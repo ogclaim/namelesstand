@@ -11,10 +11,10 @@ local ControllerName = "cool123lucas123"
 local OriginalControllerName = ControllerName
 -- Named alts (order = slot 1..N). Use exact Roblox usernames.
 local BotListOrdered = {
+    "UHCaltForShewwsh7",
     "NoraStorm38",
-    "Witkni3416",
-    "Kiptwist5311",
-    -- "BotName4",
+    "cepit775B9",
+    "ApexPanther6335",
     -- "BotName5",
 }
 local MySlot = 1
