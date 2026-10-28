@@ -82,8 +82,9 @@ local PostStompHold, SummonHold = 0.35, 0.45
 local StompHeight = 3.4
 local ForceHitFireRate, Prediction = 0.08, 0.135
 local RapidFireEnabled = true
-local RapidFireRate = 0.02          -- rapid
-local NormalFireRate = 0.08         -- normal
+local RapidFireRate = 0.0           -- no throttle between volleys when rapid
+local NormalFireRate = 0.08         -- normal human-ish spacing
+local RapidFireVolleys = 4          -- packets per burst (faster than real guns)
 ForceHitFireRate = RapidFireEnabled and RapidFireRate or NormalFireRate
 getgenv().FH_Index = getgenv().FH_Index or 0
 local BotEspEnabled = true
@@ -96,7 +97,7 @@ local ForceHitTestEnabled = true
 getgenv().KillAura = getgenv().KillAura or {
     Enabled = false,
     Range = 80,
-    Delay = 0.06,
+    Delay = 0.02,
     HitPart = "Head",
     WallCheck = false,
     ForceFieldCheck = true,
@@ -139,8 +140,8 @@ getgenv().NamelessLiteMode = LiteMode
 if LiteMode then
     -- Throttle heavy systems (keep forcehit + killaura)
     FastKillClearObstacles = false
-    FastKillTriggerRate = 0.02
-    FastKillMoveSpeed = 100
+    FastKillTriggerRate = 0.06
+    FastKillMoveSpeed = 800
     -- firerate NOT slowed on lite (rapid fire still works)
 
     OrbitSpeed = math.min(OrbitSpeed or 30, 12)
@@ -153,11 +154,11 @@ end
 
 -- Fast kill / tween config (edit here)
 local FastKillBehindDist = 100   -- studs behind target (snap)
-local FastKillHitDist = 6       -- shoot/hold distance
-local FastKillHitHold = 0.05  -- stay at hit pos so shot registers
+local FastKillHitDist = 8       -- shoot/hold distance
+local FastKillHitHold = 0.03  -- stay at hit pos so shot registers
 local FastKillFrontDist = 100    -- studs in front after hit
-local FastKillMoveSpeed = 1000 -- tween approach speed
-local SpamVoidTweenSpeed = 25000 -- void dive speed if teleport fails
+local FastKillMoveSpeed = 1100 -- tween approach speed
+local SpamVoidTweenSpeed = 100000 -- void dive speed if teleport fails
 local SpamVoidDepth = 200 -- studs below surface when voiding
 local FastKillCamHeight = 28    -- top-down camera height
 local FastKillClearObstacles = true -- hide walls/trees/fences (keep floors/roads)
@@ -754,8 +755,8 @@ function F.SyncBotWhitelist()
 function F.SetRapidFire(on)
     RapidFireEnabled = on and true or false
     ForceHitFireRate = RapidFireEnabled and RapidFireRate or NormalFireRate
-    FastKillTriggerRate = RapidFireEnabled and 0.02 or 0.05
-    warn("[NAMELESS] Rapid fire " .. (RapidFireEnabled and "ON (" .. tostring(RapidFireRate) .. "s)" or "OFF"))
+    FastKillTriggerRate = RapidFireEnabled and 0.0 or 0.05
+    warn("[NAMELESS] Rapid fire " .. (RapidFireEnabled and ("ON x" .. tostring(RapidFireVolleys or 4)) or "OFF"))
 end
 
 function F.SetAntiLag(on)
@@ -1850,13 +1851,103 @@ function F.validTarget(target, fromPos)
     return true, part
 end
 
--- Core fire: multi-pellet Shoot packet (works without camera lock)
+-- Core fire: NeverLarp FH packet + rapid volleys + controller-only tracers
 local _lastFHFire = 0
+local FHTracerFolder = nil
+
+function F.DrawForceHitTracer(origin, hitPos)
+    -- ONLY controller sees bullet tracers (bots skip for FPS)
+    if not F.IsControllerClient() then return end
+    if not origin or not hitPos then return end
+    pcall(function()
+        if not FHTracerFolder or not FHTracerFolder.Parent then
+            local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 2)
+            if not pg then return end
+            FHTracerFolder = Instance.new("Folder")
+            FHTracerFolder.Name = "NAMELESS_FH_TRACERS"
+            FHTracerFolder.Parent = pg
+        end
+        local att0 = Instance.new("Part")
+        att0.Name = "FH_A0"
+        att0.Anchored = true
+        att0.CanCollide = false
+        att0.CanQuery = false
+        att0.CanTouch = false
+        att0.Transparency = 1
+        att0.Size = Vector3.new(0.1, 0.1, 0.1)
+        att0.CFrame = CFrame.new(origin)
+        att0.Parent = workspace.Terrain
+        local att1 = att0:Clone()
+        att1.Name = "FH_A1"
+        att1.CFrame = CFrame.new(hitPos)
+        att1.Parent = workspace.Terrain
+        local a0 = Instance.new("Attachment")
+        a0.Parent = att0
+        local a1 = Instance.new("Attachment")
+        a1.Parent = att1
+        local beam = Instance.new("Beam")
+        beam.Attachment0 = a0
+        beam.Attachment1 = a1
+        beam.Width0 = 0.12
+        beam.Width1 = 0.04
+        beam.FaceCamera = true
+        beam.LightEmission = 1
+        beam.LightInfluence = 0
+        beam.Color = ColorSequence.new(Color3.fromRGB(255, 220, 80), Color3.fromRGB(255, 80, 40))
+        beam.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.1),
+            NumberSequenceKeypoint.new(1, 0.85),
+        })
+        beam.Parent = att0
+        task.delay(0.12, function()
+            pcall(function() att0:Destroy() end)
+            pcall(function() att1:Destroy() end)
+        end)
+    end)
+end
+
+-- Controller-only: visual tracers from online bots toward nearest enemy
+task.spawn(function()
+    while task.wait(0.08) do
+        if F.IsControllerClient() and BotEspEnabled and RapidFireEnabled then
+            for _, name in ipairs(BotListOrdered or {}) do
+                if type(name) == "string" then
+                    local plr = Players:FindFirstChild(name)
+                    if not plr then
+                        for _, p in ipairs(Players:GetPlayers()) do
+                            if p.Name:lower() == name:lower() then plr = p break end
+                        end
+                    end
+                    if plr and plr.Character then
+                        local tool = plr.Character:FindFirstChildOfClass("Tool")
+                        if tool and tool:FindFirstChild("Handle") and not tool.Name:lower():find("knife") then
+                            local origin = tool.Handle.Position
+                            local best, bestD = nil, 120
+                            for _, enemy in ipairs(Players:GetPlayers()) do
+                                if enemy ~= plr and enemy ~= LocalPlayer and not F.isWhitelisted(enemy) then
+                                    local h = enemy.Character and (enemy.Character:FindFirstChild("Head") or enemy.Character:FindFirstChild("HumanoidRootPart"))
+                                    if h then
+                                        local d = (h.Position - origin).Magnitude
+                                        if d < bestD then best, bestD = h, d end
+                                    end
+                                end
+                            end
+                            if best then
+                                F.DrawForceHitTracer(origin, best.Position)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
 function F.FireForceHit(target)
-    -- EXACT NeverLarp FH_Fire packet (INDEX/AIM/ORIGIN/HITS)
     if not MainEvent or not target then return false end
     local now = tick()
-    if now - (_lastFHFire or 0) < (ForceHitFireRate or 0.08) then return false end
+    local rate = ForceHitFireRate or 0.08
+    if rate > 0 and now - (_lastFHFire or 0) < rate then return false end
     local tChar = target.Character
     if not tChar then return false end
     local tHum = tChar:FindFirstChildOfClass("Humanoid")
@@ -1876,8 +1967,6 @@ function F.FireForceHit(target)
     if not hitPart or not hitPart:IsA("BasePart") then return false end
     local myChar = LocalPlayer.Character
     if not myChar then return false end
-    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return false end
     local tool = myChar:FindFirstChildOfClass("Tool")
     if not tool or not tool:FindFirstChild("Handle") then
         if F.EquipBestWeapon then tool = F.EquipBestWeapon() end
@@ -1886,38 +1975,43 @@ function F.FireForceHit(target)
     if tool.Name:lower():find("knife") then return false end
     local handlePos = tool.Handle.Position
     local hitPos = hitPart.Position
-    -- pellet count: shotguns 5 else 1 (same as NeverLarp)
     local name = string.lower(tool.Name)
     local pellets = 1
     if string.find(name, "shotgun") or string.find(name, "tactical") or string.find(name, "db") or string.find(name, "double") then
         pellets = 5
     end
-    local hits = {}
-    for i = 1, pellets do
-        local pos = hitPos
-        if pellets > 1 then
-            pos = hitPos + Vector3.new(
-                math.random(-15, 15) / 100,
-                math.random(-15, 15) / 100,
-                math.random(-15, 15) / 100
-            )
+    -- Rapid: send multiple full packets in one frame (faster than any real firerate)
+    local volleys = RapidFireEnabled and (RapidFireVolleys or 4) or 1
+    for v = 1, volleys do
+        local hits = {}
+        for i = 1, pellets do
+            local pos = hitPos
+            if pellets > 1 or RapidFireEnabled then
+                pos = hitPos + Vector3.new(
+                    math.random(-20, 20) / 100,
+                    math.random(-20, 20) / 100,
+                    math.random(-20, 20) / 100
+                )
+            end
+            hits[i] = {
+                PELLET = i,
+                POSITION = pos,
+                MODEL = tChar,
+                PART = hitPart,
+            }
         end
-        hits[i] = {
-            PELLET = i,
-            POSITION = pos,
-            MODEL = tChar,
-            PART = hitPart,
+        local aim = hitPos + (hitPos - handlePos).Unit * 25
+        getgenv().FH_Index = ((getgenv().FH_Index or 0) + 1) % 100
+        local packet = {
+            INDEX = getgenv().FH_Index,
+            AIM = aim,
+            ORIGIN = handlePos,
+            HITS = hits,
         }
+        pcall(function() MainEvent:FireServer("Shoot", packet) end)
     end
-    local aim = hitPos + (hitPos - handlePos).Unit * 25
-    getgenv().FH_Index = ((getgenv().FH_Index or 0) + 1) % 100
-    local packet = {
-        INDEX = getgenv().FH_Index,
-        AIM = aim,
-        ORIGIN = handlePos,
-        HITS = hits,
-    }
-    pcall(function() MainEvent:FireServer("Shoot", packet) end)
+    -- controller-only bullet beam
+    F.DrawForceHitTracer(handlePos, hitPos)
     _lastFHFire = now
     _lastFHT = now
     return true
@@ -3465,9 +3559,10 @@ function F.CreateNamelessGui()
             end
         end)
         addLabel("forcehit: NeverLarp FH_Fire (auto)")
-        addToggle("rapid fire", function() return RapidFireEnabled end, function(v)
+        addToggle("rapid fire (multi-packet)", function() return RapidFireEnabled end, function(v)
             F.SetRapidFire(v)
         end)
+        addLabel("tracers: controller only")
         addToggle("kill aura", function()
             return getgenv().KillAura and getgenv().KillAura.Enabled
         end, function(v)
