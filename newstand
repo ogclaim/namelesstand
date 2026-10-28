@@ -1,3 +1,9 @@
+getgenv().NAMELESS_BOOT = true
+local F = {}
+-- early stubs (filled later) so early loops never index missing keys
+F.EnsureDancePlaying = function() end
+F.StartDefaultEmote = function() end
+F.PlayEmote = function() end
 ------------------------ ROLES ------------------------
 -- Set your main account here. Leave "" to auto = whoever runs without being in BotList.
 local ControllerName = "cool123lucas123"
@@ -5,7 +11,7 @@ local ControllerName = "cool123lucas123"
 local OriginalControllerName = ControllerName
 -- Named alts (order = slot 1..N). Use exact Roblox usernames.
 local BotListOrdered = {
-    "NormaStorn38",
+    "NoraStorm38",
     "Witkni3416",
     "Kiptwist5311",
     -- "BotName4",
@@ -13,13 +19,6 @@ local BotListOrdered = {
 }
 local MySlot = 1
 -------------------------------------------------------
-getgenv().NAMELESS_BOOT = true
-local F = {}
--- early stubs (filled later) so early loops never index missing keys
-F.EnsureDancePlaying = function() end
-F.StartDefaultEmote = function() end
-F.PlayEmote = function() end
-
 getgenv().SIZE_X, getgenv().SIZE_Y, getgenv().SIZE_Z = 50, 50, 50
 getgenv().KnifeHitboxEnabled = true
 getgenv().glue_active = false
@@ -40,8 +39,8 @@ local AutoHealTriggerPct = 0.30
 local FlyVariant = 1
 local FLY_EMOTES = {
     [1] = {
-        idle = "rbxassetid://616006778",
-        move = "rbxassetid://616006778",
+        idle = "rbxassetid://72443677762664",
+        move = "rbxassetid://101170675501592",
     },
     [2] = {
         idle = "rbxassetid://134638696656624",
@@ -72,8 +71,8 @@ local SpamVoidInTime = 0.30   -- time spent in void
 local SpamVoidOutTime = 0.15  -- time on surface after void before next shot
 local WaitFFDelay = 2.35      -- fixed forcefield wait (not in commands)
 -- kill position for orbit / spamvoid (and visual orbit spoof)
-local KillPosition = "Back"   -- Back | Front | Left | Right | Top | Bottom
-local KillDistance = 8        -- studs from target for orbit/spamvoid
+local KillPosition = "Top"    -- Back | Front | Left | Right | Top | Bottom
+local KillDistance = 10       -- studs from target for orbit/spamvoid
 -- tween path direction (independent of KillPosition)
 local TweenPath = "backfront" -- backfront | leftright | topbottom | diag_tlbr | diag_trbl | diag_bltr | diag_brtl
 local BringCarryWait, BringTweenTime = 2.0, 0.1
@@ -103,14 +102,58 @@ getgenv().KillAura = getgenv().KillAura or {
 local ShiftSpamInterval = 0.1
 local PREFIX = "nameless:!"
 
+-- ========== LITE / MOBILE MODE ==========
+-- Detects mobile / low-end (Delta cloud phones, tablets) and cuts CPU/GPU load.
+-- ForceHit + KillAura stay enabled.
+local LiteMode = false
+local function detectLiteDevice()
+    local lite = false
+    pcall(function()
+        local UIS = game:GetService("UserInputService")
+        if UIS.TouchEnabled and not UIS.KeyboardEnabled then lite = true end
+        if UIS.TouchEnabled and UIS.GyroscopeEnabled then lite = true end
+    end)
+    pcall(function()
+        local name = (identifyexecutor and identifyexecutor()) or (getexecutorname and getexecutorname()) or ""
+        name = tostring(name):lower()
+        if name:find("delta") then
+            -- Delta on mobile / cloud often reports touch
+            local UIS = game:GetService("UserInputService")
+            if UIS.TouchEnabled then lite = true end
+        end
+    end)
+    pcall(function()
+        if getgenv().FORCE_LITE == true then lite = true end
+        if getgenv().FORCE_LITE == false then lite = false end
+    end)
+    return lite
+end
+LiteMode = detectLiteDevice()
+getgenv().NamelessLiteMode = LiteMode
+if LiteMode then
+    -- Throttle heavy systems (keep forcehit + killaura)
+    FastKillClearObstacles = false
+    FastKillTriggerRate = 0.08
+    FastKillMoveSpeed = 800
+    ForceHitFireRate = math.max(ForceHitFireRate or 0.08, 0.12)
+    KillAuraDelay = math.max(KillAuraDelay or 0.06, 0.12)
+    if getgenv().KillAura then getgenv().KillAura.Delay = KillAuraDelay end
+    OrbitSpeed = math.min(OrbitSpeed or 30, 12)
+    ANIM_SPEED = 0.5
+    NoRenderEnabled = true
+    KillVisualSpoof = false
+    warn("[NAMELESS] LITE MODE on — reduced CPU/GPU (forcehit + killaura kept)")
+end
+
+
 -- Fast kill / tween config (edit here)
-local FastKillBehindDist = 50   -- studs behind target (snap)
-local FastKillHitDist = 50       -- shoot/hold distance
+local FastKillBehindDist = 100   -- studs behind target (snap)
+local FastKillHitDist = 6       -- shoot/hold distance
 local FastKillHitHold = 0.05  -- stay at hit pos so shot registers
-local FastKillFrontDist = 22    -- studs in front after hit
-local FastKillMoveSpeed = 500 -- tween approach speed
+local FastKillFrontDist = 100    -- studs in front after hit
+local FastKillMoveSpeed = 1000 -- tween approach speed
 local SpamVoidTweenSpeed = 100000 -- void dive speed if teleport fails
-local SpamVoidDepth = 500 -- studs below surface when voiding
+local SpamVoidDepth = 200 -- studs below surface when voiding
 local FastKillCamHeight = 28    -- top-down camera height
 local FastKillClearObstacles = true -- hide walls/trees/fences (keep floors/roads)
 local FastKillTriggerRate = 0.04
@@ -150,11 +193,11 @@ local AutoHealEnabled = false
 local AutoHealBusy = false
 local AutoChatEnabled = true
 local KillChatPhrases = {
-    "Beta btw..",
+    "This is a simple stand dude",
     "Lock in",
     "Nearly there!",
     "OMG THIS IS FREE",
-    "This isn't real",
+    "Get n4meless today!",
     "Get the win, or go home..",
 }
 local LastKillChat = 0
@@ -214,9 +257,9 @@ local SentryEnabled, KillAuraEnabled = false, false
 local VoidSpamEnabled, UseGun = false, true
 local StompOnKill = true
 local OrbitEnabled = true
-local FastKillEnabled = true -- tween kill default on so autokill actually cycles
+local FastKillEnabled = false -- orbit is default kill method
 -- Kill method: "tween" | "orbit" | "spamvoid"
-local KillMethod = getgenv().NamelessKillMethod or "tween"
+local KillMethod = getgenv().NamelessKillMethod or "orbit"
 getgenv().NamelessKillMethod = KillMethod
 local SpamVoidPhase = "surface" -- surface | void
 local SpamVoidUntil = 0
@@ -258,6 +301,7 @@ function F.SetKillMethod(m)
     warn("[NAMELESS] Kill method → " .. m)
     return m
 end
+pcall(function() F.SetKillMethod(KillMethod or "orbit") end)
 local AutoStompEnabled = false
 local AutoStompConnection = nil
 local LastControllerHealth = 100
@@ -315,10 +359,11 @@ local ExecuteEmoteForced = true -- always re-apply default when dance is cleared
 
 
 
--- Keep default/execute emote looping forever (summon/kill included)
+-- Keep default/execute emote looping (slower on lite)
 task.spawn(function()
-    while task.wait(0.75) do
+    while task.wait(LiteMode and 2.5 or 0.75) do
         pcall(function()
+            if LiteMode then return end -- skip persistent emote spam on mobile
             if FrozenByPrivilege then return end
             if not LastDanceId then LastDanceId = DefaultEmoteId end
             DancePersistent = true
@@ -697,6 +742,30 @@ function F.ListWhitelistNames()
     table.sort(out)
     return out
 end
+
+-- Auto-whitelist every bot in BotListOrdered + controller (protected)
+function F.SyncBotWhitelist()
+    for _, name in ipairs(BotListOrdered or {}) do
+        if type(name) == "string" and name ~= "" then
+            Whitelist[name:lower()] = true
+        end
+    end
+    for name, _ in pairs(BotList or {}) do
+        if type(name) == "string" and name ~= "" then
+            Whitelist[name:lower()] = true
+        end
+    end
+    if ControllerName and ControllerName ~= "" then
+        Whitelist[tostring(ControllerName):lower()] = true
+    end
+    if OriginalControllerName and OriginalControllerName ~= "" then
+        Whitelist[tostring(OriginalControllerName):lower()] = true
+    end
+    if LocalPlayer then
+        Whitelist[LocalPlayer.Name:lower()] = true
+    end
+end
+F.SyncBotWhitelist()
 function F.addBotName(name)
     if not name or name == "" then return end
     BotList[tostring(name):lower()] = true
@@ -1084,6 +1153,7 @@ end
 
 -- Camera lock: sticky on TargetPlayer only — no switching; unlock immediately on death/KO
 function F.StartCameraLock(target)
+    if LiteMode then return end
     if CameraConnection then CameraConnection:Disconnect() CameraConnection = nil end
     -- freeze sticky target at start (do not re-pick while locking)
     local lockedTarget = target or TargetPlayer
@@ -3470,10 +3540,99 @@ function F.CreateNamelessGui()
         end
     end
 
+    local function buildWhitelist()
+        clearPage()
+        F.SyncBotWhitelist()
+        addLabel("whitelist (killaura + targeting)")
+        addLabel("bots + controller are protected")
+        local box = addBox("username to add/remove", "wlbox")
+        addBtn("add whitelist", function()
+            local name = box.Text and box.Text:match("^%s*(.-)%s*$") or ""
+            if name == "" then return end
+            if F.isProtectedWhitelistName(name) then
+                warn("[NAMELESS] Protected (bot/controller): " .. name)
+                return
+            end
+            local p = F.FindPlayerAny(name)
+            F.addWhitelistName(p and p.Name or name)
+            warn("[NAMELESS] Whitelisted: " .. (p and p.Name or name))
+            buildWhitelist()
+        end)
+        addBtn("remove whitelist", function()
+            local name = box.Text and box.Text:match("^%s*(.-)%s*$") or ""
+            if name == "" then return end
+            local p = F.FindPlayerAny(name)
+            local n = p and p.Name or name
+            local ok, reason = F.removeWhitelistName(n)
+            if not ok then
+                warn("[NAMELESS] Cannot remove (" .. tostring(reason) .. "): " .. n)
+            else
+                warn("[NAMELESS] Unwhitelisted: " .. n)
+            end
+            buildWhitelist()
+        end)
+        addBtn("sync bots now", function()
+            F.SyncBotWhitelist()
+            warn("[NAMELESS] Bot list re-synced to whitelist")
+            buildWhitelist()
+        end)
+        addLabel("--- protected (cannot remove) ---")
+        for _, name in ipairs(BotListOrdered or {}) do
+            if type(name) == "string" and name ~= "" then
+                addLabel("bot: " .. name)
+            end
+        end
+        if ControllerName and ControllerName ~= "" then
+            addLabel("controller: " .. tostring(ControllerName))
+        end
+        if OriginalControllerName and OriginalControllerName ~= "" and OriginalControllerName ~= ControllerName then
+            addLabel("original: " .. tostring(OriginalControllerName))
+        end
+        addLabel("--- extra whitelist ---")
+        local extras = {}
+        for k, v in pairs(Whitelist) do
+            if v and not F.isProtectedWhitelistName(k) then
+                extras[#extras + 1] = k
+            end
+        end
+        table.sort(extras)
+        if #extras == 0 then
+            addLabel("(none)")
+        else
+            for _, name in ipairs(extras) do
+                local rowName = name
+                addBtn("x " .. rowName, function()
+                    F.removeWhitelistName(rowName)
+                    buildWhitelist()
+                end)
+            end
+        end
+        addLabel("--- players in server ---")
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                local on = F.isWhitelisted(plr)
+                local label = (on and "[WL] " or "[  ] ") .. plr.Name
+                addBtn(label, function()
+                    if F.isProtectedWhitelistName(plr.Name) then
+                        warn("[NAMELESS] Protected: " .. plr.Name)
+                        return
+                    end
+                    if F.isWhitelisted(plr) and Whitelist[plr.Name:lower()] then
+                        F.removeWhitelistName(plr.Name)
+                    else
+                        F.addWhitelistName(plr.Name)
+                    end
+                    buildWhitelist()
+                end)
+            end
+        end
+    end
+
     pages.Main = buildMain
     pages.Toggles = buildToggles
     pages.Ragebot = buildRagebot
     pages.Commands = buildCommands
+    pages.Whitelist = buildWhitelist
     if ShowBotsTab then
         pages.Bots = buildBots
     end
@@ -3515,7 +3674,7 @@ function F.CreateNamelessGui()
         end
     end
 
-    local tabOrder = { "Main", "Toggles", "Ragebot", "Commands" }
+    local tabOrder = { "Main", "Toggles", "Ragebot", "Whitelist", "Commands" }
     if ShowBotsTab then
         table.insert(tabOrder, 2, "Bots")
     end
@@ -4480,7 +4639,13 @@ task.spawn(function()
     if F.IsStandClient() then
         -- Bot / stand: black screen, no controller GUI
         pcall(F.CreateBlackScreen)
-        pcall(F.StartDefaultEmote)
+        pcall(F.SyncBotWhitelist)
+        if LiteMode then
+            pcall(function() F.SetNoRender(true) end)
+            warn("[NAMELESS] LITE stand — 3D render reduced")
+        else
+            pcall(F.StartDefaultEmote)
+        end
         local msg = "Stand ready | slot " .. tostring(MySlot) .. " | controller: " .. tostring(ControllerName)
         warn("[NAMELESS] " .. msg)
         pcall(function()
@@ -4497,6 +4662,7 @@ task.spawn(function()
             OriginalControllerName = ControllerName
         end
         ShowBotsTab = true
+        pcall(F.SyncBotWhitelist)
         local ok, err = pcall(F.CreateNamelessGui)
         if not ok then warn("[NAMELESS] GUI failed: " .. tostring(err)) end
         pcall(F.RefreshBotEsp)
