@@ -81,7 +81,13 @@ local PostStompHold, SummonHold = 0.35, 0.45
 -- Stomp height above body (code only, not in GUI)
 local StompHeight = 3.4
 local ForceHitFireRate, Prediction = 0.08, 0.135
+local RapidFireEnabled = true
+local RapidFireRate = 0.02          -- rapid
+local NormalFireRate = 0.08         -- normal
+ForceHitFireRate = RapidFireEnabled and RapidFireRate or NormalFireRate
 getgenv().FH_Index = getgenv().FH_Index or 0
+local BotEspEnabled = true
+local AntiLagEnabled = true         -- blackscreen + norender on stands
 local ForceHitFOV, DefaultFOV = 20, 70
 -- NeverLarp forcehit only (no dual modes)
 local ForceHitMode = "nl"
@@ -133,11 +139,10 @@ getgenv().NamelessLiteMode = LiteMode
 if LiteMode then
     -- Throttle heavy systems (keep forcehit + killaura)
     FastKillClearObstacles = false
-    FastKillTriggerRate = 0.08
-    FastKillMoveSpeed = 800
-    ForceHitFireRate = math.max(ForceHitFireRate or 0.08, 0.12)
-    KillAuraDelay = math.max(KillAuraDelay or 0.06, 0.12)
-    if getgenv().KillAura then getgenv().KillAura.Delay = KillAuraDelay end
+    FastKillTriggerRate = 0.02
+    FastKillMoveSpeed = 100
+    -- firerate NOT slowed on lite (rapid fire still works)
+
     OrbitSpeed = math.min(OrbitSpeed or 30, 12)
     ANIM_SPEED = 0.5
     NoRenderEnabled = true
@@ -152,11 +157,11 @@ local FastKillHitDist = 6       -- shoot/hold distance
 local FastKillHitHold = 0.05  -- stay at hit pos so shot registers
 local FastKillFrontDist = 100    -- studs in front after hit
 local FastKillMoveSpeed = 1000 -- tween approach speed
-local SpamVoidTweenSpeed = 100000 -- void dive speed if teleport fails
+local SpamVoidTweenSpeed = 25000 -- void dive speed if teleport fails
 local SpamVoidDepth = 200 -- studs below surface when voiding
 local FastKillCamHeight = 28    -- top-down camera height
 local FastKillClearObstacles = true -- hide walls/trees/fences (keep floors/roads)
-local FastKillTriggerRate = 0.04
+local FastKillTriggerRate = 0.02
 
 -- CFrame mode (pure CFrame, no PhysicsRep glue spoof)
 local CFrameFollowEnabled = false -- follow/summon with pure CFrame
@@ -745,6 +750,39 @@ end
 
 -- Auto-whitelist every bot in BotListOrdered + controller (protected)
 function F.SyncBotWhitelist()
+
+function F.SetRapidFire(on)
+    RapidFireEnabled = on and true or false
+    ForceHitFireRate = RapidFireEnabled and RapidFireRate or NormalFireRate
+    FastKillTriggerRate = RapidFireEnabled and 0.02 or 0.05
+    warn("[NAMELESS] Rapid fire " .. (RapidFireEnabled and "ON (" .. tostring(RapidFireRate) .. "s)" or "OFF"))
+end
+
+function F.SetAntiLag(on)
+    AntiLagEnabled = on and true or false
+    if not F.IsStandClient() then
+        warn("[NAMELESS] antilag is for stand clients (blackscreen/render)")
+        return
+    end
+    if AntiLagEnabled then
+        pcall(F.CreateBlackScreen)
+        pcall(function() F.SetNoRender(true) end)
+    else
+        pcall(F.DestroyBlackScreen)
+        pcall(function() F.SetNoRender(false) end)
+    end
+    warn("[NAMELESS] antilag " .. (AntiLagEnabled and "ON" or "OFF"))
+end
+
+function F.SetBotEsp(on)
+    BotEspEnabled = on and true or false
+    if BotEspEnabled then
+        F.RefreshBotEsp()
+    else
+        F.ClearBotEsp()
+    end
+end
+
     for _, name in ipairs(BotListOrdered or {}) do
         if type(name) == "string" and name ~= "" then
             Whitelist[name:lower()] = true
@@ -2567,6 +2605,36 @@ F.RunSilent = function(cmdLine)
     getgenv()._StandGuiSilent = false
 end
 
+-- Send real chat so bots on other devices hear the command
+F.ChatCommand = function(cmdLine)
+    local msg = PREFIX .. tostring(cmdLine or "")
+    local sent = false
+    pcall(function()
+        local TCS = game:GetService("TextChatService")
+        if TCS and TCS.ChatVersion == Enum.ChatVersion.TextChatService then
+            local channels = TCS:FindFirstChild("TextChannels")
+            local ch = channels and (channels:FindFirstChild("RBXGeneral") or channels:FindFirstChild("RBXSystem"))
+            if ch and ch.SendAsync then
+                ch:SendAsync(msg)
+                sent = true
+            end
+        end
+    end)
+    if not sent then
+        pcall(function()
+            local rs = game:GetService("ReplicatedStorage")
+            local ev = rs:FindFirstChild("DefaultChatSystemChatEvents")
+            local say = ev and ev:FindFirstChild("SayMessageRequest")
+            if say then say:FireServer(msg, "All") sent = true end
+        end)
+    end
+    -- also run locally for controller-side silent tools
+    pcall(function() F.RunSilent(cmdLine) end)
+    if not sent then
+        warn("[NAMELESS] chat send failed — ran locally only: " .. msg)
+    end
+end
+
 -- Black screen for stands/bots
 local BlackScreenGui = nil
 function F.CreateBlackScreen()
@@ -2636,6 +2704,7 @@ function F.ClearBotEsp()
     if BotEspFolder then pcall(function() BotEspFolder:Destroy() end) BotEspFolder = nil end
 end
 function F.MakeBotEsp(plr)
+    if not BotEspEnabled then return end
     if not F.IsControllerClient() then return end
     if not plr or plr == LocalPlayer then return end
     if not F.IsListedBot(plr.Name) then return end
@@ -2648,28 +2717,56 @@ function F.MakeBotEsp(plr)
     end
     local existing = BotEspFolder:FindFirstChild("esp_" .. plr.Name)
     if existing then existing:Destroy() end
+    if BotEspConns[plr.Name .. "_hb"] then
+        pcall(function() BotEspConns[plr.Name .. "_hb"]:Disconnect() end)
+        BotEspConns[plr.Name .. "_hb"] = nil
+    end
     local function attach(char)
-        if not char then return end
+        if not char or not BotEspEnabled then return end
         local head = char:FindFirstChild("Head") or char:FindFirstChild("HumanoidRootPart")
         if not head then return end
+        local old = BotEspFolder:FindFirstChild("esp_" .. plr.Name)
+        if old then old:Destroy() end
         local bb = Instance.new("BillboardGui")
         bb.Name = "esp_" .. plr.Name
         bb.Adornee = head
-        bb.Size = UDim2.new(0, 160, 0, 40)
-        bb.StudsOffset = Vector3.new(0, 2.5, 0)
+        bb.Size = UDim2.new(0, 200, 0, 54)
+        bb.StudsOffset = Vector3.new(0, 3, 0)
         bb.AlwaysOnTop = true
         bb.Parent = BotEspFolder
         local lab = Instance.new("TextLabel")
+        lab.Name = "Lab"
         lab.Size = UDim2.new(1, 0, 1, 0)
         lab.BackgroundTransparency = 1
         lab.Font = Enum.Font.GothamBold
-        lab.TextSize = 14
+        lab.TextSize = 12
         lab.TextColor3 = Color3.fromRGB(80, 255, 140)
-        lab.TextStrokeTransparency = 0.4
+        lab.TextStrokeTransparency = 0.35
+        lab.TextYAlignment = Enum.TextYAlignment.Top
         lab.Text = plr.Name
         lab.Parent = bb
+        if BotEspConns[plr.Name .. "_hb"] then
+            pcall(function() BotEspConns[plr.Name .. "_hb"]:Disconnect() end)
+        end
+        BotEspConns[plr.Name .. "_hb"] = RunService.Heartbeat:Connect(function()
+            if not BotEspEnabled or not lab.Parent then return end
+            local c = plr.Character
+            if not c then
+                lab.Text = plr.Name .. "\n[no char]"
+                return
+            end
+            local hum = c:FindFirstChildOfClass("Humanoid")
+            local tool = c:FindFirstChildOfClass("Tool")
+            local hp = hum and math.floor(hum.Health + 0.5) or 0
+            local max = hum and math.floor(hum.MaxHealth + 0.5) or 100
+            local toolName = tool and tool.Name or "none"
+            lab.Text = string.format("%s\nHP %d/%d\n%s", plr.Name, hp, max, toolName)
+            local h = c:FindFirstChild("Head") or c:FindFirstChild("HumanoidRootPart")
+            if h and bb.Adornee ~= h then bb.Adornee = h end
+        end)
     end
     if plr.Character then attach(plr.Character) end
+    if BotEspConns[plr.Name] then pcall(function() BotEspConns[plr.Name]:Disconnect() end) end
     BotEspConns[plr.Name] = plr.CharacterAdded:Connect(function(c)
         task.wait(0.3)
         attach(c)
@@ -2677,6 +2774,7 @@ function F.MakeBotEsp(plr)
 end
 function F.RefreshBotEsp()
     if not F.IsControllerClient() then F.ClearBotEsp() return end
+    if not BotEspEnabled then F.ClearBotEsp() return end
     for _, plr in ipairs(Players:GetPlayers()) do
         if F.IsListedBot(plr.Name) then F.MakeBotEsp(plr) end
     end
@@ -3367,6 +3465,9 @@ function F.CreateNamelessGui()
             end
         end)
         addLabel("forcehit: NeverLarp FH_Fire (auto)")
+        addToggle("rapid fire", function() return RapidFireEnabled end, function(v)
+            F.SetRapidFire(v)
+        end)
         addToggle("kill aura", function()
             return getgenv().KillAura and getgenv().KillAura.Enabled
         end, function(v)
@@ -3401,67 +3502,88 @@ function F.CreateNamelessGui()
         clearPage()
         local cb = addBox("target / args", "cmd")
         local function a() return (cb.Text or ""):match("^%s*(.-)%s*$") or "" end
+        local function go(line)
+            if line and line ~= "" then F.ChatCommand(line) end
+        end
         local function section(title, items)
             addLabel(title)
             for _, c in ipairs(items) do
                 addBtn(c[1], function()
                     local line = c[2]()
-                    if line then F.RunSilent(line) end
+                    go(line)
                 end)
             end
         end
+        addLabel("buttons send real chat → bots hear them")
         section("stand", {
             { "summon", function() return "summon" end },
             { "stop", function() return "stop" end },
-            { "hide", function() return "hide" end },
-            { "unhide", function() return "unhide" end },
-            { "pole", function() local x=a() return x~="" and ("pole "..x) or "pole" end },
+            { "back", function() return "back" end },
+            { "bline", function() return "bline" end },
+            { "pole", function() return "pole" end },
+            { "around", function() return "around" end },
+            { "line", function() return "line" end },
+            { "circle", function() local x=a() return x~="" and ("circle "..x) or "circle" end },
         })
         section("combat", {
+            { "kill", function() local x=a() return x~="" and ("k "..x) or nil end },
+            { "autokill", function() local x=a() return x~="" and ("ak "..x) or nil end },
+            { "bring", function() local x=a() return x~="" and ("b "..x) or nil end },
             { "gun", function() return "gun" end },
             { "knife", function() return "knife" end },
-            { "kill", function() local x=a() return x~="" and ("kill "..x) or nil end },
-            { "autokill", function() local x=a() return x~="" and ("autokill "..x) or nil end },
-            { "bring", function() local x=a() return x~="" and ("bring "..x) or nil end },
-            { "tweenkill on", function() return "tweenkill on" end },
-            { "tweenkill off", function() return "tweenkill off" end },
-        })
-        section("utility", {
-            { "autoheal on", function() return "autoheal on" end },
-            { "autoheal off", function() return "autoheal off" end },
-            { "chat on", function() return "chat on" end },
-            { "chat off", function() return "chat off" end },
             { "stomp on", function() return "stomp on" end },
             { "stomp off", function() return "stomp off" end },
-            { "spamvoid kill", function() return "spamvoidkill" end },
-            { "tween kill", function() return "tween on" end },
-            { "orbit kill", function() return "orbitkill" end },
-            { "voidspam on", function() return "voidspam on" end },
-            { "voidspam off", function() return "voidspam off" end },
-            { "dance", function() return "dance" end },
-            { "reset", function() return "r" end },
+            { "killaura on", function() return "aura" end },
+            { "killaura off", function() return "aura off" end },
         })
+        section("kill method", {
+            { "orbit", function() return "orbitkill" end },
+            { "tween", function() return "tween" end },
+            { "spamvoid kill", function() return "svkill" end },
+        })
+        section("misc", {
+            { "void", function() return "void" end },
+            { "reset", function() return "r" end },
+            { "dance", function() return "dance" end },
+            { "antilag on", function() return "antilag on" end },
+            { "antilag off", function() return "antilag off" end },
+            { "sentry on", function() return "sentry on" end },
+            { "sentry off", function() return "sentry off" end },
+            { "reclaim", function() return "reclaim" end },
+        })
+        section("whitelist", {
+            { "wl list", function() return "wl list" end },
+            { "whitelist", function() local x=a() return x~="" and ("wl "..x) or nil end },
+            { "unwhitelist", function() local x=a() return x~="" and ("unwl "..x) or nil end },
+        })
+        addLabel("custom line (without prefix)")
+        addBtn("send chat command", function()
+            local x = a()
+            if x ~= "" then go(x) end
+        end)
     end
 
     local function buildBots()
         clearPage()
-        addLabel("multi-bot control (cross-device)")
-        addLabel("uses remote — works on other devices")
-        addLabel("toggle bots + set slots")
-        local rowsBox = addBox("rows (1=one row)", "brows")
-        rowsBox.Text = tostring(CtrlFormationRows or 1)
-        local perBox = addBox("per row (multi)", "bper")
-        perBox.Text = tostring(CtrlPerRow or 50)
-        addBtn("apply rows/perrow", function()
-            CtrlFormationRows = math.max(1, math.floor(tonumber(rowsBox.Text) or 1))
-            CtrlPerRow = math.max(1, math.floor(tonumber(perBox.Text) or 50))
-            warn("[NAMELESS] rows=" .. CtrlFormationRows .. " perRow=" .. CtrlPerRow)
+        addLabel("bots from BotListOrdered")
+        addLabel("ONLINE = in this server")
+        addToggle("bot ESP (name/hp/tool)", function() return BotEspEnabled end, function(v)
+            F.SetBotEsp(v)
         end)
-        addBtn("select all", function()
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= LocalPlayer then
-                    CtrlBotEnabled[p.Name] = true
-                    if not CtrlBotSlot[p.Name] then CtrlBotSlot[p.Name] = 1 end
+        addBtn("refresh list", function() buildBots() end)
+        addBtn("select all online", function()
+            for _, name in ipairs(BotListOrdered or {}) do
+                if type(name) == "string" and name ~= "" then
+                    local plr = Players:FindFirstChild(name)
+                    if not plr then
+                        for _, p in ipairs(Players:GetPlayers()) do
+                            if p.Name:lower() == name:lower() then plr = p break end
+                        end
+                    end
+                    if plr then
+                        CtrlBotEnabled[plr.Name] = true
+                        if not CtrlBotSlot[plr.Name] then CtrlBotSlot[plr.Name] = 1 end
+                    end
                 end
             end
             buildBots()
@@ -3470,74 +3592,84 @@ function F.CreateNamelessGui()
             CtrlBotEnabled = {}
             buildBots()
         end)
-        -- Auto-assign slots 1..n for enabled bots
-        addBtn("auto slots 1..n", function()
-            local i = 1
-            local names = {}
-            for _, p in ipairs(Players:GetPlayers()) do
-                if p ~= LocalPlayer and CtrlBotEnabled[p.Name] then
-                    names[#names + 1] = p.Name
+        local online, offline = {}, {}
+        for i, name in ipairs(BotListOrdered or {}) do
+            if type(name) == "string" and name ~= "" then
+                local plr = Players:FindFirstChild(name)
+                if not plr then
+                    for _, p in ipairs(Players:GetPlayers()) do
+                        if p.Name:lower() == name:lower() or (p.DisplayName and p.DisplayName:lower() == name:lower()) then
+                            plr = p
+                            break
+                        end
+                    end
+                end
+                if plr then
+                    online[#online + 1] = { name = plr.Name, slot = i, plr = plr }
+                else
+                    offline[#offline + 1] = { name = name, slot = i }
                 end
             end
-            table.sort(names)
-            for _, n in ipairs(names) do
-                CtrlBotSlot[n] = i
-                i = i + 1
-            end
-            buildBots()
-        end)
-        local targetBox = addBox("kill/bring target", "btarget")
-        addLabel("--- actions (selected bots) ---")
-        addBtn("SUMMON selected", function()
-            CtrlFormationRows = math.max(1, math.floor(tonumber(rowsBox.Text) or CtrlFormationRows or 1))
-            CtrlPerRow = math.max(1, math.floor(tonumber(perBox.Text) or CtrlPerRow or 50))
-            F.ControllerSend("summon")
-        end)
-        addBtn("STOP selected", function() F.ControllerSend("stop") end)
-        addBtn("KILL selected", function()
-            local t = (targetBox.Text or ""):match("^%s*(.-)%s*$") or ""
-            if t == "" then warn("[NAMELESS] enter a target") return end
-            F.ControllerSend("kill", t)
-        end)
-        addBtn("AUTOKILL selected", function()
-            local t = (targetBox.Text or ""):match("^%s*(.-)%s*$") or ""
-            if t == "" then warn("[NAMELESS] enter a target") return end
-            F.ControllerSend("autokill", t)
-        end)
-        addBtn("BRING selected", function()
-            local t = (targetBox.Text or ""):match("^%s*(.-)%s*$") or ""
-            if t == "" then warn("[NAMELESS] enter a target") return end
-            F.ControllerSend("bring", t)
-        end)
-        addBtn("HIDE selected", function() F.ControllerSend("hide") end)
-        addBtn("GUN mode", function() F.ControllerSend("gun") end)
-        addBtn("KNIFE mode", function() F.ControllerSend("knife") end)
-        addLabel("--- players ---")
-        local list = {}
-        for _, p in ipairs(Players:GetPlayers()) do
-            if p ~= LocalPlayer then list[#list + 1] = p end
         end
-        table.sort(list, function(a, b) return a.Name:lower() < b.Name:lower() end)
-        for _, p in ipairs(list) do
-            local name = p.Name
-            if CtrlBotSlot[name] == nil then CtrlBotSlot[name] = 1 end
-            if CtrlBotEnabled[name] == nil then CtrlBotEnabled[name] = false end
-            local on = CtrlBotEnabled[name] and true or false
-            addToggle(name .. "  [bot]", function()
+        addLabel("--- ONLINE (" .. tostring(#online) .. ") ---")
+        if #online == 0 then addLabel("(none in server)") end
+        for _, info in ipairs(online) do
+            local name = info.name
+            if CtrlBotSlot[name] == nil then CtrlBotSlot[name] = info.slot end
+            if CtrlBotEnabled[name] == nil then CtrlBotEnabled[name] = true end
+            local hp, tool = "?", "none"
+            if info.plr.Character then
+                local hum = info.plr.Character:FindFirstChildOfClass("Humanoid")
+                local t = info.plr.Character:FindFirstChildOfClass("Tool")
+                if hum then hp = math.floor(hum.Health + 0.5) end
+                if t then tool = t.Name end
+            end
+            addToggle(string.format("[ON] %s  hp:%s  %s", name, tostring(hp), tool), function()
                 return CtrlBotEnabled[name] and true or false
             end, function(v)
                 CtrlBotEnabled[name] = v and true or false
             end)
             local sb = addBox("slot " .. name, "slot_" .. name)
-            sb.Text = tostring(CtrlBotSlot[name] or 1)
+            sb.Text = tostring(CtrlBotSlot[name] or info.slot)
             addBtn("set slot " .. name, function()
                 local n = tonumber(sb.Text)
                 if n and n >= 1 then
                     CtrlBotSlot[name] = math.floor(n)
-                    warn("[NAMELESS] " .. name .. " slot=" .. CtrlBotSlot[name])
+                    F.ChatCommand("slot " .. tostring(CtrlBotSlot[name]))
                 end
             end)
         end
+        addLabel("--- OFFLINE (" .. tostring(#offline) .. ") ---")
+        if #offline == 0 then addLabel("(all listed bots online)") end
+        for _, info in ipairs(offline) do
+            addLabel(string.format("[OFF] %s  (slot %d)", info.name, info.slot))
+        end
+        local rowsBox = addBox("rows", "brows")
+        rowsBox.Text = tostring(CtrlFormationRows or 1)
+        local perBox = addBox("per row", "bper")
+        perBox.Text = tostring(CtrlPerRow or 50)
+        addBtn("apply rows/perrow", function()
+            CtrlFormationRows = math.max(1, math.floor(tonumber(rowsBox.Text) or 1))
+            CtrlPerRow = math.max(1, math.floor(tonumber(perBox.Text) or 50))
+            F.ChatCommand("rows " .. CtrlFormationRows)
+            F.ChatCommand("perrow " .. CtrlPerRow)
+        end)
+        local targetBox = addBox("kill/bring target", "btarget")
+        addLabel("--- actions (chat → selected bots) ---")
+        addBtn("summon selected", function() F.ChatCommand("summon") end)
+        addBtn("stop", function() F.ChatCommand("stop") end)
+        addBtn("kill target", function()
+            local x = targetBox.Text and targetBox.Text:match("^%s*(.-)%s*$") or ""
+            if x ~= "" then F.ChatCommand("k " .. x) end
+        end)
+        addBtn("autokill target", function()
+            local x = targetBox.Text and targetBox.Text:match("^%s*(.-)%s*$") or ""
+            if x ~= "" then F.ChatCommand("ak " .. x) end
+        end)
+        addBtn("bring target", function()
+            local x = targetBox.Text and targetBox.Text:match("^%s*(.-)%s*$") or ""
+            if x ~= "" then F.ChatCommand("b " .. x) end
+        end)
     end
 
     local function buildWhitelist()
@@ -4363,6 +4495,18 @@ F.OnChatted = function(player, message)
         local n = tonumber(args[2]); if n then SpamVoidInTime = math.clamp(n, 0.05, 5) end
     elseif cmd == "voidout" then
         local n = tonumber(args[2]); if n then SpamVoidOutTime = math.clamp(n, 0.05, 5) end
+    elseif cmd == "antilag" then
+        if args[2] == "off" then F.SetAntiLag(false)
+        elseif args[2] == "on" then F.SetAntiLag(true)
+        else F.SetAntiLag(not AntiLagEnabled) end
+    elseif cmd == "botesp" then
+        if args[2] == "off" then F.SetBotEsp(false)
+        elseif args[2] == "on" then F.SetBotEsp(true)
+        else F.SetBotEsp(not BotEspEnabled) end
+    elseif cmd == "rapid" or cmd == "rapidfire" then
+        if args[2] == "off" then F.SetRapidFire(false)
+        elseif args[2] == "on" then F.SetRapidFire(true)
+        else F.SetRapidFire(not RapidFireEnabled) end
     elseif cmd == "killaura" or cmd == "aura" then
         if args[2] == "off" then F.StopKillAura()
         else F.StartKillAura() end
@@ -4640,12 +4784,12 @@ task.spawn(function()
         -- Bot / stand: black screen, no controller GUI
         pcall(F.CreateBlackScreen)
         pcall(F.SyncBotWhitelist)
-        if LiteMode then
+        if AntiLagEnabled or LiteMode then
+            pcall(F.CreateBlackScreen)
             pcall(function() F.SetNoRender(true) end)
-            warn("[NAMELESS] LITE stand — 3D render reduced")
-        else
-            pcall(F.StartDefaultEmote)
+            warn("[NAMELESS] antilag/lite — blackscreen + reduced render")
         end
+        if not LiteMode then pcall(F.StartDefaultEmote) end
         local msg = "Stand ready | slot " .. tostring(MySlot) .. " | controller: " .. tostring(ControllerName)
         warn("[NAMELESS] " .. msg)
         pcall(function()
@@ -4665,7 +4809,7 @@ task.spawn(function()
         pcall(F.SyncBotWhitelist)
         local ok, err = pcall(F.CreateNamelessGui)
         if not ok then warn("[NAMELESS] GUI failed: " .. tostring(err)) end
-        pcall(F.RefreshBotEsp)
+        if BotEspEnabled then pcall(F.RefreshBotEsp) end
         local msg = "Controller ready — " .. LocalPlayer.Name .. " | bots listed: " .. tostring(#BotListOrdered)
         warn("[NAMELESS] " .. msg)
         pcall(function()
