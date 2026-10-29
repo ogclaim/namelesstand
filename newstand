@@ -11,11 +11,11 @@ local ControllerName = "cool123lucas123"
 local OriginalControllerName = ControllerName
 -- Named alts (order = slot 1..N). Use exact Roblox usernames.
 local BotListOrdered = {
-    "UHCaltForShewwsh7",
-    "NoraStorm38",
     "cepit775B9",
-    "ApexPanther6335",
+    "UHCaltForShewwsh7",
     "Jadeventure3876",
+    -- "BotName4",
+    -- "BotName5",
 }
 local MySlot = 1
 -------------------------------------------------------
@@ -82,8 +82,9 @@ local PostStompHold, SummonHold = 0.35, 0.45
 local StompHeight = 3.4
 local ForceHitFireRate, Prediction = 0.08, 0.135
 local RapidFireEnabled = true
-local RapidFireRate = 0.02          -- rapid
-local NormalFireRate = 0.08         -- normal
+local RapidFireRate = 0.0           -- no throttle between volleys when rapid
+local NormalFireRate = 0.08         -- normal human-ish spacing
+local RapidFireVolleys = 4          -- packets per burst (faster than real guns)
 ForceHitFireRate = RapidFireEnabled and RapidFireRate or NormalFireRate
 getgenv().FH_Index = getgenv().FH_Index or 0
 local BotEspEnabled = true
@@ -151,17 +152,39 @@ if LiteMode then
 end
 
 
--- Fast kill / tween config (edit here)
-local FastKillBehindDist = 18   -- studs behind target (snap)
-local FastKillHitDist = 6       -- shoot/hold distance
-local FastKillHitHold = 0.05  -- stay at hit pos so shot registers
-local FastKillFrontDist = 22    -- studs in front after hit
-local FastKillMoveSpeed = 2500 -- tween approach speed
-local SpamVoidTweenSpeed = 100000 -- void dive speed if teleport fails
-local SpamVoidDepth = 500 -- studs below surface when voiding
-local FastKillCamHeight = 28    -- top-down camera height
-local FastKillClearObstacles = true -- hide walls/trees/fences (keep floors/roads)
+-- Executor quality (Hood Customs safer profiles)
+local ExecutorName = ""
+pcall(function()
+    ExecutorName = tostring((identifyexecutor and identifyexecutor()) or (getexecutorname and getexecutorname()) or ""):lower()
+end)
+local BadExecutor = LiteMode
+    or (ExecutorName:find("xeno") ~= nil)
+    or (ExecutorName:find("solara") ~= nil)
+    or (ExecutorName:find("electron") ~= nil)
+    or (ExecutorName:find("jjsploit") ~= nil)
+pcall(function()
+    if getgenv().FORCE_BAD_EXEC == true then BadExecutor = true end
+    if getgenv().FORCE_BAD_EXEC == false then BadExecutor = false end
+end)
+
+-- Fast kill / knife-tween config
+-- Good exec: 100 back/front @ 1000 | Bad/mobile: 50/50 @ 100
+local FastKillBehindDist = BadExecutor and 50 or 100
+local FastKillHitDist = 6
+local FastKillHitHold = 0.05
+local FastKillFrontDist = BadExecutor and 50 or 100
+local FastKillMoveSpeed = BadExecutor and 100 or 1000
+local SpamVoidTweenSpeed = BadExecutor and 5000 or 100000
+local SpamVoidDepth = 500
+local FastKillCamHeight = 28
+local FastKillClearObstacles = not BadExecutor
 local FastKillTriggerRate = 0.04
+local GunSpamVoidIn, GunSpamVoidOut = 4.0, 2.0
+local KnifeSpamVoidIn, KnifeSpamVoidOut = 2.0, 1.0
+local SpamVoidWeapon = "gun"
+local ProtectOwnerEnabled = false
+local ProtectOwnerConn = nil
+local KnifeTweenEnabled = false
 
 -- CFrame mode (pure CFrame, no PhysicsRep glue spoof)
 local CFrameFollowEnabled = false -- follow/summon with pure CFrame
@@ -754,8 +777,8 @@ function F.SyncBotWhitelist()
 function F.SetRapidFire(on)
     RapidFireEnabled = on and true or false
     ForceHitFireRate = RapidFireEnabled and RapidFireRate or NormalFireRate
-    FastKillTriggerRate = RapidFireEnabled and 0.02 or 0.05
-    warn("[NAMELESS] Rapid fire " .. (RapidFireEnabled and "ON (" .. tostring(RapidFireRate) .. "s)" or "OFF"))
+    FastKillTriggerRate = RapidFireEnabled and 0.0 or 0.05
+    warn("[NAMELESS] Rapid fire " .. (RapidFireEnabled and ("ON x" .. tostring(RapidFireVolleys or 4)) or "OFF"))
 end
 
 function F.SetAntiLag(on)
@@ -782,6 +805,61 @@ function F.SetBotEsp(on)
         F.ClearBotEsp()
     end
 end
+
+function F.StartProtectOwner()
+    ProtectOwnerEnabled = true
+    if ProtectOwnerConn then pcall(function() ProtectOwnerConn:Disconnect() end) ProtectOwnerConn = nil end
+    ProtectOwnerConn = RunService.Heartbeat:Connect(function()
+        if not ProtectOwnerEnabled then return end
+        if F.IsControllerClient() then return end
+        local c = F.GetController()
+        if not c or not c.Character then return end
+        local cr = c.Character:FindFirstChild("HumanoidRootPart")
+        local r = getgenv().get_root_part and getgenv().get_root_part()
+        if cr and r then
+            r.CFrame = cr.CFrame
+            pcall(function() r.AssemblyLinearVelocity = Vector3.zero end)
+        end
+    end)
+    warn("[NAMELESS] protect owner ON")
+end
+
+function F.StopProtectOwner()
+    ProtectOwnerEnabled = false
+    if ProtectOwnerConn then pcall(function() ProtectOwnerConn:Disconnect() end) ProtectOwnerConn = nil end
+    warn("[NAMELESS] protect owner OFF")
+end
+
+task.spawn(function()
+    local Config = { PingSpoofEnabled = true, PingValue = 50 }
+    getgenv().NamelessPingSpoof = Config
+    local ME = ReplicatedStorage:FindFirstChild("MainEvent") or ReplicatedStorage:WaitForChild("MainEvent", 15)
+    if not ME then return end
+    pcall(function()
+        local mt = getrawmetatable(game)
+        if not mt then return end
+        setreadonly(mt, false)
+        local oldnc = mt.__namecall
+        mt.__namecall = function(self, ...)
+            local args = {...}
+            local method = getnamecallmethod()
+            if method == "FireServer" and self == ME and args[1] == "GetPing" then
+                if Config.PingSpoofEnabled and not checkcaller() then
+                    return
+                end
+            end
+            return oldnc(self, ...)
+        end
+        setreadonly(mt, true)
+    end)
+    while true do
+        if Config.PingSpoofEnabled and ME then
+            pcall(function() ME:FireServer("GetPing", (Config.PingValue or 50) / 1000) end)
+        end
+        task.wait(1.0)
+    end
+end)
+
 
     for _, name in ipairs(BotListOrdered or {}) do
         if type(name) == "string" and name ~= "" then
@@ -1007,30 +1085,30 @@ function F.GetFormationCF()
         return CFrame.new(pos, pos + look)
     end
 
-    -- !around — front/back/left/right + diagonals, 5 studs out, 5 studs high
+    -- !around — 4 cardinals then stack upward on those pillars
     if ft == "around" then
-        local dist, height = 5, 5
+        local dist, baseH = 5, 5
         local dirs = {
-            -look,              -- 1 back
-            look,               -- 2 front
-            -right,             -- 3 left
-            right,              -- 4 right
-            (-look - right).Unit, -- 5 back-left
-            (-look + right).Unit, -- 6 back-right
-            (look - right).Unit,  -- 7 front-left
-            (look + right).Unit,  -- 8 front-right
+            -look,
+            look,
+            -right,
+            right,
         }
-        local d = dirs[((slot - 1) % #dirs) + 1]
-        local ring = math.floor((slot - 1) / #dirs)
-        local pos = origin + d * (dist + ring * space) + Vector3.new(0, height, 0)
+        local pillar = ((slot - 1) % 4) + 1
+        local stack = math.floor((slot - 1) / 4)
+        local d = dirs[pillar]
+        local pos = origin + d * dist + Vector3.new(0, baseH + stack * (StackHeight or 3.2), 0)
         return CFrame.new(pos, pos + look)
     end
 
-    -- !line — equal left/right wings, face same way as controller
+    -- !line — left/right wings, extras stack up
     if ft == "line" then
-        local side = (slot % 2 == 1) and -1 or 1  -- odd left, even right
-        local index = math.floor((slot - 1) / 2)  -- 0,1,2... along each wing
-        local pos = origin + right * (side * space * (index + 1)) + Vector3.new(0, FollowHeight, 0)
+        local wing = ((slot - 1) % 2) + 1
+        local stack = math.floor((slot - 1) / 2)
+        local side = (wing == 1) and -1 or 1
+        local along = math.floor(stack / 2) + 1
+        local layer = stack
+        local pos = origin + right * (side * space * along) + Vector3.new(0, FollowHeight + layer * (StackHeight or 3.2), 0)
         return CFrame.new(pos, pos + look)
     end
 
@@ -1677,53 +1755,60 @@ function F.applyKnifeHitbox()
     end
 end
 
-local LockedGunTool = nil -- lock first gun, never cycle
+local LockedGunTool = nil
+local LockedGunSlot = 1
+
+function F.CollectGuns()
+    local guns = {}
+    local char = LocalPlayer.Character
+    local bag = LocalPlayer:FindFirstChild("Backpack")
+    local function add(tool)
+        if tool and tool:IsA("Tool") and not tool.Name:lower():find("knife") then
+            guns[#guns + 1] = tool
+        end
+    end
+    if char then
+        for _, tool in ipairs(char:GetChildren()) do add(tool) end
+    end
+    if bag then
+        for _, tool in ipairs(bag:GetChildren()) do add(tool) end
+    end
+    return guns
+end
+
+function F.EquipGunBySlot(slot)
+    slot = math.max(1, math.floor(tonumber(slot) or 1))
+    local guns = F.CollectGuns()
+    if #guns == 0 then return nil end
+    local gun = guns[math.min(slot, #guns)]
+    local char = LocalPlayer.Character
+    if not char or not gun then return nil end
+    pcall(function() gun.Parent = char end)
+    LockedGunTool = gun
+    LockedGunSlot = slot
+    return gun
+end
+
 function F.EquipBestWeapon()
     local char = LocalPlayer.Character
     if not char then return nil end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return nil end
-    local bag = LocalPlayer:FindFirstChild("Backpack")
     local equipped = char:FindFirstChildOfClass("Tool")
+    local wantSlot = LockedGunSlot or 1
 
     if UseGun then
-        -- if already holding any non-knife gun, keep it (no switch)
         if equipped and not equipped.Name:lower():find("knife") then
+            if wantSlot > 1 then
+                local guns = F.CollectGuns()
+                if #guns >= wantSlot and equipped ~= guns[wantSlot] then
+                    return F.EquipGunBySlot(wantSlot) or equipped
+                end
+            end
             LockedGunTool = equipped
             return equipped
         end
-        if LockedGunTool and LockedGunTool.Parent then
-            local parent = LockedGunTool.Parent
-            if parent == char then return LockedGunTool end
-            if parent == bag then
-                pcall(function() LockedGunTool.Parent = char end)
-                return LockedGunTool
-            end
-        end
-        -- first-time lock: first gun in backpack only
-        local gun = nil
-        if bag then
-            for _, tool in ipairs(bag:GetChildren()) do
-                if tool:IsA("Tool") and not tool.Name:lower():find("knife") then
-                    gun = tool
-                    break
-                end
-            end
-        end
-        if not gun then
-            for _, tool in ipairs(char:GetChildren()) do
-                if tool:IsA("Tool") and not tool.Name:lower():find("knife") then
-                    gun = tool
-                    break
-                end
-            end
-        end
-        if gun then
-            LockedGunTool = gun
-            pcall(function() gun.Parent = char end)
-            return gun
-        end
-        return equipped
+        return F.EquipGunBySlot(wantSlot) or equipped
     end
 
     -- knife mode
@@ -1850,13 +1935,103 @@ function F.validTarget(target, fromPos)
     return true, part
 end
 
--- Core fire: multi-pellet Shoot packet (works without camera lock)
+-- Core fire: NeverLarp FH packet + rapid volleys + controller-only tracers
 local _lastFHFire = 0
+local FHTracerFolder = nil
+
+function F.DrawForceHitTracer(origin, hitPos)
+    -- ONLY controller sees bullet tracers (bots skip for FPS)
+    if not F.IsControllerClient() then return end
+    if not origin or not hitPos then return end
+    pcall(function()
+        if not FHTracerFolder or not FHTracerFolder.Parent then
+            local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 2)
+            if not pg then return end
+            FHTracerFolder = Instance.new("Folder")
+            FHTracerFolder.Name = "NAMELESS_FH_TRACERS"
+            FHTracerFolder.Parent = pg
+        end
+        local att0 = Instance.new("Part")
+        att0.Name = "FH_A0"
+        att0.Anchored = true
+        att0.CanCollide = false
+        att0.CanQuery = false
+        att0.CanTouch = false
+        att0.Transparency = 1
+        att0.Size = Vector3.new(0.1, 0.1, 0.1)
+        att0.CFrame = CFrame.new(origin)
+        att0.Parent = workspace.Terrain
+        local att1 = att0:Clone()
+        att1.Name = "FH_A1"
+        att1.CFrame = CFrame.new(hitPos)
+        att1.Parent = workspace.Terrain
+        local a0 = Instance.new("Attachment")
+        a0.Parent = att0
+        local a1 = Instance.new("Attachment")
+        a1.Parent = att1
+        local beam = Instance.new("Beam")
+        beam.Attachment0 = a0
+        beam.Attachment1 = a1
+        beam.Width0 = 0.12
+        beam.Width1 = 0.04
+        beam.FaceCamera = true
+        beam.LightEmission = 1
+        beam.LightInfluence = 0
+        beam.Color = ColorSequence.new(Color3.fromRGB(255, 220, 80), Color3.fromRGB(255, 80, 40))
+        beam.Transparency = NumberSequence.new({
+            NumberSequenceKeypoint.new(0, 0.1),
+            NumberSequenceKeypoint.new(1, 0.85),
+        })
+        beam.Parent = att0
+        task.delay(0.12, function()
+            pcall(function() att0:Destroy() end)
+            pcall(function() att1:Destroy() end)
+        end)
+    end)
+end
+
+-- Controller-only: visual tracers from online bots toward nearest enemy
+task.spawn(function()
+    while task.wait(0.08) do
+        if F.IsControllerClient() and BotEspEnabled and RapidFireEnabled then
+            for _, name in ipairs(BotListOrdered or {}) do
+                if type(name) == "string" then
+                    local plr = Players:FindFirstChild(name)
+                    if not plr then
+                        for _, p in ipairs(Players:GetPlayers()) do
+                            if p.Name:lower() == name:lower() then plr = p break end
+                        end
+                    end
+                    if plr and plr.Character then
+                        local tool = plr.Character:FindFirstChildOfClass("Tool")
+                        if tool and tool:FindFirstChild("Handle") and not tool.Name:lower():find("knife") then
+                            local origin = tool.Handle.Position
+                            local best, bestD = nil, 120
+                            for _, enemy in ipairs(Players:GetPlayers()) do
+                                if enemy ~= plr and enemy ~= LocalPlayer and not F.isWhitelisted(enemy) then
+                                    local h = enemy.Character and (enemy.Character:FindFirstChild("Head") or enemy.Character:FindFirstChild("HumanoidRootPart"))
+                                    if h then
+                                        local d = (h.Position - origin).Magnitude
+                                        if d < bestD then best, bestD = h, d end
+                                    end
+                                end
+                            end
+                            if best then
+                                F.DrawForceHitTracer(origin, best.Position)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
 function F.FireForceHit(target)
-    -- EXACT NeverLarp FH_Fire packet (INDEX/AIM/ORIGIN/HITS)
     if not MainEvent or not target then return false end
     local now = tick()
-    if now - (_lastFHFire or 0) < (ForceHitFireRate or 0.08) then return false end
+    local rate = ForceHitFireRate or 0.08
+    if rate > 0 and now - (_lastFHFire or 0) < rate then return false end
     local tChar = target.Character
     if not tChar then return false end
     local tHum = tChar:FindFirstChildOfClass("Humanoid")
@@ -1876,8 +2051,6 @@ function F.FireForceHit(target)
     if not hitPart or not hitPart:IsA("BasePart") then return false end
     local myChar = LocalPlayer.Character
     if not myChar then return false end
-    local myRoot = myChar:FindFirstChild("HumanoidRootPart")
-    if not myRoot then return false end
     local tool = myChar:FindFirstChildOfClass("Tool")
     if not tool or not tool:FindFirstChild("Handle") then
         if F.EquipBestWeapon then tool = F.EquipBestWeapon() end
@@ -1886,38 +2059,43 @@ function F.FireForceHit(target)
     if tool.Name:lower():find("knife") then return false end
     local handlePos = tool.Handle.Position
     local hitPos = hitPart.Position
-    -- pellet count: shotguns 5 else 1 (same as NeverLarp)
     local name = string.lower(tool.Name)
     local pellets = 1
     if string.find(name, "shotgun") or string.find(name, "tactical") or string.find(name, "db") or string.find(name, "double") then
         pellets = 5
     end
-    local hits = {}
-    for i = 1, pellets do
-        local pos = hitPos
-        if pellets > 1 then
-            pos = hitPos + Vector3.new(
-                math.random(-15, 15) / 100,
-                math.random(-15, 15) / 100,
-                math.random(-15, 15) / 100
-            )
+    -- Rapid: send multiple full packets in one frame (faster than any real firerate)
+    local volleys = RapidFireEnabled and (RapidFireVolleys or 4) or 1
+    for v = 1, volleys do
+        local hits = {}
+        for i = 1, pellets do
+            local pos = hitPos
+            if pellets > 1 or RapidFireEnabled then
+                pos = hitPos + Vector3.new(
+                    math.random(-20, 20) / 100,
+                    math.random(-20, 20) / 100,
+                    math.random(-20, 20) / 100
+                )
+            end
+            hits[i] = {
+                PELLET = i,
+                POSITION = pos,
+                MODEL = tChar,
+                PART = hitPart,
+            }
         end
-        hits[i] = {
-            PELLET = i,
-            POSITION = pos,
-            MODEL = tChar,
-            PART = hitPart,
+        local aim = hitPos + (hitPos - handlePos).Unit * 25
+        getgenv().FH_Index = ((getgenv().FH_Index or 0) + 1) % 100
+        local packet = {
+            INDEX = getgenv().FH_Index,
+            AIM = aim,
+            ORIGIN = handlePos,
+            HITS = hits,
         }
+        pcall(function() MainEvent:FireServer("Shoot", packet) end)
     end
-    local aim = hitPos + (hitPos - handlePos).Unit * 25
-    getgenv().FH_Index = ((getgenv().FH_Index or 0) + 1) % 100
-    local packet = {
-        INDEX = getgenv().FH_Index,
-        AIM = aim,
-        ORIGIN = handlePos,
-        HITS = hits,
-    }
-    pcall(function() MainEvent:FireServer("Shoot", packet) end)
+    -- controller-only bullet beam
+    F.DrawForceHitTracer(handlePos, hitPos)
     _lastFHFire = now
     _lastFHT = now
     return true
@@ -1947,6 +2125,9 @@ function F.StartKillAura()
     end
     ka.Enabled = true
     KillAuraEnabled = true
+    UseGun = true
+    LockedGunSlot = 2
+    pcall(function() F.EquipGunBySlot(2) end)
     local lastShot = 0
     KillAuraConnection = RunService.Heartbeat:Connect(function()
         ka = getgenv().KillAura
@@ -1961,9 +2142,13 @@ function F.StartKillAura()
             ka.CurrentTarget = nil
             return
         end
+        UseGun = true
+        LockedGunSlot = 2
         local tool = char:FindFirstChildOfClass("Tool")
-        if not tool and F.EquipBestWeapon then tool = F.EquipBestWeapon() end
-        if not tool then
+        if not tool or tool.Name:lower():find("knife") then
+            tool = F.EquipGunBySlot(2) or F.EquipGunBySlot(1)
+        end
+        if not tool or tool.Name:lower():find("knife") then
             ka.CurrentTarget = nil
             return
         end
@@ -2282,13 +2467,28 @@ end
 function F.FastKillTriggerBot(target)
     if tick() - FastKillLastTrigger < FastKillTriggerRate then return end
     FastKillLastTrigger = tick()
+    local method = F.GetKillMethod and F.GetKillMethod() or KillMethod
+    if method == "tween" or KnifeTweenEnabled then
+        UseGun = false
+        local char = LocalPlayer.Character
+        local knife = char and (char:FindFirstChild("[Knife]") or char:FindFirstChild("Knife"))
+        if not knife then
+            local bag = LocalPlayer:FindFirstChild("Backpack")
+            knife = bag and (bag:FindFirstChild("[Knife]") or bag:FindFirstChild("Knife"))
+            if knife then pcall(function() knife.Parent = char end) end
+        end
+        if knife then
+            F.applyKnifeHitbox()
+            pcall(function() knife:Activate() end)
+        end
+        return
+    end
     local tool = F.EquipBestWeapon()
     if not tool then return end
     if tool.Name:lower():find("knife") then
         F.applyKnifeHitbox()
         pcall(function() tool:Activate() end)
     else
-        -- NeverLarp only: FH_Fire packet + ammo reload (no mouse / Activate)
         F.FireForceHit(target)
         F.TryReload()
     end
@@ -2521,8 +2721,14 @@ function F.SpamVoidKillStep(target)
     r.AssemblyLinearVelocity = Vector3.zero
     r.AssemblyAngularVelocity = Vector3.zero
 
-    local inT = SpamVoidInTime or VoidSpamDeep or 0.3
-    local outT = SpamVoidOutTime or VoidSpamSurface or 0.15
+    local inT, outT
+    if UseGun then
+        inT = GunSpamVoidIn or 4
+        outT = GunSpamVoidOut or 2
+    else
+        inT = KnifeSpamVoidIn or 2
+        outT = KnifeSpamVoidOut or 1
+    end
 
     if SpamVoidPhase == "surface" then
         F.SetPhysicsRepRootPart(r, tRoot)
@@ -3465,9 +3671,10 @@ function F.CreateNamelessGui()
             end
         end)
         addLabel("forcehit: NeverLarp FH_Fire (auto)")
-        addToggle("rapid fire", function() return RapidFireEnabled end, function(v)
+        addToggle("rapid fire (multi-packet)", function() return RapidFireEnabled end, function(v)
             F.SetRapidFire(v)
         end)
+        addLabel("tracers: controller only")
         addToggle("kill aura", function()
             return getgenv().KillAura and getgenv().KillAura.Enabled
         end, function(v)
@@ -4380,8 +4587,12 @@ F.OnChatted = function(player, message)
         if CurrentDance then pcall(function() CurrentDance:Stop() end) CurrentDance = nil end
         F.StopAll()
         VoidSpamEnabled = false
-    elseif cmd == "summon" or cmd == "follow" or cmd == "come" then
+        KnifeTweenEnabled = false
+        if F.StopKillAura then F.StopKillAura() end
+        if F.StopProtectOwner then F.StopProtectOwner() end
+    elseif cmd == "return" or cmd == "summon" or cmd == "follow" or cmd == "come" then
         PendingAutokill, SavedKillTargets = nil, nil
+        if F.StopProtectOwner then F.StopProtectOwner() end
         F.StartFollow()
     elseif cmd == "stomp" then
         if args[2] == "on" then StompOnKill = true
@@ -4394,6 +4605,28 @@ F.OnChatted = function(player, message)
         withBots(2, function(t) if #t > 0 then F.StartKill(t, false) end end)
     elseif cmd == "autokill" or cmd == "ak" or cmd == "a" then
         withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
+    elseif cmd == "atween" then
+        KnifeTweenEnabled = true
+        UseGun = false
+        F.SetKillMethod("tween")
+        withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
+    elseif cmd == "aorbit" then
+        F.SetKillMethod("orbit")
+        withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
+    elseif cmd == "aksk" then
+        UseGun = false
+        SpamVoidWeapon = "knife"
+        F.SetKillMethod("spamvoid")
+        withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
+    elseif cmd == "agsk" then
+        UseGun = true
+        SpamVoidWeapon = "gun"
+        F.SetKillMethod("spamvoid")
+        withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
+    elseif cmd == "powner" or cmd == "protectowner" then
+        F.StartProtectOwner()
+    elseif cmd == "unpowner" or cmd == "unprotectowner" then
+        F.StopProtectOwner()
     elseif cmd == "bring" or cmd == "get" or cmd == "b" then
         withBots(2, function(t) if #t > 0 then F.StartBring(t) end end)
     elseif cmd == "void" then
@@ -4462,14 +4695,46 @@ F.OnChatted = function(player, message)
         end
 
     elseif cmd == "orbit" then
-        if args[2] == "on" then OrbitEnabled = true
-        elseif args[2] == "off" then OrbitEnabled = false
+        local a2 = args[2] and args[2]:lower() or ""
+        if a2 == "on" then OrbitEnabled = true
+        elseif a2 == "off" then OrbitEnabled = false
+        elseif a2 == "top" or a2 == "bottom" or a2 == "back" or a2 == "front" or a2 == "left" or a2 == "right" then
+            KillPosition = a2:sub(1,1):upper() .. a2:sub(2)
+            OrbitEnabled = true
+            F.SetKillMethod("orbit")
+            warn("[NAMELESS] Orbit position: " .. KillPosition)
         else OrbitEnabled = not OrbitEnabled end
+    elseif cmd == "knifetween" or cmd == "kt" then
+        if args[2] == "off" then
+            KnifeTweenEnabled = false
+        else
+            KnifeTweenEnabled = true
+            UseGun = false
+            FastKillBehindDist = BadExecutor and 50 or 100
+            FastKillFrontDist = BadExecutor and 50 or 100
+            FastKillMoveSpeed = BadExecutor and 100 or 1000
+            F.SetKillMethod("tween")
+        end
+    elseif cmd == "gunspamkill" or cmd == "gsk" then
+        if args[2] ~= "off" then
+            UseGun = true
+            SpamVoidWeapon = "gun"
+            F.SetKillMethod("spamvoid")
+        end
+    elseif cmd == "knifespamkill" or cmd == "ksk" then
+        if args[2] ~= "off" then
+            UseGun = false
+            SpamVoidWeapon = "knife"
+            F.SetKillMethod("spamvoid")
+        end
     elseif cmd == "fastkill" or cmd == "tweenkill" or cmd == "tween" then
+        KnifeTweenEnabled = true
+        UseGun = false
         F.SetKillMethod("tween")
     elseif cmd == "orbitkill" then
         F.SetKillMethod("orbit")
     elseif cmd == "spamvoidkill" or cmd == "svkill" then
+        UseGun = true
         F.SetKillMethod("spamvoid")
     elseif cmd == "killmethod" and args[2] then
         local m = args[2]
@@ -4507,9 +4772,16 @@ F.OnChatted = function(player, message)
         if args[2] == "off" then F.SetRapidFire(false)
         elseif args[2] == "on" then F.SetRapidFire(true)
         else F.SetRapidFire(not RapidFireEnabled) end
-    elseif cmd == "killaura" or cmd == "aura" then
+    elseif cmd == "killaura" or cmd == "aura" or cmd == "ka" then
         if args[2] == "off" then F.StopKillAura()
-        else F.StartKillAura() end
+        elseif args[2] == "on" then F.StartKillAura()
+        else
+            if KillAuraEnabled or (getgenv().KillAura and getgenv().KillAura.Enabled) then
+                F.StopKillAura()
+            else
+                F.StartKillAura()
+            end
+        end
     elseif cmd == "aurarange" then
         local n = tonumber(args[2])
         if n and getgenv().KillAura then
