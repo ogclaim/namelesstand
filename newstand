@@ -1,4 +1,9 @@
 getgenv().NAMELESS_BOOT = true
+
+-- Register pool fix: shared state table (avoids 200 local limit)
+getgenv()._NL = getgenv()._NL or {}
+local NL = getgenv()._NL
+
 local F = {}
 -- early stubs (filled later) so early loops never index missing keys
 F.EnsureDancePlaying = function() end
@@ -81,17 +86,22 @@ local PostStompHold, SummonHold = 0.35, 0.45
 -- Stomp height above body (code only, not in GUI)
 local StompHeight = 3.4
 local ForceHitFireRate, Prediction = 0.08, 0.135
-local RapidFireEnabled = true
-local RapidFireRate = 0.0           -- no throttle between volleys when rapid
-local NormalFireRate = 0.08         -- normal human-ish spacing
-local RapidFireVolleys = 4          -- packets per burst (faster than real guns)
+RapidFireEnabled = true
+RapidFireRate = 0.0           -- no throttle between volleys when rapid
+NormalFireRate = 0.08         -- normal human-ish spacing
+RapidFireVolleys = 4          -- packets per burst (faster than real guns)
 ForceHitFireRate = RapidFireEnabled and RapidFireRate or NormalFireRate
 getgenv().FH_Index = getgenv().FH_Index or 0
-local BotEspEnabled = true
-local AntiLagEnabled = true         -- blackscreen + norender on stands
+BotEspEnabled = true
+AntiLagEnabled = true         -- blackscreen + norender on stands
+PerformanceMode = false
+PerformanceConn = nil
+local _OrigWarn = warn
+local _OrigPrint = print
+PerformanceHidden = {} -- [instance] = true, destroyed/streamed out
 local ForceHitFOV, DefaultFOV = 20, 70
 -- NeverLarp forcehit only (no dual modes)
-local ForceHitMode = "nl"
+ForceHitMode = "nl"
 local ForceHitMyEnabled = false
 local ForceHitTestEnabled = true
 getgenv().KillAura = getgenv().KillAura or {
@@ -108,6 +118,11 @@ getgenv().KillAura = getgenv().KillAura or {
 }
 local ShiftSpamInterval = 0.1
 local PREFIX = "nameless:!"
+KillVisualSpoof = false
+FastKillPhase = "behind"
+FastKillLastStep = 0
+FastKillLastTrigger = 0
+
 
 -- ========== LITE / MOBILE MODE ==========
 -- Detects mobile / low-end (Delta cloud phones, tablets) and cuts CPU/GPU load.
@@ -181,10 +196,10 @@ local FastKillClearObstacles = not BadExecutor
 local FastKillTriggerRate = 0.04
 local GunSpamVoidIn, GunSpamVoidOut = 4.0, 2.0
 local KnifeSpamVoidIn, KnifeSpamVoidOut = 2.0, 1.0
-local SpamVoidWeapon = "gun"
-local ProtectOwnerEnabled = false
-local ProtectOwnerConn = nil
-local KnifeTweenEnabled = false
+SpamVoidWeapon = "gun"
+ProtectOwnerEnabled = false
+ProtectOwnerConn = nil
+KnifeTweenEnabled = false
 
 -- CFrame mode (pure CFrame, no PhysicsRep glue spoof)
 local CFrameFollowEnabled = false -- follow/summon with pure CFrame
@@ -228,7 +243,7 @@ local KillChatPhrases = {
     "Get n4meless today!",
     "Get the win, or go home..",
 }
-local LastKillChat = 0
+LastKillChat = 0
 local AutoHealShop = Vector3.new(-390.07, 34.70, -587.01)
 local AutoHealEat = {
     Vector3.new(-198.28, 71.75, -53.94),
@@ -275,7 +290,7 @@ do
     if ch then F.refreshChar(ch) end
 end
 
-local MainEvent = ReplicatedStorage:FindFirstChild("MainEvent")
+MainEvent = ReplicatedStorage:FindFirstChild("MainEvent")
 task.spawn(function()
     if not MainEvent then MainEvent = ReplicatedStorage:WaitForChild("MainEvent", 10) end
 end)
@@ -283,18 +298,18 @@ end)
 local ExtraOwners = {}
 local SentryEnabled, KillAuraEnabled = false, false
 local VoidSpamEnabled, UseGun = false, true
-local StompOnKill = true
-local OrbitEnabled = true
-local FastKillEnabled = false -- orbit is default kill method
+StompOnKill = true
+OrbitEnabled = true
+FastKillEnabled = false -- orbit is default kill method
 -- Kill method: "tween" | "orbit" | "spamvoid"
-local KillMethod = getgenv().NamelessKillMethod or "orbit"
+KillMethod = getgenv().NamelessKillMethod or "orbit"
 getgenv().NamelessKillMethod = KillMethod
-local SpamVoidPhase = "surface" -- surface | void
-local SpamVoidUntil = 0
-local SpamVoidSurfaceCF = nil
-local SpamVoidHitDone = false
-local ShowBotsTab = false -- only after !controller
-local KillMethodPaint = {} -- GUI radio paint callbacks
+SpamVoidPhase = "surface" -- surface | void
+SpamVoidUntil = 0
+SpamVoidSurfaceCF = nil
+SpamVoidHitDone = false
+ShowBotsTab = false -- only after !controller
+KillMethodPaint = {} -- GUI radio paint callbacks
 
 function F.GetKillMethod()
     return getgenv().NamelessKillMethod or KillMethod or "tween"
@@ -330,29 +345,29 @@ function F.SetKillMethod(m)
     return m
 end
 pcall(function() F.SetKillMethod(KillMethod or "orbit") end)
-local AutoStompEnabled = false
-local AutoStompConnection = nil
-local LastControllerHealth = 100
-local CurrentAction = "idle"
+AutoStompEnabled = false
+AutoStompConnection = nil
+LastControllerHealth = 100
+CurrentAction = "idle"
 local TargetPlayer, TargetList = nil, {}
 local FormationTarget, FormationType = nil, nil
 local SentryConnection, KillAuraConnection, CameraConnection = nil, nil, nil
 local SlotSpamRunning = false
-local PreVoidCFrame = nil
+PreVoidCFrame = nil
 local CurrentDance, DancePersistent, LastDanceId = nil, false, nil
 local FlyTrack, HoverTrack = nil, nil
 local LastAuraShot, LastReload, _lastFHT = 0, 0, 0
-local FrozenByPrivilege = false
+FrozenByPrivilege = false
 local BringStage, GrabOnceDone = nil, false
 local GlueTargetPlayer, GlueMode, CustomGlueCF = nil, "follow", nil
 local AntiStompProcessing, koConn = false, nil
 local PendingAutokill, SavedKillTargets = nil, nil
 local KillPhase, StompDoneForCycle = "attack", false
-local WaitFFUntil = nil
+WaitFFUntil = nil
 local BotGui, FOVCircle = nil, nil
 local GuiWindow, MenuOpen = nil, false
 
-local GuiState = {
+GuiState = {
     Aimbot = false, AimbotMode = "Hold", AimbotKey = Enum.KeyCode.E,
     Triggerbot = false,
     CFrameSpeed = false, SpeedValue = 50, SpeedKey = Enum.KeyCode.LeftShift, SpeedKeyMode = "Hold",
@@ -360,7 +375,7 @@ local GuiState = {
     Viewing = false, ViewTarget = nil,
     HitboxSize = 21,
 }
-local GuiConns = {}
+GuiConns = {}
 
 local Emotes = {
     Floss = "rbxassetid://10714340543",
@@ -784,7 +799,9 @@ end
 function F.SetAntiLag(on)
     AntiLagEnabled = on and true or false
     if not F.IsStandClient() then
-        warn("[NAMELESS] antilag is for stand clients (blackscreen/render)")
+        if not PerformanceMode then
+            pcall(_OrigWarn or warn, "[NAMELESS] antilag is for stand clients (blackscreen/render)")
+        end
         return
     end
     if AntiLagEnabled then
@@ -794,8 +811,204 @@ function F.SetAntiLag(on)
         pcall(F.DestroyBlackScreen)
         pcall(function() F.SetNoRender(false) end)
     end
-    warn("[NAMELESS] antilag " .. (AntiLagEnabled and "ON" or "OFF"))
+    if not PerformanceMode then
+        pcall(_OrigWarn or warn, "[NAMELESS] antilag " .. (AntiLagEnabled and "ON" or "OFF"))
+    end
 end
+
+function F.MuteAllSounds()
+    pcall(function()
+        local SoundService = game:GetService("SoundService")
+        SoundService.AmbientReverb = Enum.ReverbType.NoReverb
+        pcall(function() SoundService.RespectFilteringEnabled = true end)
+        for _, s in ipairs(workspace:GetDescendants()) do
+            if s:IsA("Sound") or s:IsA("AudioPlayer") then
+                pcall(function()
+                    s.Volume = 0
+                    s.Playing = false
+                    s:Stop()
+                end)
+            end
+        end
+        for _, s in ipairs(game:GetService("SoundService"):GetDescendants()) do
+            if s:IsA("Sound") then
+                pcall(function() s.Volume = 0 s:Stop() end)
+            end
+        end
+    end)
+end
+
+function F.StripMapForPerformance()
+    -- Client-side only: remove world geometry/effects, keep player characters
+    local keepNames = {
+        Players = true,
+        Terrain = true,
+        Camera = true,
+        CurrentCamera = true,
+    }
+    local function isPlayerChar(inst)
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr.Character and (inst == plr.Character or inst:IsDescendantOf(plr.Character)) then
+                return true
+            end
+        end
+        return false
+    end
+    pcall(function()
+        for _, child in ipairs(workspace:GetChildren()) do
+            if child.Name == "Terrain" or child:IsA("Camera") or child:IsA("Terrain") then
+                -- keep
+            elseif isPlayerChar(child) then
+                -- keep characters, strip tools/effects under them below
+            else
+                -- map / buildings / effects
+                pcall(function()
+                    child:Destroy()
+                end)
+            end
+        end
+    end)
+    -- strip effects/tools visuals on characters (client)
+    pcall(function()
+        for _, plr in ipairs(Players:GetPlayers()) do
+            local char = plr.Character
+            if char then
+                for _, d in ipairs(char:GetDescendants()) do
+                    if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam")
+                        or d:IsA("Fire") or d:IsA("Smoke") or d:IsA("Sparkles")
+                        or d:IsA("Explosion") then
+                        pcall(function() d:Destroy() end)
+                    elseif d:IsA("Sound") then
+                        pcall(function() d.Volume = 0 d:Stop() end)
+                    end
+                end
+                -- remove other players' tools from local view (not LocalPlayer)
+                if plr ~= LocalPlayer then
+                    for _, d in ipairs(char:GetChildren()) do
+                        if d:IsA("Tool") then
+                            pcall(function() d:Destroy() end)
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    -- lighting / atmosphere minimal
+    pcall(function()
+        local Lighting = game:GetService("Lighting")
+        Lighting.GlobalShadows = false
+        Lighting.FogEnd = 1e6
+        Lighting.Brightness = 1
+        for _, v in ipairs(Lighting:GetChildren()) do
+            if v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect")
+                or v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") or v:IsA("Atmosphere") then
+                pcall(function() v:Destroy() end)
+            end
+        end
+    end)
+end
+
+function F.SuppressLogs(on)
+    -- soft mute only; never touch getfenv (crashes some executors)
+    if on then
+        pcall(function()
+            warn = function() end
+        end)
+    else
+        pcall(function()
+            if _OrigWarn then warn = _OrigWarn end
+        end)
+    end
+end
+
+function F.SetPerformanceMode(on)
+    PerformanceMode = on and true or false
+    if PerformanceConn then
+        pcall(function() PerformanceConn:Disconnect() end)
+        PerformanceConn = nil
+    end
+    if not PerformanceMode then
+        F.SuppressLogs(false)
+        pcall(_OrigWarn or warn, "[NAMELESS] performance OFF")
+        return
+    end
+    -- only useful / safe on stand clients (bots)
+    F.SuppressLogs(true)
+    pcall(function() F.SetNoRender(true) end)
+    pcall(F.CreateBlackScreen)
+    AntiLagEnabled = true
+    -- kill expensive visuals
+    BotEspEnabled = false
+    pcall(F.ClearBotEsp)
+    KillVisualSpoof = false
+    pcall(function() if F.StopKillVisualSpoof then F.StopKillVisualSpoof() end end)
+    FastKillClearObstacles = false
+    RapidFireVolleys = 1 -- less packet spam = less crash risk
+    ForceHitFireRate = math.max(ForceHitFireRate or 0.02, 0.05)
+    OrbitSpeed = math.min(OrbitSpeed or 12, 8)
+    F.MuteAllSounds()
+    F.StripMapForPerformance()
+    -- continuous cleanup
+    PerformanceConn = RunService.Heartbeat:Connect(function()
+        if not PerformanceMode then return end
+        -- throttle: every ~0.5s via accumulator
+    end)
+    task.spawn(function()
+        local acc = 0
+        while PerformanceMode do
+            acc = acc + task.wait(0.35)
+            if not PerformanceMode then break end
+            F.MuteAllSounds()
+            -- remove new map pieces / effects
+            pcall(function()
+                for _, child in ipairs(workspace:GetChildren()) do
+                    local keep = child.Name == "Terrain" or child:IsA("Terrain") or child:IsA("Camera")
+                    if not keep then
+                        local isChar = false
+                        for _, plr in ipairs(Players:GetPlayers()) do
+                            if plr.Character == child then isChar = true break end
+                        end
+                        if not isChar then
+                            pcall(function() child:Destroy() end)
+                        end
+                    end
+                end
+            end)
+            pcall(function()
+                for _, plr in ipairs(Players:GetPlayers()) do
+                    local char = plr.Character
+                    if char then
+                    for _, d in ipairs(char:GetDescendants()) do
+                        if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam")
+                            or d:IsA("Fire") or d:IsA("Smoke") or d:IsA("Sparkles") then
+                            pcall(function() d:Destroy() end)
+                        elseif d:IsA("Sound") then
+                            pcall(function() d.Volume = 0 end)
+                        end
+                    end
+                    if plr ~= LocalPlayer then
+                        for _, d in ipairs(char:GetChildren()) do
+                            if d:IsA("Tool") then pcall(function() d:Destroy() end) end
+                        end
+                    end
+                    end -- char
+                end
+            end)
+        end
+    end)
+    -- mute SoundService future sounds
+    pcall(function()
+        workspace.DescendantAdded:Connect(function(d)
+            if not PerformanceMode then return end
+            if d:IsA("Sound") then
+                pcall(function() d.Volume = 0 d:Stop() end)
+            elseif d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam") then
+                pcall(function() d:Destroy() end)
+            end
+        end)
+    end)
+end
+
 
 function F.SetBotEsp(on)
     BotEspEnabled = on and true or false
@@ -1755,8 +1968,8 @@ function F.applyKnifeHitbox()
     end
 end
 
-local LockedGunTool = nil
-local LockedGunSlot = 1
+LockedGunTool = nil
+LockedGunSlot = 1
 
 function F.CollectGuns()
     local guns = {}
@@ -1936,11 +2149,12 @@ function F.validTarget(target, fromPos)
 end
 
 -- Core fire: NeverLarp FH packet + rapid volleys + controller-only tracers
-local _lastFHFire = 0
-local FHTracerFolder = nil
+_lastFHFire = 0
+FHTracerFolder = nil
 
 function F.DrawForceHitTracer(origin, hitPos)
     -- ONLY controller sees bullet tracers (bots skip for FPS)
+    if PerformanceMode then return end
     if not F.IsControllerClient() then return end
     if not origin or not hitPos then return end
     pcall(function()
@@ -2342,19 +2556,19 @@ end
 -- 3) Fly FRONT at FastKillMoveSpeed
 -- 4) Repeat until dead
 -- Top-down camera lock on target. Obstacles cleared on start.
-local FastKillPhase = "behind" -- behind | hit | front
-local FastKillFrontCF = nil
-local FastKillTweening = false
-local FastKillTweenStart = 0
-local FastKillTweenFrom = nil
-local FastKillLastStep = 0
-local FastKillLastTrigger = 0
+FastKillPhase = "behind" -- behind | hit | front
+FastKillFrontCF = nil
+FastKillTweening = false
+FastKillTweenStart = 0
+FastKillTweenFrom = nil
+FastKillLastStep = 0
+FastKillLastTrigger = 0
 
 -- Client visual spoof: real kill on Heartbeat, RenderStepped shows orbit around target
-local KillVisualSpoof = true
-local KillSpoofConn = nil
-local LastRealKillCF = nil
-local OrbitVisualAngle = 0
+KillVisualSpoof = true
+KillSpoofConn = nil
+LastRealKillCF = nil
+OrbitVisualAngle = 0
 
 function F.GetKillOffset(tRoot, posName, dist)
     if not tRoot then return Vector3.zero end
@@ -2760,7 +2974,7 @@ function F.SpamVoidKillStep(target)
     return false
 end
 
-local KillAttackConn = nil
+KillAttackConn = nil
 function F.StopKillAttackLoop()
     if KillAttackConn then KillAttackConn:Disconnect() KillAttackConn = nil end
     F.StopKillVisualSpoof()
@@ -2842,7 +3056,7 @@ F.ChatCommand = function(cmdLine)
 end
 
 -- Black screen for stands/bots
-local BlackScreenGui = nil
+BlackScreenGui = nil
 function F.CreateBlackScreen()
     if BlackScreenGui then return end
     local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 5)
@@ -2902,7 +3116,7 @@ function F.Notify(text)
 end
 
 -- Controller-only username ESP for bots in BotList
-local BotEspFolder = nil
+BotEspFolder = nil
 local BotEspConns = {}
 function F.ClearBotEsp()
     for _, c in pairs(BotEspConns) do pcall(function() c:Disconnect() end) end
@@ -4760,6 +4974,10 @@ F.OnChatted = function(player, message)
         local n = tonumber(args[2]); if n then SpamVoidInTime = math.clamp(n, 0.05, 5) end
     elseif cmd == "voidout" then
         local n = tonumber(args[2]); if n then SpamVoidOutTime = math.clamp(n, 0.05, 5) end
+    elseif cmd == "performance" or cmd == "perf" then
+        if args[2] == "off" then F.SetPerformanceMode(false)
+        elseif args[2] == "on" then F.SetPerformanceMode(true)
+        else F.SetPerformanceMode(not PerformanceMode) end
     elseif cmd == "antilag" then
         if args[2] == "off" then F.SetAntiLag(false)
         elseif args[2] == "on" then F.SetAntiLag(true)
@@ -4896,9 +5114,9 @@ CtrlPerRow = CtrlPerRow or 50
 -- Remote multi-bot control (scoped function = own register pool, avoids 200-local limit)
 function F.InitRemoteSystem()
     local NPOINT_URL = "https://api.npoint.io/e356beb5fcba0b07d042"
-    local RemoteLastId = nil
-    local RemotePollSeconds = 1.0
-    local RemoteCmdId = tonumber(getgenv().NamelessRemoteId) or 0
+    RemoteLastId = nil
+    RemotePollSeconds = 1.0
+    RemoteCmdId = tonumber(getgenv().NamelessRemoteId) or 0
     CtrlBotEnabled = CtrlBotEnabled or {}
     CtrlBotSlot = CtrlBotSlot or {}
     CtrlFormationRows = CtrlFormationRows or 1
