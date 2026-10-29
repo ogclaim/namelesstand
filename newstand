@@ -16,7 +16,7 @@ local ControllerName = "cool123lucas123"  -- set your main
 local BotList = {
     -- up to 10 usernames
     "JadeVenture3876",
-    "UHCaltForShewwsh7",
+    "",
     "",
     "",
     "",
@@ -36,9 +36,9 @@ local OrbitSpeed, OrbitHeight, GunOrbitDist = 30, 3, 10
 local WaitFFDelay = 2
 local RapidFireEnabled = true
 local RapidFireVolleys = 2
-local ForceHitFireRate = -0.1
-local KillAuraRange, KillAuraDelay = 50, 0.00
-local OptMode, OptCullRange = true, 20
+local ForceHitFireRate = 0.001
+local KillAuraRange, KillAuraDelay = 80, 0.01
+local OptMode, OptCullRange = true, 50
 local ProtectOwnerEnabled = false
 --------------------------------------------------------
 
@@ -278,18 +278,40 @@ function F.TryReload()
     pcall(function() MainEvent:FireServer("Reload") end)
 end
 
--- Glue (simple CFrame stick for summon/orbit)
+-- Glue (PhysicsRep + CFrame) for summon / around / protect / kill stick
 local glueConn = nil
+local BlackScreenGui = nil
+local AntiStompProcessing = false
+local AntiStompDelay = 1.5
+local FlashbackConfig = { Enabled = true, TriggerHP = 10, SavedCF = nil }
+getgenv().FlashbackConfig = FlashbackConfig
+
+function F.SetPhysicsRepRootPart(selfRoot, targetPart)
+    if not selfRoot then return end
+    pcall(function()
+        if sethiddenproperty and targetPart then
+            sethiddenproperty(selfRoot, "PhysicsRepRootPart", targetPart)
+        end
+    end)
+end
+
 function F.StopGlue()
     if glueConn then glueConn:Disconnect() glueConn = nil end
     GlueMode = nil
+    local r = F.root()
+    if r then
+        F.SetPhysicsRepRootPart(r, r)
+        pcall(function() r.AssemblyLinearVelocity = Vector3.zero end)
+    end
 end
 
 function F.StartGlueFollow()
     F.StopGlue()
     GlueMode = "follow"
     glueConn = RunService.Heartbeat:Connect(function()
-        if CurrentAction ~= "follow" and CurrentAction ~= "formation" and not ProtectOwnerEnabled then
+        if CurrentAction ~= "follow" and CurrentAction ~= "formation"
+            and CurrentAction ~= "kill" and CurrentAction ~= "autokill"
+            and not ProtectOwnerEnabled then
             return
         end
         local r = F.root()
@@ -297,8 +319,14 @@ function F.StartGlueFollow()
         if ProtectOwnerEnabled then
             local c = F.GetController()
             local cr = c and c.Character and c.Character:FindFirstChild("HumanoidRootPart")
-            if cr then r.CFrame = cr.CFrame end
+            if cr then
+                F.SetPhysicsRepRootPart(r, cr)
+                r.CFrame = cr.CFrame
+            end
             return
+        end
+        if CurrentAction == "kill" or CurrentAction == "autokill" then
+            return -- kill loop sets CFrame
         end
         local cf
         if CurrentAction == "formation" then
@@ -307,10 +335,114 @@ function F.StartGlueFollow()
             cf = F.GetSummonCF()
         end
         if cf then
+            local c = F.GetController()
+            local cr = c and c.Character and c.Character:FindFirstChild("HumanoidRootPart")
+            if cr then F.SetPhysicsRepRootPart(r, cr) end
             r.CFrame = cf
-            pcall(function() r.AssemblyLinearVelocity = Vector3.zero end)
+            pcall(function()
+                r.AssemblyLinearVelocity = Vector3.zero
+                r.AssemblyAngularVelocity = Vector3.zero
+            end)
         end
     end)
+end
+
+function F.NL_ForceKill(char)
+    if not char then return end
+    if replicatesignal then pcall(replicatesignal, LocalPlayer.Kill) return end
+    local h = char:FindFirstChildOfClass("Humanoid")
+    if h then pcall(function() h.Health = 0 end) return end
+    pcall(function() char:BreakJoints() end)
+end
+
+function F.HookKO(char)
+    if not char then return end
+    task.spawn(function()
+        local be = char:WaitForChild("BodyEffects", 4)
+        if not be then return end
+        local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
+        if not ko then return end
+        ko:GetPropertyChangedSignal("Value"):Connect(function()
+            if ko.Value then F.NL_ForceKill(char) end
+        end)
+        if ko.Value then F.NL_ForceKill(char) end
+    end)
+end
+
+function F.StartAntiStomp()
+    task.spawn(function()
+        while task.wait(0.15) do
+            local char = LocalPlayer.Character
+            if char then
+            local hum = char:FindFirstChildOfClass("Humanoid")
+            local hrp = char:FindFirstChild("HumanoidRootPart")
+            local be = char:FindFirstChild("BodyEffects")
+            local ko = be and (be:FindFirstChild("K.O") or be:FindFirstChild("KO"))
+            local cfg = FlashbackConfig
+            if cfg and cfg.Enabled and hum and hrp then
+                if hum.Health <= cfg.TriggerHP and not cfg.SavedCF then
+                    cfg.SavedCF = hrp.CFrame
+                elseif hum.Health > cfg.TriggerHP and cfg.SavedCF then
+                    hrp.CFrame = cfg.SavedCF
+                    cfg.SavedCF = nil
+                end
+            end
+            if ko and ko.Value and not AntiStompProcessing and hum and hum.Health > 0 then
+                AntiStompProcessing = true
+                task.delay(AntiStompDelay, function()
+                    local c = LocalPlayer.Character
+                    local h = c and c:FindFirstChildOfClass("Humanoid")
+                    local b = c and c:FindFirstChild("BodyEffects")
+                    local k = b and (b:FindFirstChild("K.O") or b:FindFirstChild("KO"))
+                    if k and k.Value and h and h.Health > 0 then
+                        F.NL_ForceKill(c)
+                    end
+                    AntiStompProcessing = false
+                end)
+            end
+            end -- char
+        end
+    end)
+end
+
+function F.CreateBlackScreen()
+    if BlackScreenGui then return end
+    pcall(function()
+        local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 3)
+        if not pg then return end
+        local g = Instance.new("ScreenGui")
+        g.Name = "NAMELESS_LITE_BS"
+        g.IgnoreGuiInset = true
+        g.ResetOnSpawn = false
+        g.DisplayOrder = 99999
+        local f = Instance.new("Frame")
+        f.Size = UDim2.fromScale(1, 1)
+        f.BackgroundColor3 = Color3.new(0, 0, 0)
+        f.BorderSizePixel = 0
+        f.Parent = g
+        local t = Instance.new("TextLabel")
+        t.Size = UDim2.new(1, 0, 0, 40)
+        t.Position = UDim2.new(0, 0, 0.45, 0)
+        t.BackgroundTransparency = 1
+        t.Text = "NAMELESS LITE | stand"
+        t.TextColor3 = Color3.new(1, 1, 1)
+        t.TextSize = 18
+        t.Font = Enum.Font.Gotham
+        t.Parent = f
+        g.Parent = pg
+        BlackScreenGui = g
+    end)
+end
+
+function F.DestroyBlackScreen()
+    if BlackScreenGui then
+        pcall(function() BlackScreenGui:Destroy() end)
+        BlackScreenGui = nil
+    end
+end
+
+function F.SetBlackScreen(on)
+    if on then F.CreateBlackScreen() else F.DestroyBlackScreen() end
 end
 
 function F.GetSummonCF()
@@ -663,6 +795,10 @@ function F.OnChatted(player, message)
         F.SelectGun(cmd)
     elseif cmd == "gun" then UseGun = true
     elseif cmd == "knife" then UseGun = false
+    elseif cmd == "blackscreen" or cmd == "bscreen" then
+        if args[2] == "off" then F.SetBlackScreen(false)
+        elseif args[2] == "on" then F.SetBlackScreen(true)
+        else F.SetBlackScreen(BlackScreenGui == nil) end
     end
 end
 
@@ -685,7 +821,16 @@ Players.PlayerAdded:Connect(function(p)
     if BotSet[p.Name:lower()] then Whitelist[p.Name:lower()] = true end
 end)
 
--- Boot
+-- Boot antistomp (stands + controller)
+F.StartAntiStomp()
+if LocalPlayer.Character then F.HookKO(LocalPlayer.Character) end
+LocalPlayer.CharacterAdded:Connect(function(char)
+    F.HookKO(char)
+    if BlackScreenGui then
+        task.defer(function() F.CreateBlackScreen() end)
+    end
+end)
+
 if F.IsStandClient() then
     Whitelist[LocalPlayer.Name:lower()] = true
     F.SetOptMode(true)
@@ -696,7 +841,6 @@ elseif F.IsControllerClient() then
     end)
     warn("[NAMELESS LITE] Controller ready | bots max " .. MaxBots)
 else
-    -- not in list: treat as stand if transfer later; still listen
     warn("[NAMELESS LITE] Loaded (not in BotList) — use !transfer or add username")
 end
 
