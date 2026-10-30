@@ -1,3 +1,7 @@
+-- NAMELESS LITE (single execute / loadstring-ready)
+-- Usage: loadstring(readfile("nameless_lite_loadstring.lua"))()
+-- Or paste entire file into executor
+
 --[[
     NAMELESS LITE STAND
     Max 10 bots | Limited commands | No camera lock | No tween kill
@@ -14,17 +18,9 @@ getgenv().NAMELESS_LITE_BOOT = true
 ------------------------ CONFIG ------------------------
 local ControllerName = "Kipsh6295"  -- set your main
 local BotList = {
-    -- up to 10 usernames
     "Skybla1919",
     "KINGSnakelady1995",
     "Kiptwist5311",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
 }
 local PREFIX = "NAMELESS.HVH|:!"
 local MaxBots = 10
@@ -1199,5 +1195,24 @@ getgenv().NAMELESS_LITE_UNLOAD = function()
     F.StopKillAura()
     OptMode = false
 end
+
+
+local function AnnounceLoaded()
+    local msg = "Stand loaded successfully!"
+    pcall(function()
+        local TCS = game:GetService("TextChatService")
+        local ch = TCS and TCS:FindFirstChild("TextChannels") and TCS.TextChannels:FindFirstChild("RBXGeneral")
+        if ch and ch.SendAsync then
+            ch:SendAsync(msg)
+            return
+        end
+    end)
+    pcall(function()
+        local ev = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
+        local say = ev and ev:FindFirstChild("SayMessageRequest")
+        if say then say:FireServer(msg, "All") end
+    end)
+end
+task.defer(AnnounceLoaded)
 
 print("[NAMELESS LITE] loaded")
