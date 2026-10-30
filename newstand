@@ -12,7 +12,7 @@ end
 getgenv().NAMELESS_LITE_BOOT = true
 
 ------------------------ CONFIG ------------------------
-local ControllerName = "godlyseananners9"  -- set your main
+local ControllerName = "jW1OSDJgF9YxLOZ"  -- set your main
 local BotList = {
     -- up to 10 usernames
     "Skybla1919",
