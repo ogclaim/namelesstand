@@ -26,7 +26,7 @@ local BotList = {
     "",
     "",
 }
-local PREFIX = "nameless:!"
+local PREFIX = "NAMELESS.HVH|:!"
 local MaxBots = 10
 local FollowBack, FollowHeight, FollowSpacing = 5, 3, 3.5
 local StackHeight = 3.2
