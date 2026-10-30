@@ -12,11 +12,11 @@ end
 getgenv().NAMELESS_LITE_BOOT = true
 
 ------------------------ CONFIG ------------------------
-local ControllerName = "cool123lucas123"  -- set your main
+local ControllerName = "godlyseananners9"  -- set your main
 local BotList = {
     -- up to 10 usernames
-    "JadeVenture3876",
-    "",
+    "Skybla1919",
+    "KINGSnakelady1995",
     "",
     "",
     "",
@@ -33,38 +33,19 @@ local StackHeight = 3.2
 local KillPosition = "Top"
 local KillDistance = 10
 local OrbitSpeed, OrbitHeight, GunOrbitDist = 30, 3, 10
-local WaitFFDelay = 2.35
+local WaitFFDelay = 2
 local RapidFireEnabled = true
-local RapidFireVolleys = 3
-local ForceHitFireRate = 0.0
-local KillAuraRange, KillAuraDelay = 80, 0.06
-local OptMode, OptCullRange = true, 50
+local RapidFireVolleys = 2
+local ForceHitFireRate = -0.1
+local KillAuraRange, KillAuraDelay = 50, 0.00
+local OptMode, OptCullRange = true, 20
 local ProtectOwnerEnabled = false
 --------------------------------------------------------
-getgenv().glue_active = false
-getgenv().glue_offset_z = 3
-getgenv().glue_position = "Back"
-getgenv().use_unc_method = sethiddenproperty ~= nil
-getgenv().connection_loop = nil
-getgenv().KnifeRage = { Enabled = false, Interval = 0.12, CycleStart = tick() }
-getgenv().target_players = getgenv().target_players or {}
-NoclipEnabled = true
-CFrameFollowEnabled = false
-CFrameKillEnabled = false
-StompHeight = 3.4
-FormationTarget = nil
-FormationType = "around"
-FormationRows, FormationPerRow = 1, 50
-HeightPerRow = 3
-CustomGlueCF = nil
-GlueTargetPlayer = nil
-
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local MainEvent = ReplicatedStorage:FindFirstChild("MainEvent") or ReplicatedStorage:WaitForChild("MainEvent", 10)
 
 local F = {}
@@ -292,395 +273,44 @@ function F.FireForceHit(target)
     return true
 end
 
--- NeverLarp-style auto reload (Ammo == 0 → press R)
-local _ReloadLast = {}
-local _ReloadCD = 0.8
-local LastReload = 0
 function F.TryReload()
-    local char = LocalPlayer.Character
-    if not char then return end
-    local function checkTool(tool)
-        if not tool or not tool:IsA("Tool") then return end
-        if tool.Name:lower():find("knife") then return end
-        local last = _ReloadLast[tool.Name] or 0
-        if tick() - last < _ReloadCD then return end
-        local scr = tool:FindFirstChild("Script")
-        local ammo = scr and scr:FindFirstChild("Ammo")
-        if not ammo then
-            ammo = tool:FindFirstChild("Ammo") or tool:FindFirstChild("AMMO")
-        end
-        if ammo and ammo:IsA("IntValue") and ammo.Value == 0 then
-            _ReloadLast[tool.Name] = tick()
-            LastReload = tick()
-            pcall(function()
-                if VirtualInputManager then
-                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
-                    task.wait(0.03)
-                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
-                end
-            end)
-            pcall(function()
-                if MainEvent then MainEvent:FireServer("Reload") end
-            end)
-        elseif not ammo then
-            if tick() - LastReload > 1.5 then
-                LastReload = tick()
-                pcall(function()
-                    if VirtualInputManager then
-                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
-                        task.wait(0.03)
-                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
-                    end
-                end)
-                pcall(function()
-                    if MainEvent then MainEvent:FireServer("Reload") end
-                end)
-            end
-        end
-    end
-    for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") then checkTool(tool) end
-    end
-    local bag = LocalPlayer:FindFirstChild("Backpack")
-    if bag then
-        for _, tool in ipairs(bag:GetChildren()) do
-            if tool:IsA("Tool") then checkTool(tool) end
-        end
-    end
+    if not MainEvent then return end
+    pcall(function() MainEvent:FireServer("Reload") end)
 end
 
--- continuous autoreload while gun combat / killaura
-if getgenv()._NamelessLiteAutoReloadConn then
-    pcall(function() getgenv()._NamelessLiteAutoReloadConn:Disconnect() end)
-end
-getgenv()._NamelessLiteAutoReloadConn = RunService.Heartbeat:Connect(function()
-    if not UseGun then return end
-    if CurrentAction == "kill" or CurrentAction == "autokill"
-        or KillAuraEnabled or HoldMode == "gun" then
-        F.TryReload()
-    end
-end)
-
-
--- ========== GLUE (exact same as nameless_stand_spoof) ==========
-getgenv().get_root_part = function()
-    local char = LocalPlayer.Character
-    if not char then return nil end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum or hum.Health <= 0 then return nil end
-    return hum.RootPart or char:FindFirstChild("HumanoidRootPart")
-end
-getgenv().reset_velocity = function()
-    local r = getgenv().get_root_part()
-    if r then
-        r.AssemblyLinearVelocity = Vector3.zero
-        r.AssemblyAngularVelocity = Vector3.zero
-    end
-end
-getgenv().get_position_offset = function()
-    local d, p = getgenv().glue_offset_z or 3, getgenv().glue_position or "Back"
-    if p == "Front" then return CFrame.new(0, 0, -d) end
-    if p == "Left Side" then return CFrame.new(-d, 0, 0) end
-    return CFrame.new(0, 0, d)
-end
-
-function F.SetPhysicsRepRootPart(selfRoot, targetPart)
-    if not selfRoot or not targetPart then return end
-    if sethiddenproperty then
-        pcall(function()
-            sethiddenproperty(selfRoot, "PhysicsRepRootPart", targetPart)
-        end)
-        pcall(function()
-            if InstanceHandle then
-                sethiddenproperty(selfRoot, "PhysicsRepRootRef", InstanceHandle.new(targetPart))
-            end
-        end)
-    end
-    pcall(function()
-        if setsimulationradius then setsimulationradius(math.huge, math.huge) end
-    end)
-end
-
-function F.ForceLocalVisibility(char)
-    char = char or LocalPlayer.Character
-    if not char then return end
-    for _, d in ipairs(char:GetDescendants()) do
-        if d:IsA("BasePart") then
-            pcall(function() d.LocalTransparencyModifier = 0 end)
-        elseif d:IsA("Decal") or d:IsA("Texture") then
-            pcall(function() d.LocalTransparencyModifier = 0 end)
-        end
-    end
-end
-
-function F.resolveTargetRoot()
-    if GlueMode == "follow" then
-        local c = F.GetController()
-        return c and c.Character and c.Character:FindFirstChild("HumanoidRootPart")
-    elseif GlueMode == "formation" then
-        local t = FormationTarget or F.GetController()
-        return t and t.Character and t.Character:FindFirstChild("HumanoidRootPart")
-    elseif GlueMode == "knife" or GlueMode == "gun" or GlueMode == "stomp" then
-        local t = GlueTargetPlayer or TargetPlayer
-        return t and t.Character and (t.Character:FindFirstChild("HumanoidRootPart") or t.Character:FindFirstChild("UpperTorso"))
-    elseif GlueMode == "custom" then
-        local t = GlueTargetPlayer
-        return t and t.Character and t.Character:FindFirstChild("HumanoidRootPart")
-    end
-end
-
-function F.GetSummonWorldCF()
-    return F.GetSummonCF and F.GetSummonCF() or nil
-end
-
-function F.GetFormationCF()
-    return F.GetAroundCF and F.GetAroundCF() or nil
-end
-
-function F.GetGunOrbitCF(tRoot)
-    if not OrbitEnabled then
-        local look = tRoot.CFrame.LookVector
-        local pos = tRoot.Position - look * (GunOrbitDist or 10) + Vector3.new(0, OrbitHeight or 3, 0)
-        return CFrame.lookAt(pos, tRoot.Position)
-    end
-    local a = tick() * (OrbitSpeed or 30) + (MySlot or 1) * (math.pi * 2 / 10)
-    return CFrame.lookAt(
-        tRoot.Position + Vector3.new(math.cos(a) * (GunOrbitDist or 10), OrbitHeight or 3, math.sin(a) * (GunOrbitDist or 10)),
-        tRoot.Position
-    )
-end
-
-function F.GetKnifeSurfaceCF(tRoot)
-    local dist, s = getgenv().glue_offset_z or 3, MySlot or 1
-    local off
-    if s == 1 then off = Vector3.new(0, dist, 0)
-    elseif s == 2 then off = Vector3.new(0, -dist, 0)
-    elseif s == 3 then off = Vector3.new(0, 0, dist)
-    elseif s == 4 then off = Vector3.new(0, 0, -dist)
-    elseif s == 5 then off = Vector3.new(-dist, 0, 0)
-    elseif s == 6 then off = Vector3.new(dist, 0, 0)
-    else
-        local ang = ((s - 7) / 14) * math.pi * 2
-        off = Vector3.new(math.cos(ang) * dist, 1, math.sin(ang) * dist)
-    end
-    return tRoot.CFrame * CFrame.new(off)
-end
-
-getgenv().unc_connection = function()
-    if getgenv().connection_loop then
-        getgenv().connection_loop:Disconnect()
-        getgenv().connection_loop = nil
-    end
-    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if hrp then hrp.CanCollide = false end
-    getgenv().connection_loop = RunService.Heartbeat:Connect(function()
-        if not getgenv().glue_active then
-            if getgenv().connection_loop then
-                getgenv().connection_loop:Disconnect()
-                getgenv().connection_loop = nil
-            end
-            getgenv().reset_velocity()
-            local a = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if a then
-                if not NoclipEnabled then a.CanCollide = true end
-                F.SetPhysicsRepRootPart(a, a)
-            end
-            return
-        end
-        local selfRoot = getgenv().get_root_part()
-        local targetRoot = F.resolveTargetRoot()
-        if not selfRoot then return end
-        if CurrentAction == "kill" or CurrentAction == "autokill" then
-            if targetRoot then
-                F.SetPhysicsRepRootPart(selfRoot, targetRoot)
-                selfRoot.CanCollide = false
-            end
-            F.ForceLocalVisibility()
-            return
-        end
-        local dest
-        if GlueMode == "follow" then
-            dest = F.GetSummonWorldCF()
-        elseif GlueMode == "formation" then
-            dest = F.GetFormationCF()
-        elseif GlueMode == "gun" and targetRoot then
-            dest = F.GetGunOrbitCF(targetRoot)
-        elseif GlueMode == "knife" and targetRoot then
-            dest = F.GetKnifeSurfaceCF(targetRoot)
-            local KR = getgenv().KnifeRage
-            if KR and KR.Enabled then
-                local H = KR.Interval or 0.12
-                if math.floor(tick() / H) % 2 == 0 then
-                    dest = CFrame.new(targetRoot.Position + Vector3.new(
-                        math.random() < 0.5 and 900000 or -900000,
-                        900000,
-                        math.random() < 0.5 and 900000 or -900000
-                    ))
-                end
-            end
-        elseif GlueMode == "stomp" and targetRoot then
-            dest = CFrame.new(targetRoot.Position + Vector3.new(0, StompHeight or 3.4, 0))
-        elseif GlueMode == "custom" then
-            dest = CustomGlueCF
-        elseif targetRoot then
-            dest = targetRoot.CFrame * getgenv().get_position_offset()
-        end
-        local isKill = (CurrentAction == "kill" or CurrentAction == "autokill")
-        local isFollow = (CurrentAction == "follow" or CurrentAction == "formation" or GlueMode == "follow")
-        local useCFrameOnly = (isKill and CFrameKillEnabled) or (isFollow and CFrameFollowEnabled)
-        if targetRoot then
-            F.SetPhysicsRepRootPart(selfRoot, targetRoot)
-            selfRoot.CanCollide = false
-        else
-            F.SetPhysicsRepRootPart(selfRoot, selfRoot)
-        end
-        if dest then
-            selfRoot.AssemblyLinearVelocity = Vector3.zero
-            selfRoot.AssemblyAngularVelocity = Vector3.zero
-            selfRoot.CFrame = dest
-        end
-        F.ForceLocalVisibility()
-    end)
-end
-
-function F.StartGlue(mode, targetPlayer)
-    GlueMode = mode or "follow"
-    GlueTargetPlayer = targetPlayer
-    getgenv().glue_active = true
-    if getgenv().KnifeRage then
-        getgenv().KnifeRage.Enabled = (mode == "knife")
-        getgenv().KnifeRage.CycleStart = tick()
-    end
-    getgenv().unc_connection()
-end
-
+-- Glue (simple CFrame stick for summon/orbit)
+local glueConn = nil
 function F.StopGlue()
-    getgenv().glue_active = false
-    if getgenv().KnifeRage then getgenv().KnifeRage.Enabled = false end
-    if getgenv().connection_loop then
-        getgenv().connection_loop:Disconnect()
-        getgenv().connection_loop = nil
-    end
-    getgenv().reset_velocity()
-    local a = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if a then
-        if not NoclipEnabled then a.CanCollide = true end
-        F.SetPhysicsRepRootPart(a, a)
-    end
-    GlueTargetPlayer = nil
-    CustomGlueCF = nil
+    if glueConn then glueConn:Disconnect() glueConn = nil end
     GlueMode = nil
 end
 
 function F.StartGlueFollow()
-    -- alias used by summon/around/protect
-    local ctrl = F.GetController()
-    if CurrentAction == "formation" then
-        FormationTarget = ctrl
-        F.StartGlue("formation", ctrl)
-    elseif ProtectOwnerEnabled then
-        F.StartGlue("follow", ctrl)
-    else
-        F.StartGlue("follow", ctrl)
-    end
-end
-
-function F.NL_ForceKill(char)
-    if not char then return end
-    if replicatesignal then pcall(replicatesignal, LocalPlayer.Kill) return end
-    local h = char:FindFirstChildOfClass("Humanoid")
-    if h then pcall(function() h.Health = 0 end) return end
-    pcall(function() char:BreakJoints() end)
-end
-
-function F.HookKO(char)
-    if not char then return end
-    task.spawn(function()
-        local be = char:WaitForChild("BodyEffects", 4)
-        if not be then return end
-        local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
-        if not ko then return end
-        ko:GetPropertyChangedSignal("Value"):Connect(function()
-            if ko.Value then F.NL_ForceKill(char) end
-        end)
-        if ko.Value then F.NL_ForceKill(char) end
-    end)
-end
-
-function F.StartAntiStomp()
-    task.spawn(function()
-        while task.wait(0.15) do
-            local char = LocalPlayer.Character
-            if char then
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            local hrp = char:FindFirstChild("HumanoidRootPart")
-            local be = char:FindFirstChild("BodyEffects")
-            local ko = be and (be:FindFirstChild("K.O") or be:FindFirstChild("KO"))
-            local cfg = FlashbackConfig
-            if cfg and cfg.Enabled and hum and hrp then
-                if hum.Health <= cfg.TriggerHP and not cfg.SavedCF then
-                    cfg.SavedCF = hrp.CFrame
-                elseif hum.Health > cfg.TriggerHP and cfg.SavedCF then
-                    hrp.CFrame = cfg.SavedCF
-                    cfg.SavedCF = nil
-                end
-            end
-            if ko and ko.Value and not AntiStompProcessing and hum and hum.Health > 0 then
-                AntiStompProcessing = true
-                task.delay(AntiStompDelay, function()
-                    local c = LocalPlayer.Character
-                    local h = c and c:FindFirstChildOfClass("Humanoid")
-                    local b = c and c:FindFirstChild("BodyEffects")
-                    local k = b and (b:FindFirstChild("K.O") or b:FindFirstChild("KO"))
-                    if k and k.Value and h and h.Health > 0 then
-                        F.NL_ForceKill(c)
-                    end
-                    AntiStompProcessing = false
-                end)
-            end
-            end -- char
+    F.StopGlue()
+    GlueMode = "follow"
+    glueConn = RunService.Heartbeat:Connect(function()
+        if CurrentAction ~= "follow" and CurrentAction ~= "formation" and not ProtectOwnerEnabled then
+            return
+        end
+        local r = F.root()
+        if not r then return end
+        if ProtectOwnerEnabled then
+            local c = F.GetController()
+            local cr = c and c.Character and c.Character:FindFirstChild("HumanoidRootPart")
+            if cr then r.CFrame = cr.CFrame end
+            return
+        end
+        local cf
+        if CurrentAction == "formation" then
+            cf = F.GetAroundCF()
+        else
+            cf = F.GetSummonCF()
+        end
+        if cf then
+            r.CFrame = cf
+            pcall(function() r.AssemblyLinearVelocity = Vector3.zero end)
         end
     end)
-end
-
-function F.CreateBlackScreen()
-    if BlackScreenGui then return end
-    pcall(function()
-        local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 3)
-        if not pg then return end
-        local g = Instance.new("ScreenGui")
-        g.Name = "NAMELESS_LITE_BS"
-        g.IgnoreGuiInset = true
-        g.ResetOnSpawn = false
-        g.DisplayOrder = 99999
-        local f = Instance.new("Frame")
-        f.Size = UDim2.fromScale(1, 1)
-        f.BackgroundColor3 = Color3.new(0, 0, 0)
-        f.BorderSizePixel = 0
-        f.Parent = g
-        local t = Instance.new("TextLabel")
-        t.Size = UDim2.new(1, 0, 0, 40)
-        t.Position = UDim2.new(0, 0, 0.45, 0)
-        t.BackgroundTransparency = 1
-        t.Text = "NAMELESS LITE | stand"
-        t.TextColor3 = Color3.new(1, 1, 1)
-        t.TextSize = 18
-        t.Font = Enum.Font.Gotham
-        t.Parent = f
-        g.Parent = pg
-        BlackScreenGui = g
-    end)
-end
-
-function F.DestroyBlackScreen()
-    if BlackScreenGui then
-        pcall(function() BlackScreenGui:Destroy() end)
-        BlackScreenGui = nil
-    end
-end
-
-function F.SetBlackScreen(on)
-    if on then F.CreateBlackScreen() else F.DestroyBlackScreen() end
 end
 
 function F.GetSummonCF()
@@ -726,25 +356,21 @@ function F.StartFollow()
     if F.IsControllerClient() then return end
     F.StopAll()
     CurrentAction = "follow"
-    ProtectOwnerEnabled = false
-    F.StartGlue("follow", F.GetController())
+    F.StartGlueFollow()
 end
 
 function F.StartAround()
     if F.IsControllerClient() then return end
     F.StopAll()
     CurrentAction = "formation"
-    FormationType = "around"
-    FormationTarget = F.GetController()
-    ProtectOwnerEnabled = false
-    F.StartGlue("formation", F.GetController())
+    F.StartGlueFollow()
 end
 
 function F.StartProtectOwner()
     if F.IsControllerClient() then return end
     ProtectOwnerEnabled = true
-    CurrentAction = "follow"
-    F.StartGlue("follow", F.GetController())
+    CurrentAction = "protect"
+    F.StartGlueFollow()
 end
 
 function F.StopProtectOwner()
@@ -794,12 +420,6 @@ function F.StartKill(targets, auto)
     TargetIndex = 1
     TargetPlayer = targets[1]
     CurrentAction = auto and "autokill" or "kill"
-    GlueTargetPlayer = TargetPlayer
-    if UseGun then
-        F.StartGlue("gun", TargetPlayer)
-    else
-        F.StartGlue("knife", TargetPlayer)
-    end
     local voidPhase, voidUntil = "surface", 0
     KillAttackConn = RunService.Heartbeat:Connect(function()
         if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then return end
@@ -1043,10 +663,6 @@ function F.OnChatted(player, message)
         F.SelectGun(cmd)
     elseif cmd == "gun" then UseGun = true
     elseif cmd == "knife" then UseGun = false
-    elseif cmd == "blackscreen" or cmd == "bscreen" then
-        if args[2] == "off" then F.SetBlackScreen(false)
-        elseif args[2] == "on" then F.SetBlackScreen(true)
-        else F.SetBlackScreen(BlackScreenGui == nil) end
     end
 end
 
@@ -1069,16 +685,7 @@ Players.PlayerAdded:Connect(function(p)
     if BotSet[p.Name:lower()] then Whitelist[p.Name:lower()] = true end
 end)
 
--- Boot antistomp (stands + controller)
-F.StartAntiStomp()
-if LocalPlayer.Character then F.HookKO(LocalPlayer.Character) end
-LocalPlayer.CharacterAdded:Connect(function(char)
-    F.HookKO(char)
-    if BlackScreenGui then
-        task.defer(function() F.CreateBlackScreen() end)
-    end
-end)
-
+-- Boot
 if F.IsStandClient() then
     Whitelist[LocalPlayer.Name:lower()] = true
     F.SetOptMode(true)
@@ -1089,6 +696,7 @@ elseif F.IsControllerClient() then
     end)
     warn("[NAMELESS LITE] Controller ready | bots max " .. MaxBots)
 else
+    -- not in list: treat as stand if transfer later; still listen
     warn("[NAMELESS LITE] Loaded (not in BotList) — use !transfer or add username")
 end
 
