@@ -6,8 +6,10 @@ local ControllerName = "godlyseananners9"
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
     "JadeVenture3876",
-    "KINGSnakelady1995",
-    "Kiptwist5311",
+    "MechaXerath5324",
+    "HiddenGraves508",
+	"ApexPanther6335",
+	"AbyssalTyphon232",
 }
 local PREFIX = "NAMELESS.HVH | !"
 -------------------------------------------------------------
