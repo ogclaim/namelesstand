@@ -14,7 +14,7 @@ getgenv().NAMELESS_LITE_BOOT = true
 ------------------------ CONFIG ------------------------
 local ControllerName = "Kipsh6295"  -- set your main
 local BotList = {
-    "Skybla1919",
+    "JadeVenture3876",
     "KINGSnakelady1995",
     "Kiptwist5311",
 }
