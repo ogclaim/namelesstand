@@ -14,11 +14,19 @@ getgenv().NAMELESS_LITE_BOOT = true
 ------------------------ CONFIG ------------------------
 local ControllerName = "godlyseananners9"  -- set your main
 local BotList = {
+    -- up to 10 usernames
     "JadeVenture3876",
-    "KINGSnakelady1995",
-    "Kiptwist5311",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
 }
-local PREFIX = "NAMELESS.HVH|:!"
+local PREFIX = "nameless:!"
 local MaxBots = 10
 local FollowBack, FollowHeight, FollowSpacing = 5, 3, 3.5
 local StackHeight = 3.2
@@ -39,14 +47,6 @@ local CtrlOrbitDist = 10
 local CtrlOrbitSpeed = 10
 local CtrlOrbitInDist = 5
 local CtrlOrbitOutDist = 10
-FlyMode = "Hover"
-local FLY_MODE_OFFSET = {
-    Hover = { y = 2.5, back = 0 },
-    Glide = { y = 4, back = 1 },
-    Fly = { y = 12, back = 2 },
-    Heaven = { y = 45, back = 0 },
-    gogo = { y = 1.2, back = -1.5 },
-}
 --------------------------------------------------------
 getgenv().glue_active = false
 getgenv().glue_offset_z = 3
@@ -124,9 +124,8 @@ local function lower(s) return tostring(s or ""):lower() end
 function F.IsOwner(p)
     if not p then return false end
     local n = p.Name:lower()
-    local d = p.DisplayName and p.DisplayName:lower() or ""
-    if n == ControllerName:lower() or d == ControllerName:lower() then return true end
-    if ExtraOwners[n] or ExtraOwners[d] then return true end
+    if n == ControllerName:lower() then return true end
+    if ExtraOwners[n] then return true end
     return false
 end
 
@@ -139,11 +138,6 @@ function F.IsStandClient()
 end
 
 function F.GetController()
-    local want = ControllerName:lower()
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p.Name:lower() == want then return p end
-        if p.DisplayName and p.DisplayName:lower() == want then return p end
-    end
     return Players:FindFirstChild(ControllerName)
 end
 
@@ -709,8 +703,7 @@ function F.GetSummonCF()
     local look, right = b.LookVector, b.RightVector
     local col = i % 3
     local row = math.floor(i / 3)
-    local fm = FLY_MODE_OFFSET[FlyMode or "Hover"] or { y = 2.5, back = 0 }
-    local pos = cr.Position - look * (FollowBack + row * FollowBack + (fm.back or 0)) + right * ((col - 1) * FollowSpacing) + Vector3.new(0, FollowHeight + row * 1.5 + (fm.y or 0), 0)
+    local pos = cr.Position - look * (FollowBack + row * FollowBack) + right * ((col - 1) * FollowSpacing) + Vector3.new(0, FollowHeight + row * 1.5, 0)
     return CFrame.new(pos, pos + look)
 end
 
@@ -1013,33 +1006,13 @@ function F.ParseTargets(args, startIdx)
     return out
 end
 
-function F.ParseBody(message)
-    if not message then return nil end
-    local raw = tostring(message):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
-    local lower = raw:lower()
-    -- NAMELESS.HVH|:!cmd  (case-insensitive)
-    local tag = "nameless.hvh|:!"
-    if lower:sub(1, #tag) == tag then
-        return raw:sub(#tag + 1):match("^%s*(.-)%s*$")
-    end
-    -- legacy nameless:!
-    if lower:sub(1, 10) == "nameless:!" then
-        return raw:sub(11):match("^%s*(.-)%s*$")
-    end
-    -- plain !cmd
-    if lower:sub(1, 1) == "!" then
-        return raw:sub(2):match("^%s*(.-)%s*$")
-    end
-    return nil
-end
-
 function F.OnChatted(player, message)
-    if not player or not F.IsOwner(player) then return end
-    -- Only stands execute stand actions (controller chat is the signal)
-    if F.IsControllerClient() then return end
-    local body = F.ParseBody(message)
-    if not body or body == "" then return end
-    body = body:lower()
+    if not F.IsOwner(player) then return end
+    if F.IsControllerClient() then return end -- controller does not listen to self for bot actions when same account
+    -- stands execute; if controller is separate they chat and stands hear
+    message = lower(message):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
+    if message:sub(1, #PREFIX) ~= PREFIX then return end
+    local body = message:sub(#PREFIX + 1)
     local args = {}
     for w in body:gmatch("%S+") do args[#args + 1] = w end
     local cmd = args[1]
@@ -1073,10 +1046,6 @@ function F.OnChatted(player, message)
     elseif cmd == "orbitkill" then
         KillMethod = "orbit"
         OrbitEnabled = true
-    elseif cmd == "flymode" or cmd == "fly" then
-        local m = args[2] and lower(args[2]) or ""
-        local map = { hover = "Hover", glide = "Glide", fly = "Fly", heaven = "Heaven", gogo = "gogo" }
-        if map[m] then FlyMode = map[m] end
     elseif cmd == "spinbot" or cmd == "spin" then
         local n = tonumber(args[2])
         if args[2] == "off" then
@@ -1180,38 +1149,13 @@ RunService.Heartbeat:Connect(function()
 end)
 
 
--- Chat hooks (legacy Chatted + TextChatService)
-local function HookPlayerChat(p)
-    if not p then return end
-    p.Chatted:Connect(function(msg)
-        F.OnChatted(p, msg)
-    end)
-end
+-- Chat hooks
 for _, p in ipairs(Players:GetPlayers()) do
-    HookPlayerChat(p)
+    p.Chatted:Connect(function(msg) F.OnChatted(p, msg) end)
 end
 Players.PlayerAdded:Connect(function(p)
-    HookPlayerChat(p)
+    p.Chatted:Connect(function(msg) F.OnChatted(p, msg) end)
     if BotSet[p.Name:lower()] then Whitelist[p.Name:lower()] = true end
-end)
--- Modern chat
-pcall(function()
-    local TCS = game:GetService("TextChatService")
-    if not TCS then return end
-    TCS.MessageReceived:Connect(function(textMessage)
-        if not textMessage then return end
-        local src = textMessage.TextSource
-        if not src then return end
-        local plr = Players:GetPlayerByUserId(src.UserId)
-        if plr then
-            F.OnChatted(plr, textMessage.Text)
-        end
-    end)
-end)
--- Debug: confirm stand identity
-pcall(function()
-    warn("[NAMELESS LITE] local=" .. LocalPlayer.Name .. " controller=" .. ControllerName
-        .. " isStand=" .. tostring(F.IsStandClient()) .. " slot=" .. tostring(MySlot))
 end)
 
 -- Boot antistomp (stands + controller)
@@ -1242,24 +1186,5 @@ getgenv().NAMELESS_LITE_UNLOAD = function()
     F.StopKillAura()
     OptMode = false
 end
-
-
-local function AnnounceLoaded()
-    local msg = "Stand loaded successfully!"
-    pcall(function()
-        local TCS = game:GetService("TextChatService")
-        local ch = TCS and TCS:FindFirstChild("TextChannels") and TCS.TextChannels:FindFirstChild("RBXGeneral")
-        if ch and ch.SendAsync then
-            ch:SendAsync(msg)
-            return
-        end
-    end)
-    pcall(function()
-        local ev = game:GetService("ReplicatedStorage"):FindFirstChild("DefaultChatSystemChatEvents")
-        local say = ev and ev:FindFirstChild("SayMessageRequest")
-        if say then say:FireServer(msg, "All") end
-    end)
-end
-task.defer(AnnounceLoaded)
 
 print("[NAMELESS LITE] loaded")
