@@ -1,7 +1,3 @@
--- NAMELESS LITE (single execute / loadstring-ready)
--- Usage: loadstring(readfile("nameless_lite_loadstring.lua"))()
--- Or paste entire file into executor
-
 --[[
     NAMELESS LITE STAND
     Max 10 bots | Limited commands | No camera lock | No tween kill
@@ -128,8 +124,9 @@ local function lower(s) return tostring(s or ""):lower() end
 function F.IsOwner(p)
     if not p then return false end
     local n = p.Name:lower()
-    if n == ControllerName:lower() then return true end
-    if ExtraOwners[n] then return true end
+    local d = p.DisplayName and p.DisplayName:lower() or ""
+    if n == ControllerName:lower() or d == ControllerName:lower() then return true end
+    if ExtraOwners[n] or ExtraOwners[d] then return true end
     return false
 end
 
@@ -142,6 +139,11 @@ function F.IsStandClient()
 end
 
 function F.GetController()
+    local want = ControllerName:lower()
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name:lower() == want then return p end
+        if p.DisplayName and p.DisplayName:lower() == want then return p end
+    end
     return Players:FindFirstChild(ControllerName)
 end
 
@@ -1011,13 +1013,33 @@ function F.ParseTargets(args, startIdx)
     return out
 end
 
+function F.ParseBody(message)
+    if not message then return nil end
+    local raw = tostring(message):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
+    local lower = raw:lower()
+    -- NAMELESS.HVH|:!cmd  (case-insensitive)
+    local tag = "nameless.hvh|:!"
+    if lower:sub(1, #tag) == tag then
+        return raw:sub(#tag + 1):match("^%s*(.-)%s*$")
+    end
+    -- legacy nameless:!
+    if lower:sub(1, 10) == "nameless:!" then
+        return raw:sub(11):match("^%s*(.-)%s*$")
+    end
+    -- plain !cmd
+    if lower:sub(1, 1) == "!" then
+        return raw:sub(2):match("^%s*(.-)%s*$")
+    end
+    return nil
+end
+
 function F.OnChatted(player, message)
-    if not F.IsOwner(player) then return end
-    if F.IsControllerClient() then return end -- controller does not listen to self for bot actions when same account
-    -- stands execute; if controller is separate they chat and stands hear
-    message = lower(message):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
-    if message:sub(1, #PREFIX) ~= PREFIX then return end
-    local body = message:sub(#PREFIX + 1)
+    if not player or not F.IsOwner(player) then return end
+    -- Only stands execute stand actions (controller chat is the signal)
+    if F.IsControllerClient() then return end
+    local body = F.ParseBody(message)
+    if not body or body == "" then return end
+    body = body:lower()
     local args = {}
     for w in body:gmatch("%S+") do args[#args + 1] = w end
     local cmd = args[1]
@@ -1158,13 +1180,38 @@ RunService.Heartbeat:Connect(function()
 end)
 
 
--- Chat hooks
+-- Chat hooks (legacy Chatted + TextChatService)
+local function HookPlayerChat(p)
+    if not p then return end
+    p.Chatted:Connect(function(msg)
+        F.OnChatted(p, msg)
+    end)
+end
 for _, p in ipairs(Players:GetPlayers()) do
-    p.Chatted:Connect(function(msg) F.OnChatted(p, msg) end)
+    HookPlayerChat(p)
 end
 Players.PlayerAdded:Connect(function(p)
-    p.Chatted:Connect(function(msg) F.OnChatted(p, msg) end)
+    HookPlayerChat(p)
     if BotSet[p.Name:lower()] then Whitelist[p.Name:lower()] = true end
+end)
+-- Modern chat
+pcall(function()
+    local TCS = game:GetService("TextChatService")
+    if not TCS then return end
+    TCS.MessageReceived:Connect(function(textMessage)
+        if not textMessage then return end
+        local src = textMessage.TextSource
+        if not src then return end
+        local plr = Players:GetPlayerByUserId(src.UserId)
+        if plr then
+            F.OnChatted(plr, textMessage.Text)
+        end
+    end)
+end)
+-- Debug: confirm stand identity
+pcall(function()
+    warn("[NAMELESS LITE] local=" .. LocalPlayer.Name .. " controller=" .. ControllerName
+        .. " isStand=" .. tostring(F.IsStandClient()) .. " slot=" .. tostring(MySlot))
 end)
 
 -- Boot antistomp (stands + controller)
