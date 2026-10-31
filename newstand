@@ -1,29 +1,32 @@
-getgenv().NAMELESS_BOOT = true
-
--- Register pool fix: shared state table (avoids 200 local limit)
-getgenv()._NL = getgenv()._NL or {}
-local NL = getgenv()._NL
-
-local F = {}
--- early stubs (filled later) so early loops never index missing keys
-F.EnsureDancePlaying = function() end
-F.StartDefaultEmote = function() end
-F.PlayEmote = function() end
------------------------- ROLES ------------------------
--- Set your main account here. Leave "" to auto = whoever runs without being in BotList.
+--[[
+    NAMELESS.HVH — Stand Controller
+]]
+------------------------ EDIT THESE ------------------------
 local ControllerName = "godlyseananners9"
--- Original owner (can reclaim after transfer; only they can wl/unwl)
 local OriginalControllerName = ControllerName
--- Named alts (order = slot 1..N). Use exact Roblox usernames.
 local BotListOrdered = {
     "JadeVenture3876",
     "KINGSnakelady1995",
     "Kiptwist5311",
-    -- "BotName4",
-    -- "BotName5",
 }
+local PREFIX = "NAMELESS.HVH | !"
+-------------------------------------------------------------
+
+getgenv().NAMELESS_BOOT = true
+getgenv()._NL = getgenv()._NL or {}
+local NL = getgenv()._NL
+local F = {}
+F.EnsureDancePlaying = function() end
+F.StartDefaultEmote = function() end
+F.PlayEmote = function() end
 local MySlot = 1
--------------------------------------------------------
+SyncBotsEnabled = false
+ForceHitCmdTarget = nil
+ForceHit2Active = false
+ForceHit1Active = false
+StompSelectedTarget = false
+ForceHitStompTarget = nil
+
 getgenv().SIZE_X, getgenv().SIZE_Y, getgenv().SIZE_Z = 50, 50, 50
 getgenv().KnifeHitboxEnabled = true
 getgenv().glue_active = false
@@ -137,10 +140,11 @@ getgenv().KillAura = getgenv().KillAura or {
     ApplyForceHitVisuals = false,
 }
 local ShiftSpamInterval = 0.1
-local PREFIX = "NAMELESS.HVH | !"
+-- PREFIX set at top
 SyncBotsEnabled = false
 ForceHitCmdTarget = nil -- set by !forcehit <user>
 ForceHit2Active = false
+ForceHit1Active = false
 StompSelectedTarget = false
 ForceHitStompTarget = nil
 PlayerRelation = PlayerRelation or {} -- name.lower -> friendly|neutral|enemy
@@ -196,7 +200,6 @@ if LiteMode then
     ANIM_SPEED = 0.5
     NoRenderEnabled = true
     KillVisualSpoof = false
-    warn("[NAMELESS] LITE MODE on — reduced CPU/GPU (forcehit + killaura kept)")
 end
 
 
@@ -374,8 +377,7 @@ function F.SetKillMethod(m)
     if (CurrentAction == "kill" or CurrentAction == "autokill") and KillPhase == "attack" then
         pcall(function() F.StartKillAttackLoop() end)
     end
-    warn("[NAMELESS] Kill method → " .. m)
-    return m
+return m
 end
 pcall(function() F.SetKillMethod(KillMethod or "orbit") end)
 AutoStompEnabled = false
@@ -837,7 +839,6 @@ function F.SetRapidFire(on)
     RapidFireEnabled = on and true or false
     ForceHitFireRate = RapidFireEnabled and RapidFireRate or NormalFireRate
     FastKillTriggerRate = RapidFireEnabled and 0.0 or 0.05
-    warn("[NAMELESS] Rapid fire " .. (RapidFireEnabled and ("ON x" .. tostring(RapidFireVolleys or 4)) or "OFF"))
 end
 
 function F.SetAntiLag(on)
@@ -1300,12 +1301,10 @@ function F.SetVisualStrip(on)
         VisualStripConn = nil
     end
     if not VisualStripEnabled then
-        warn("[NAMELESS] visual strip OFF")
-        return
+return
     end
     F.StripAllCharacters()
-    warn("[NAMELESS] visual strip ON (grey avatars only)")
-    VisualStripConn = Players.PlayerAdded:Connect(function(plr)
+VisualStripConn = Players.PlayerAdded:Connect(function(plr)
         plr.CharacterAdded:Connect(function(char)
             if VisualStripEnabled then
                 task.wait(0.5)
@@ -1343,12 +1342,10 @@ function F.SetOptMode(on)
         OptConn = nil
     end
     if not OptMode then
-        warn("[NAMELESS] optimization OFF")
-        return
+return
     end
     F.ApplyOptSettings()
-    warn("[NAMELESS] optimization ON (batched, no freeze)")
-    -- single slow loop: cull batch + grey batch + occasional mute
+-- single slow loop: cull batch + grey batch + occasional mute
     task.spawn(function()
         local tickN = 0
         while OptMode do
@@ -1374,7 +1371,6 @@ function F.SetPingSpoof(on)
         getgenv().NamelessPingSpoof.PingSpoofEnabled = PingSpoofEnabled
         getgenv().NamelessPingSpoof.PingValue = PingSpoofValue or 30
     end
-    warn("[NAMELESS] ping spoof " .. (PingSpoofEnabled and ("ON " .. tostring(PingSpoofValue) .. "ms") or "OFF"))
 end
 
 function F.StartProtectOwner()
@@ -1392,13 +1388,11 @@ function F.StartProtectOwner()
             pcall(function() r.AssemblyLinearVelocity = Vector3.zero end)
         end
     end)
-    warn("[NAMELESS] protect owner ON")
 end
 
 function F.StopProtectOwner()
     ProtectOwnerEnabled = false
     if ProtectOwnerConn then pcall(function() ProtectOwnerConn:Disconnect() end) ProtectOwnerConn = nil end
-    warn("[NAMELESS] protect owner OFF")
 end
 
 task.spawn(function()
@@ -2583,7 +2577,8 @@ end
 _lastFHFire = 0
 FHTracerFolder = nil
 
-function F.DrawForceHitTracer(origin, hitPos)
+function F.DrawForceHitTracer(...) end
+function F.DrawForceHitTracer_DISABLED(origin, hitPos)
     -- ONLY controller sees bullet tracers (bots skip for FPS)
     if not F.IsControllerClient() then return end
     if not origin or not hitPos then return end
@@ -2673,15 +2668,10 @@ end)
 
 function F.FireForceHit(target)
     if not MainEvent or not target then return false end
-    if ForceHitCmdTarget and ForceHitCmdTarget.Parent and target ~= ForceHitCmdTarget then
-        return false
-    end
+    -- optional lock: only the cmd target
     if ForceHitCmdTarget and ForceHitCmdTarget.Parent then
-        local ctrl = F.GetController and F.GetController()
-        local cr = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
-        local tr = target.Character and target.Character:FindFirstChild("HumanoidRootPart")
-        if cr and tr and (cr.Position - tr.Position).Magnitude > 80 then
-            return false -- only near controller
+        if target ~= ForceHitCmdTarget and target.Name ~= ForceHitCmdTarget.Name then
+            return false
         end
     end
     local now = tick()
@@ -2749,8 +2739,7 @@ function F.FireForceHit(target)
         }
         pcall(function() MainEvent:FireServer("Shoot", packet) end)
     end
-    -- controller-only bullet beam
-    F.DrawForceHitTracer(handlePos, hitPos)
+    -- tracer disabled
     _lastFHFire = now
     _lastFHT = now
     return true
@@ -3506,8 +3495,7 @@ F.ChatCommand = function(cmdLine)
     -- also run locally for controller-side silent tools
     pcall(function() F.RunSilent(cmdLine) end)
     if not sent then
-        warn("[NAMELESS] chat send failed — ran locally only: " .. msg)
-    end
+end
 end
 
 -- Black screen for stands/bots
@@ -3567,7 +3555,6 @@ function F.Notify(text)
             TextSize = 16,
         })
     end)
-    warn("[NAMELESS] " .. tostring(text))
 end
 
 -- Controller-only username ESP for bots in BotList
@@ -3767,7 +3754,7 @@ task.spawn(function()
                 end
             end
             if target then
-                if ForceHitTracerEnabled then
+                if false and ForceHitTracerEnabled then
                     local my = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                     local th = target.Character and target.Character:FindFirstChild("Head")
                     if my and th then F.DrawFHTracer(my.Position, th.Position) end
@@ -3788,15 +3775,13 @@ task.spawn(function()
             if input.UserInputType == Enum.UserInputType.Keyboard then
                 ForceHitKeyCode = input.KeyCode
                 ForceHitKeyListening = false
-                warn("[NAMELESS] forcehit key = " .. tostring(input.KeyCode.Name))
-            end
+end
             return
         end
         if input.KeyCode == ForceHitKeyCode and not ForceHitFOVEnabled then
             if ForceHitKeybindTarget and ForceHitKeybindTarget.Parent then
                 ForceHitKeybindTarget = nil
-                warn("[NAMELESS] forcehit target cleared")
-                return
+return
             end
             local mouse = LocalPlayer:GetMouse()
             local best, bd = nil, 9e9
@@ -3813,37 +3798,80 @@ task.spawn(function()
             end
             if best then
                 ForceHitKeybindTarget = best
-                warn("[NAMELESS] forcehit target = " .. best.Name)
-            end
+end
         end
     end)
 end)
 
 
 task.spawn(function()
-    local retCF = nil
     while true do
         task.wait(0.15)
         if StompSelectedTarget then
-            local t = ForceHitStompTarget or ForceHitCmdTarget
+            local t = ForceHitStompTarget or ForceHitCmdTarget or ForceHitKeybindTarget
             if t and t.Character then
                 local be = t.Character:FindFirstChild("BodyEffects")
                 local ko = be and (be:FindFirstChild("K.O") or be:FindFirstChild("KO"))
                 if ko and ko.Value then
-                    local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    if r and not retCF then retCF = r.CFrame end
                     if F.DoStomp then pcall(F.DoStomp, t) end
-                    task.wait(0.5)
-                    if retCF and r then pcall(function() r.CFrame = retCF end) end
-                    retCF = nil
+                    task.wait(0.45)
+                    -- return to owner (controller)
+                    if F.StartFollow then
+                        pcall(F.StartFollow)
+                    else
+                        local ctrl = F.GetController and F.GetController()
+                        local cr = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
+                        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if cr and r then pcall(function() r.CFrame = cr.CFrame * CFrame.new(0, 3, 5) end) end
+                    end
                     StompSelectedTarget = false
                 end
             end
-        else
-            retCF = nil
         end
     end
 end)
+
+
+-- Controller local combat (Ragebot UI — does not command bots)
+function F.ControllerKill(name, auto)
+    if not F.IsControllerClient or not F.IsControllerClient() then return end
+    local p = F.FindPlayer and F.FindPlayer(name)
+    if not p then return end
+    UseGun = true
+    -- equip uzi/rev for controller
+    if F.SelectGun then
+        if not F.SelectGun("uzi") then F.SelectGun("rev") end
+    end
+    TargetPlayer = p
+    getgenv()._CTRL_KILL_GEN = (getgenv()._CTRL_KILL_GEN or 0) + 1
+    local gen = getgenv()._CTRL_KILL_GEN
+    CurrentAction = auto and "ctrl_autokill" or "ctrl_kill"
+    task.spawn(function()
+        while gen == getgenv()._CTRL_KILL_GEN and (CurrentAction == "ctrl_autokill" or CurrentAction == "ctrl_kill") do
+            if not p or not p.Parent then break end
+            local char = p.Character
+            if char and F.isKnocked and F.isKnocked(char) then
+                if F.DoStomp then pcall(F.DoStomp, p) end
+                if not auto then break end
+                task.wait(1.2)
+            else
+                -- clear ForceHitCmdTarget lock so controller FH is not filtered
+                local prev = ForceHitCmdTarget
+                ForceHitCmdTarget = nil
+                pcall(function() if F.FireForceHit then F.FireForceHit(p) end end)
+                ForceHitCmdTarget = prev
+            end
+            if not auto then
+                task.wait(0.35)
+                break
+            end
+            task.wait(0.05)
+        end
+        if gen == getgenv()._CTRL_KILL_GEN then
+            CurrentAction = "idle"
+        end
+    end)
+end
 
 function F.CreateNamelessGui()
     -- Embedded Sample UI (single-script, controller only)
@@ -9250,14 +9278,12 @@ return function(F, ctx)
         if SyncBotsEnabled and F.RunSilent then F.RunSilent(line) end
     end
     local function listenKey(label, apply)
-        warn("[NAMELESS] press " .. label .. " key...")
-        local c
+local c
         c = UserInputService.InputBegan:Connect(function(input, gp)
             if gp then return end
             if input.UserInputType == Enum.UserInputType.Keyboard then
                 apply(input.KeyCode)
-                warn("[NAMELESS] " .. label .. " = " .. input.KeyCode.Name)
-                c:Disconnect()
+c:Disconnect()
             end
         end)
     end
@@ -9346,8 +9372,7 @@ return function(F, ctx)
         return fn and fn()
     end)
     if not ok or not library then
-        warn("[NAMELESS] sample UI failed: " .. tostring(library))
-        return false
+return false
     end
     pcall(function()
         if library.update_theme then
@@ -9382,9 +9407,9 @@ return function(F, ctx)
         end,
     })
     pcall(function()
-        secFH:slider({ name = "forcehit fov", flag = "fh_fovv", min = 5, max = 90, default = ForceHitFOV or 20, callback = function(v) ForceHitFOV = v end })
+        secFH:slider({ name = "forcehit fov", flag = "fh_fovv", min = 5, max = 90, default = ForceHitFOV or 20, callback = function(v) ForceHitFOV = v end})
     end)
-    secFH:toggle({ name = "forcehit tracer", flag = "fh_tr", default = false, callback = function(v) ForceHitTracerEnabled = v end })
+    secFH:toggle({ name = "forcehit tracer", flag = "fh_tr", default = false, callback = function(v) ForceHitTracerEnabled = v end})
     secFH:toggle({
         name = "stomp-target (selected only)",
         flag = "fh_stomp",
@@ -9396,40 +9421,39 @@ return function(F, ctx)
     })
     secFH:button({ name = "set forcehit keybind", callback = function()
         ForceHitKeyListening = true
-        warn("[NAMELESS] press forcehit key...")
-    end })
+end})
     secFH:button({ name = "clear forcehit target", callback = function()
         ForceHitKeybindTarget = nil
         ForceHitCmdTarget = nil
-    end })
+    end})
 
     local secAim = tabMain:section({ name = "aimbot" })
     secAim:toggle({ name = "aimbot", flag = "aim", default = false, callback = function(v)
         GuiState.Aimbot = v
         if v then startAimbotLoop() else clearConn("aimbot") end
-    end })
+    end})
     secAim:toggle({ name = "aimbot hold mode", flag = "aim_hold", default = true, callback = function(v)
         GuiState.AimbotMode = v and "Hold" or "Toggle"
-    end })
+    end})
     secAim:button({ name = "set aimbot keybind", callback = function()
         listenKey("aimbot", function(k) GuiState.AimbotKey = k end)
-    end })
+    end})
 
     local secSp = tabMain:section({ name = "cframe speed / fly" })
     secSp:toggle({ name = "cframe speed", flag = "spd", default = false, callback = function(v)
         GuiState.CFrameSpeed = v
         if v then startSpeedLoop() else clearConn("speed") end
-    end })
+    end})
     pcall(function()
-        secSp:slider({ name = "speed value", flag = "spdv", min = 10, max = 200, default = 50, callback = function(v) GuiState.SpeedValue = v end })
-        secSp:slider({ name = "fly speed", flag = "flyv", min = 10, max = 200, default = 50, callback = function(v) GuiState.FlySpeed = v end })
+        secSp:slider({ name = "speed value", flag = "spdv", min = 10, max = 200, default = 50, callback = function(v) GuiState.SpeedValue = v end})
+        secSp:slider({ name = "fly speed", flag = "flyv", min = 10, max = 200, default = 50, callback = function(v) GuiState.FlySpeed = v end})
     end)
     secSp:toggle({ name = "cframe fly", flag = "fly", default = false, callback = function(v)
         GuiState.CFrameFly = v
         if v then startFlyLoop() else clearConn("fly") end
-    end })
-    secSp:button({ name = "set speed keybind", callback = function() listenKey("speed", function(k) GuiState.SpeedKey = k end) end })
-    secSp:button({ name = "set fly keybind", callback = function() listenKey("fly", function(k) GuiState.FlyKey = k end) end })
+    end})
+    secSp:button({ name = "set speed keybind", callback = function() listenKey("speed", function(k) GuiState.SpeedKey = k end) end})
+    secSp:button({ name = "set fly keybind", callback = function() listenKey("fly", function(k) GuiState.FlyKey = k end) end})
     pcall(function()
         secSp:dropdown({
             name = "stand fly mode",
@@ -9441,7 +9465,7 @@ return function(F, ctx)
     end)
 
     -- RAGEBOT top: autokill by name
-    local secAK = tabRage:section({ name = "autokill / kill" })
+    local secAK = tabRage:section({ name = "controller kill (you)" })
     pcall(function()
         if secAK.textbox then
             secAK:textbox({
@@ -9452,29 +9476,43 @@ return function(F, ctx)
             })
         end
     end)
-    secAK:button({ name = "autokill", callback = function()
+    secAK:button({ name = "autokill (controller)", callback = function()
         local x = (rageTarget or ""):match("^%s*(.-)%s*$") or ""
-        if x == "" then warn("[NAMELESS] type a username") return end
-        runCmd("autokill " .. x)
-    end })
-    secAK:button({ name = "kill", callback = function()
+        if x == "" then x = selectedPlayer end
+        if not x or x == "" or x == "(none)" then warn("[NAMELESS] type a username") return end
+        if F.ControllerKill then F.ControllerKill(x, true) end
+    end})
+    secAK:button({ name = "kill (controller)", callback = function()
         local x = (rageTarget or ""):match("^%s*(.-)%s*$") or ""
-        if x == "" then warn("[NAMELESS] type a username") return end
-        runCmd("kill " .. x)
-    end })
-    secAK:button({ name = "stop", callback = function() runCmd("stop") end })
-    secAK:button({ name = "force reset", callback = function() runCmd("reset") end })
+        if x == "" then x = selectedPlayer end
+        if not x or x == "" or x == "(none)" then warn("[NAMELESS] type a username") return end
+        if F.ControllerKill then F.ControllerKill(x, false) end
+    end})
+    secAK:button({ name = "stop (controller)", callback = function()
+        CurrentAction = "idle"
+        TargetPlayer = nil
+        if F.StopAll then pcall(F.StopAll) end
+    end})
+    secAK:button({ name = "force reset", callback = function()
+        pcall(function()
+            if replicatesignal then replicatesignal(LocalPlayer.Kill)
+            else
+                local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                if h then h.Health = 0 end
+            end
+        end)
+    end})
 
     local secRage = tabRage:section({ name = "ragebot" })
-    secRage:toggle({ name = "cframe follow", flag = "r_cff", default = false, callback = function(v) CFrameFollowEnabled = v end })
-    secRage:toggle({ name = "cframe kill", flag = "r_cfk", default = false, callback = function(v) CFrameKillEnabled = v end })
-    secRage:toggle({ name = "orbit enabled", flag = "r_orb", default = true, callback = function(v) OrbitEnabled = v end })
+    secRage:toggle({ name = "cframe follow", flag = "r_cff", default = false, callback = function(v) CFrameFollowEnabled = v end})
+    secRage:toggle({ name = "cframe kill", flag = "r_cfk", default = false, callback = function(v) CFrameKillEnabled = v end})
+    secRage:toggle({ name = "orbit enabled", flag = "r_orb", default = true, callback = function(v) OrbitEnabled = v end})
     pcall(function()
-        secRage:slider({ name = "orbit height", flag = "oh", min = 0, max = 20, default = OrbitHeight or 3, callback = function(v) OrbitHeight = v end })
-        secRage:slider({ name = "orbit speed", flag = "os", min = 5, max = 80, default = OrbitSpeed or 30, callback = function(v) OrbitSpeed = v end })
-        secRage:slider({ name = "orbit distance", flag = "od", min = 3, max = 30, default = GunOrbitDist or 10, callback = function(v) GunOrbitDist = v end })
-        secRage:slider({ name = "spinbot speed", flag = "sbs", min = 1, max = 200, default = SpinbotSpeed or 25, callback = function(v) SpinbotSpeed = v end })
-        secRage:slider({ name = "killaura distance", flag = "kad", min = 10, max = 200, default = KillAuraRange or 80, callback = function(v) KillAuraRange = v end })
+        secRage:slider({ name = "orbit height", flag = "oh", min = 0, max = 20, default = OrbitHeight or 3, callback = function(v) OrbitHeight = v end})
+        secRage:slider({ name = "orbit speed", flag = "os", min = 5, max = 80, default = OrbitSpeed or 30, callback = function(v) OrbitSpeed = v end})
+        secRage:slider({ name = "orbit distance", flag = "od", min = 3, max = 30, default = GunOrbitDist or 10, callback = function(v) GunOrbitDist = v end})
+        secRage:slider({ name = "spinbot speed", flag = "sbs", min = 1, max = 200, default = SpinbotSpeed or 25, callback = function(v) SpinbotSpeed = v end})
+        secRage:slider({ name = "killaura distance", flag = "kad", min = 10, max = 200, default = KillAuraRange or 80, callback = function(v) KillAuraRange = v end})
         secRage:dropdown({
             name = "kill method",
             flag = "km",
@@ -9499,7 +9537,7 @@ return function(F, ctx)
     end)
 
     -- Players with type + dropdown + refresh that works
-    local secPl = tabRage:section({ name = "players" })
+    local secPl = tabRage:section({ name = "player select (controller)" })
     pcall(function()
         if secPl.textbox then
             secPl:textbox({
@@ -9542,46 +9580,40 @@ return function(F, ctx)
     end)
     secPl:button({ name = "refresh player list", callback = function()
         local names = refreshPlayerNames()
-        -- rebuild options if library supports
         if playerDropdown then
-            if playerDropdown.refresh_options then
-                pcall(function() playerDropdown:refresh_options(names) end)
-            elseif playerDropdown.set then
-                pcall(function() playerDropdown:set(names[1]) end)
-            end
+            pcall(function()
+                if playerDropdown.refresh_options then
+                    playerDropdown:refresh_options(names)
+                elseif playerDropdown.set then
+                    playerDropdown:set(names[1])
+                end
+            end)
         end
-        -- force library flag table
-        pcall(function()
-            if library.flags and library.flags.rel_plr then
-                -- some libs store items on flag object
-            end
-        end)
-        warn("[NAMELESS] players refreshed (" .. tostring(#names) .. ")")
-    end })
+    end})
 
     local secView = tabRage:section({ name = "view / bring" })
     secView:button({ name = "view", callback = function()
         local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
         if not x or x == "" or x == "(none)" then warn("[NAMELESS] pick a player") return end
         runCmd("view " .. x)
-    end })
-    secView:button({ name = "unview", callback = function() runCmd("unview") end })
+    end})
+    secView:button({ name = "unview", callback = function() runCmd("unview") end})
     secView:button({ name = "bring", callback = function()
         local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
         if not x or x == "" or x == "(none)" then warn("[NAMELESS] pick a player") return end
         runCmd("bring " .. x)
-    end })
+    end})
 
     local secT = tabRage:section({ name = "toggles" })
-    secT:toggle({ name = "opt mode", flag = "opt", default = true, callback = function(v) if F.SetOptMode then F.SetOptMode(v) end end })
-    secT:toggle({ name = "rapid fire", flag = "rapid", default = true, callback = function(v) RapidFireEnabled = v end })
-    secT:toggle({ name = "spinbot", flag = "spinbot", default = false, callback = function(v) SpinbotEnabled = v end })
+    secT:toggle({ name = "opt mode", flag = "opt", default = true, callback = function(v) if F.SetOptMode then F.SetOptMode(v) end end})
+    secT:toggle({ name = "rapid fire", flag = "rapid", default = true, callback = function(v) RapidFireEnabled = v end})
+    secT:toggle({ name = "spinbot", flag = "spinbot", default = false, callback = function(v) SpinbotEnabled = v end})
     secT:toggle({ name = "killaura", flag = "ka", default = false, callback = function(v)
         if v and F.StartKillAura then F.StartKillAura() elseif F.StopKillAura then F.StopKillAura() end
-    end })
+    end})
     secT:toggle({ name = "antistomp", flag = "as", default = true, callback = function(v)
         if getgenv().FlashbackConfig then getgenv().FlashbackConfig.Enabled = v end
-    end })
+    end})
 
     local danceItems = { "floss", "happier", "takel", "darktriad", "vampire", "off" }
     local secDanceR = tabRage:section({ name = "dance" })
@@ -9612,12 +9644,76 @@ return function(F, ctx)
         callback = function(v) if F.SetBotEsp then F.SetBotEsp(v) else BotEspEnabled = v if F.RefreshBotEsp then F.RefreshBotEsp() end end end,
     })
 
+    local secCmdAK = tabCmd:section({ name = "autokill / kill (bots)" })
+    pcall(function()
+        if secCmdAK.textbox then
+            secCmdAK:textbox({
+                name = "target username",
+                flag = "cmd_ak_name",
+                placeholder = "username",
+                callback = function(txt) rageTarget = tostring(txt or "") end,
+            })
+        end
+    end)
+    secCmdAK:button({ name = "autokill", callback = function()
+        local x = (rageTarget or ""):match("^%s*(.-)%s*$") or ""
+        if x == "" then x = selectedPlayer end
+        if not x or x == "" or x == "(none)" then warn("[NAMELESS] type username") return end
+        runCmd("autokill " .. x)
+    end})
+    secCmdAK:button({ name = "kill", callback = function()
+        local x = (rageTarget or ""):match("^%s*(.-)%s*$") or ""
+        if x == "" then x = selectedPlayer end
+        if not x or x == "" or x == "(none)" then warn("[NAMELESS] type username") return end
+        runCmd("kill " .. x)
+    end})
+    secCmdAK:button({ name = "stop", callback = function() runCmd("stop") end})
+    secCmdAK:button({ name = "forcehit", callback = function()
+        local x = (rageTarget or ""):match("^%s*(.-)%s*$") or selectedPlayer
+        if x and x ~= "" and x ~= "(none)" then runCmd("forcehit " .. x) end
+    end})
+    secCmdAK:button({ name = "forcehit2", callback = function()
+        local x = (rageTarget or ""):match("^%s*(.-)%s*$") or selectedPlayer
+        if x and x ~= "" and x ~= "(none)" then runCmd("forcehit2 " .. x) end
+    end})
+    secCmdAK:button({ name = "unforcehit", callback = function() runCmd("unforcehit") end})
+
+    local secCmdPl = tabCmd:section({ name = "player select (bots)" })
+    pcall(function()
+        if secCmdPl.textbox then
+            secCmdPl:textbox({
+                name = "type username",
+                flag = "cmd_pl_type",
+                placeholder = "username",
+                callback = function(txt)
+                    selectedPlayer = tostring(txt or "")
+                    rageTarget = selectedPlayer
+                end,
+            })
+        end
+    end)
+    pcall(function()
+        secCmdPl:dropdown({
+            name = "player select",
+            flag = "cmd_rel_plr",
+            items = playerItems,
+            default = playerItems[1] or "(none)",
+            callback = function(v)
+                selectedPlayer = v
+                rageTarget = v
+            end,
+        })
+    end)
+    secCmdPl:button({ name = "refresh player list", callback = function()
+        refreshPlayerNames()
+end})
+
     local secForm = tabCmd:section({ name = "formations" })
     for _, c in ipairs({
         "summon", "return", "around", "back", "bline", "pole", "line", "circle",
         "orbit", "orbit 2", "orbit 3", "rline", "lline", "stackon",
     }) do
-        secForm:button({ name = c, callback = function() runCmd(c) end })
+        secForm:button({ name = c, callback = function() runCmd(c) end})
     end
 
     local secCombat = tabCmd:section({ name = "combat" })
@@ -9636,7 +9732,7 @@ return function(F, ctx)
             else
                 runCmd(c)
             end
-        end })
+        end})
     end
 
     local secMisc = tabCmd:section({ name = "misc" })
@@ -9645,7 +9741,7 @@ return function(F, ctx)
         "blackscreen on", "blackscreen off", "antilag on", "antilag off",
         "sentry on", "sentry off", "reset", "reclaim", "void", "dance off",
     }) do
-        secMisc:button({ name = c, callback = function() runCmd(c) end })
+        secMisc:button({ name = c, callback = function() runCmd(c) end})
     end
 
     local secDanceC = tabCmd:section({ name = "dance" })
@@ -9679,7 +9775,7 @@ return function(F, ctx)
             else
                 runCmd(c)
             end
-        end })
+        end})
     end
 
     local secBots = tabCmd:section({ name = "bot list" })
@@ -9695,7 +9791,7 @@ return function(F, ctx)
         secBots:button({ name = n .. " [" .. online .. "]", callback = function()
             selectedPlayer = n
             rageTarget = n
-        end })
+        end})
     end
 
     -- live refresh on player join/leave
@@ -9707,8 +9803,7 @@ return function(F, ctx)
     end)
 
     getgenv().library = library
-    warn("[NAMELESS] Nameless.HVH UI ready | prefix NAMELESS.HVH | !")
-    return true
+return true
 end
 ]]
     end
@@ -9732,12 +9827,10 @@ end
                         end
                     end)
                     loadedUI = true
-                    warn("[NAMELESS] Nameless.HVH UI loaded (embedded)")
-                end
+end
             end)
             if not ok then
-                warn("[NAMELESS] sample UI error: " .. tostring(err))
-            end
+end
         end
         if loadedUI then
             return
@@ -9745,8 +9838,7 @@ end
     end
     -- Fallback: legacy gui if sample UI fails
     F.DestroyBotGui()
-    warn("[NAMELESS] sample UI failed — no legacy dual GUI")
-    return
+return
 end
 
 function F.ToggleLoadGui()
@@ -9755,8 +9847,7 @@ function F.ToggleLoadGui()
     else
         local ok, err = pcall(F.CreateNamelessGui)
         if not ok then
-            warn("[NAMELESS] GUI error: " .. tostring(err))
-        end
+end
     end
 end
 
@@ -10235,8 +10326,7 @@ F.OnChatted = function(player, message)
         if not (F.IsOwner(player) or player == LocalPlayer or fromGui or not ControllerName) then return end
         ShowBotsTab = true
         if not ControllerName then ControllerName = player.Name end
-        warn("[NAMELESS] Controller mode — Bots tab unlocked")
-        pcall(function()
+pcall(function()
             F.DestroyBotGui()
             F.CreateNamelessGui()
         end)
@@ -10247,18 +10337,15 @@ F.OnChatted = function(player, message)
         if not F.IsOriginalController(player) and not fromGui then return end
         if not args[2] or args[2] == "list" then
             local list = F.ListWhitelistNames()
-            warn("[NAMELESS] Whitelist: " .. (#list > 0 and table.concat(list, ", ") or "(empty)"))
-            return
+return
         end
         local t = F.FindPlayerAny(args[2])
         local name = t and t.Name or args[2]
         if F.isProtectedWhitelistName(name) then
-            warn("[NAMELESS] Cannot change protected entry: " .. tostring(name))
-            return
+return
         end
         F.addWhitelistName(name)
-        warn("[NAMELESS] Whitelisted: " .. tostring(name))
-        return
+return
     end
     if cmd == "unwhitelist" or cmd == "unwl" then
         if not F.IsOriginalController(player) and not fromGui then return end
@@ -10267,10 +10354,8 @@ F.OnChatted = function(player, message)
         local name = t and t.Name or args[2]
         local ok, reason = F.removeWhitelistName(name)
         if not ok then
-            warn("[NAMELESS] Unwhitelist failed (" .. tostring(reason) .. "): " .. tostring(name))
-        else
-            warn("[NAMELESS] Unwhitelisted: " .. tostring(name))
-        end
+else
+end
         return
     end
     -- Transfer ownership (current owner) / reclaim (original only)
@@ -10283,20 +10368,17 @@ F.OnChatted = function(player, message)
                 ControllerName = player.Name
                 ExtraOwners = {}
                 FrozenByPrivilege = false
-                warn("[NAMELESS] Controller set to " .. player.Name)
-            end
+end
             return
         end
         if args[2] == "reclaim" or args[2] == "revert" or args[2] == "back" then
             if not F.IsOriginalController(player) then
-                warn("[NAMELESS] Only original controller can reclaim")
-                return
+return
             end
             ControllerName = OriginalControllerName or player.Name
             ExtraOwners = {}
             FrozenByPrivilege = false
-            warn("[NAMELESS] Ownership reclaimed by " .. tostring(ControllerName))
-            return
+return
         end
         local t = F.FindPlayerAny(args[2])
         local newName = t and t.Name or args[2]
@@ -10306,16 +10388,14 @@ F.OnChatted = function(player, message)
         end
         ControllerName = newName
         FrozenByPrivilege = false
-        warn("[NAMELESS] Transferred to " .. tostring(newName) .. " (original: " .. tostring(OriginalControllerName) .. ")")
-        return
+return
     end
     if cmd == "reclaim" or cmd == "revert" then
         if not F.IsOriginalController(player) then return end
         ControllerName = OriginalControllerName or player.Name
         ExtraOwners = {}
         FrozenByPrivilege = false
-        warn("[NAMELESS] Ownership reclaimed")
-        return
+return
     end
     if F.IsPrivileged(player) then
         if cmd == "freeze" then F.StopAll() FrozenByPrivilege = true local r=getgenv().get_root_part() if r then r.Anchored=true end return end
@@ -10331,17 +10411,87 @@ F.OnChatted = function(player, message)
         if should then fn(targets) end
     end
     
-    if cmd == "forcehit" or cmd == "fh" then
-        local name = args[2]
-        if not name then ForceHitCmdTarget = nil return end
-        local p = F.FindPlayer and F.FindPlayer(name)
-        ForceHitCmdTarget = p
+    if cmd == "unforcehit" or cmd == "ufh" then
+        ForceHitCmdTarget = nil
+        ForceHit1Active = false
         ForceHit2Active = false
         return
     end
-    if cmd == "unforcehit" or cmd == "ufh" then
-        ForceHitCmdTarget = nil
+    if cmd == "forcehit" or cmd == "fh" then
+        local name = args[2]
+        if not name then
+            ForceHitCmdTarget = nil
+            ForceHit1Active = false
+            return
+        end
+        local p = F.FindPlayer and F.FindPlayer(name)
+        if not p then return end
+        ForceHitCmdTarget = p
         ForceHit2Active = false
+        ForceHit1Active = true
+        UseGun = true
+        -- equip uzi or revolver only
+        local equipped = false
+        if F.SelectGun then
+            if F.SelectGun("uzi") then equipped = true
+            elseif F.SelectGun("rev") or F.SelectGun("revolver") then equipped = true
+            end
+        end
+        if not equipped then
+            local guns = F.CollectGuns and F.CollectGuns() or {}
+            for _, g in ipairs(guns) do
+                local n = g.Name:lower()
+                if n:find("uzi") or n:find("revolver") or n:find("[rev]") then
+                    if F.EquipOnlyTool then F.EquipOnlyTool(g) else pcall(function() g.Parent = LocalPlayer.Character end) end
+                    equipped = true
+                    break
+                end
+            end
+        end
+        CurrentAction = "forcehit1"
+        -- one loop at a time
+        getgenv()._FH1_GEN = (getgenv()._FH1_GEN or 0) + 1
+        local gen = getgenv()._FH1_GEN
+        task.spawn(function()
+            while ForceHit1Active and gen == getgenv()._FH1_GEN and ForceHitCmdTarget and ForceHitCmdTarget.Parent do
+                local t = ForceHitCmdTarget
+                local tChar = t.Character
+                if not tChar then task.wait(0.1)
+                else
+                    local knocked = F.isKnocked and F.isKnocked(tChar)
+                    local alive = F.isFullyAlive and F.isFullyAlive(t)
+                    if knocked or not alive then
+                        -- one bot stomps
+                        if F.DoStomp then pcall(F.DoStomp, t) end
+                        task.wait(0.35)
+                        ForceHit1Active = false
+                        ForceHitCmdTarget = nil
+                        break
+                    end
+                    local ctrl = F.GetController and F.GetController()
+                    local cr = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
+                    local tr = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("Head")
+                    local my = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    local near = true
+                    if cr and tr then
+                        near = (cr.Position - tr.Position).Magnitude <= 80
+                    end
+                    local wall = false
+                    if my and tr and F.HasWallBetween then
+                        wall = F.HasWallBetween(my.Position, tr.Position)
+                    end
+                    if near and not wall then
+                        pcall(function()
+                            if F.FireForceHit then F.FireForceHit(t) end
+                        end)
+                    end
+                    task.wait(0.05)
+                end
+            end
+            if gen == getgenv()._FH1_GEN then
+                ForceHit1Active = false
+            end
+        end)
         return
     end
     if cmd == "forcehit2" or cmd == "fh2" then
@@ -10349,46 +10499,63 @@ F.OnChatted = function(player, message)
         if not name then return end
         local p = F.FindPlayer and F.FindPlayer(name)
         if not p then return end
+        -- cancel previous runs
+        ForceHit1Active = false
+        ForceHit2Active = false
+        task.wait()
         ForceHitCmdTarget = p
         ForceHit2Active = true
-        -- equip db or any gun
+        UseGun = true
         if F.SelectGun then
             if not F.SelectGun("db") then
-                local guns = F.CollectGuns and F.CollectGuns()
-                if guns and guns[1] then F.EquipOnlyTool(guns[1]) end
+                local guns = F.CollectGuns and F.CollectGuns() or {}
+                if guns[1] and F.EquipOnlyTool then F.EquipOnlyTool(guns[1]) end
             end
         end
-        UseGun = true
         TargetPlayer = p
         CurrentAction = "forcehit2"
+        getgenv()._FH2_GEN = (getgenv()._FH2_GEN or 0) + 1
+        local gen = getgenv()._FH2_GEN
         task.spawn(function()
             local followDist = 7
-            while ForceHit2Active and ForceHitCmdTarget and ForceHitCmdTarget.Parent do
+            while ForceHit2Active and gen == getgenv()._FH2_GEN and ForceHitCmdTarget and ForceHitCmdTarget.Parent do
                 local t = ForceHitCmdTarget
-                if not F.isFullyAlive or not F.isFullyAlive(t) then break end
-                local tr = t.Character and t.Character:FindFirstChild("HumanoidRootPart")
-                local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                if tr and r then
-                    r.CFrame = tr.CFrame * CFrame.new(0, 0, followDist)
+                local tChar = t.Character
+                if not tChar then task.wait(0.1)
+                else
+                    local knocked = F.isKnocked and F.isKnocked(tChar)
+                    local alive = not (F.isFullyAlive) or F.isFullyAlive(t)
+                    if knocked or (F.isFullyAlive and not F.isFullyAlive(t)) then
+                        break
+                    end
+                    local tr = tChar:FindFirstChild("HumanoidRootPart")
+                    local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if tr and r then
+                        r.CFrame = tr.CFrame * CFrame.new(0, 0, followDist)
+                    end
+                    pcall(function() if F.FireForceHit then F.FireForceHit(t) end end)
+                    task.wait(0.05)
                 end
-                if F.FireForceHit then pcall(F.FireForceHit, t) end
-                task.wait(0.05)
             end
-            -- stomp if KO
+            if gen ~= getgenv()._FH2_GEN then return end
             local t = ForceHitCmdTarget
             if t and t.Character and F.DoStomp then
                 pcall(F.DoStomp, t)
                 task.wait(0.4)
             end
-            ForceHit2Active = false
-            ForceHitCmdTarget = nil
-            if F.StartFollow then F.StartFollow() end
+            if gen == getgenv()._FH2_GEN then
+                ForceHit2Active = false
+                ForceHitCmdTarget = nil
+                CurrentAction = "idle"
+                if F.StartFollow then F.StartFollow() end
+            end
         end)
         return
     end
 
 if cmd == "stop" or cmd == "idle" then
         ForceHitCmdTarget = nil
+        ForceHit1Active = false
         ForceHit2Active = false
         StompSelectedTarget = false
         PendingAutokill, SavedKillTargets = nil, nil
@@ -10518,8 +10685,7 @@ if cmd == "stop" or cmd == "idle" then
             KillPosition = a2:sub(1,1):upper() .. a2:sub(2)
             OrbitEnabled = true
             F.SetKillMethod("orbit")
-            warn("[NAMELESS] Orbit position: " .. KillPosition)
-        else
+else
             F.StartControllerOrbit(1)
         end
     elseif cmd == "flymode" or cmd == "fly" then
@@ -10527,10 +10693,8 @@ if cmd == "stop" or cmd == "idle" then
         local map = { hover = "Hover", glide = "Glide", fly = "Fly", heaven = "Heaven", gogo = "gogo" }
         if map[m] then
             FlyMode = map[m]
-            warn("[NAMELESS] FlyMode = " .. FlyMode)
-        else
-            warn("[NAMELESS] fly modes: hover glide fly heaven gogo")
-        end
+else
+end
     elseif cmd == "spinbot" or cmd == "spin" then
         local n = tonumber(args[2])
         if args[2] == "off" then
@@ -10538,11 +10702,9 @@ if cmd == "stop" or cmd == "idle" then
         elseif n then
             SpinbotSpeed = math.clamp(n, 1, 200)
             SpinbotEnabled = true
-            warn("[NAMELESS] spinbot speed " .. tostring(SpinbotSpeed))
-        else
+else
             SpinbotEnabled = not SpinbotEnabled
-            warn("[NAMELESS] spinbot " .. (SpinbotEnabled and "ON" or "OFF"))
-        end
+end
     elseif cmd == "knifetween" or cmd == "kt" then
         if args[2] == "off" then
             KnifeTweenEnabled = false
@@ -10617,8 +10779,7 @@ if cmd == "stop" or cmd == "idle" then
         if n then
             KillAuraRange = math.clamp(n, 5, 300)
             if getgenv().KillAura then getgenv().KillAura.Range = KillAuraRange end
-            warn("[NAMELESS] killaura range = " .. tostring(KillAuraRange))
-            if not KillAuraEnabled then F.StartKillAura() end
+if not KillAuraEnabled then F.StartKillAura() end
         elseif a2 == "off" then F.StopKillAura()
         elseif a2 == "on" or a2 == "" then F.StartKillAura()
         else
@@ -10874,10 +11035,8 @@ function F.InitRemoteSystem()
         }
         local ok = httpPutJson(NPOINT_URL, payload)
         if ok then
-            warn("[NAMELESS] Published remote #" .. RemoteCmdId .. " cmd=" .. payload.cmd)
-        else
-            warn("[NAMELESS] npoint write failed")
-        end
+else
+end
         return ok
     end
 
@@ -10886,8 +11045,7 @@ function F.InitRemoteSystem()
     end
 
     task.spawn(function()
-        warn("[NAMELESS] Remote polling " .. NPOINT_URL)
-        while true do
+while true do
             task.wait(RemotePollSeconds)
             local data = parseRemoteJson(httpGet(NPOINT_URL))
             if data then
@@ -10902,8 +11060,7 @@ function F.InitRemoteSystem()
                             line = line .. " " .. tostring(data.target)
                         end
                         if line ~= "" and line ~= "a simple JSON data store" then
-                            warn("[NAMELESS] Remote [" .. tostring(id) .. "] slot=" .. tostring(MySlot) .. ": " .. line)
-                            pcall(function() F.RunSilent(line) end)
+pcall(function() F.RunSilent(line) end)
                         end
                     end
                 end
@@ -10930,8 +11087,7 @@ task.spawn(function()
         end
         if not LiteMode then pcall(F.StartDefaultEmote) end
         local msg = "Stand ready | slot " .. tostring(MySlot) .. " | controller: " .. tostring(ControllerName)
-        warn("[NAMELESS] " .. msg)
-        pcall(function()
+pcall(function()
             game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
                 Text = msg, Color = Color3.fromRGB(180, 220, 255), Font = Enum.Font.SourceSansBold, TextSize = 16,
             })
@@ -10955,8 +11111,7 @@ task.spawn(function()
         if not ok then warn("[NAMELESS] GUI failed: " .. tostring(err)) end
         if BotEspEnabled then pcall(F.RefreshBotEsp) end
         local msg = "Controller ready — " .. LocalPlayer.Name .. " | bots listed: " .. tostring(#BotListOrdered)
-        warn("[NAMELESS] " .. msg)
-        pcall(function()
+pcall(function()
             game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
                 Text = msg, Color = Color3.fromRGB(180, 220, 255), Font = Enum.Font.SourceSansBold, TextSize = 16,
             })
