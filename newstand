@@ -8,25 +8,9 @@ local BotListOrdered = {
     "JadeVenture3876",
     "cepit775B9",
     "UHCaltForShewwsh7",
-    "tvastroo7391", -- 4
-    "KINGSnakelady1995", -- 5
-    "MechaXerath5324", -- 6
-    "", -- 7
-    "", -- 8
-    "", -- 9
-    "", -- 10
-    "", -- 11
-    "", -- 12
-    "", -- 13
-    "", -- 14
-    "", -- 15
-    "", -- 16
-    "", -- 17
-    "", -- 18
-    "", -- 19
-    "", -- 20
+    "AbyssalTyphon232",
+    "tvastroo7391",
 }
-local MaxBots = 20
 local PREFIX = "NAMELESS.HVH | !"
 -------------------------------------------------------------
 
@@ -242,20 +226,6 @@ FastKillLastStep = 0
 FastKillLastTrigger = 0
 
 
--- Fast kill defaults (declared before lite overrides)
-local FastKillBehindDist = 100
-local FastKillHitDist = 6
-local FastKillHitHold = 0.05
-local FastKillFrontDist = 100
-local FastKillMoveSpeed = 1000
-local SpamVoidTweenSpeed = 100000
-local SpamVoidDepth = 500
-local FastKillCamHeight = 28
-local FastKillClearObstacles = true
-local FastKillTriggerRate = 0.04
-local GunSpamVoidIn, GunSpamVoidOut = 4.0, 2.0
-local KnifeSpamVoidIn, KnifeSpamVoidOut = 2.0, 1.0
-
 -- ========== LITE / MOBILE MODE ==========
 -- Detects mobile / low-end (Delta cloud phones, tablets) and cuts CPU/GPU load.
 -- ForceHit + KillAura stay enabled.
@@ -303,32 +273,30 @@ local ExecutorName = ""
 pcall(function()
     ExecutorName = tostring((identifyexecutor and identifyexecutor()) or (getexecutorname and getexecutorname()) or ""):lower()
 end)
-local BadExecutor = false
-if LiteMode then BadExecutor = true end
-if type(ExecutorName) == "string" then
-    if ExecutorName:find("xeno") or ExecutorName:find("solara") or ExecutorName:find("electron") or ExecutorName:find("jjsploit") then
-        BadExecutor = true
-    end
-end
+local BadExecutor = LiteMode
+    or (ExecutorName:find("xeno") ~= nil)
+    or (ExecutorName:find("solara") ~= nil)
+    or (ExecutorName:find("electron") ~= nil)
+    or (ExecutorName:find("jjsploit") ~= nil)
 pcall(function()
     if getgenv().FORCE_BAD_EXEC == true then BadExecutor = true end
     if getgenv().FORCE_BAD_EXEC == false then BadExecutor = false end
 end)
 
--- Fast kill / knife-tween config (adjust for executor)
+-- Fast kill / knife-tween config
 -- Good exec: 100 back/front @ 1000 | Bad/mobile: 50/50 @ 100
-FastKillBehindDist = BadExecutor and 50 or 100
-FastKillHitDist = 6
-FastKillHitHold = 0.05
-FastKillFrontDist = BadExecutor and 50 or 100
-FastKillMoveSpeed = BadExecutor and 100 or 1000
-SpamVoidTweenSpeed = BadExecutor and 5000 or 100000
-SpamVoidDepth = 500
-FastKillCamHeight = 28
-FastKillClearObstacles = not BadExecutor
-FastKillTriggerRate = 0.04
-GunSpamVoidIn, GunSpamVoidOut = 4.0, 2.0
-KnifeSpamVoidIn, KnifeSpamVoidOut = 2.0, 1.0
+local FastKillBehindDist = BadExecutor and 50 or 100
+local FastKillHitDist = 6
+local FastKillHitHold = 0.05
+local FastKillFrontDist = BadExecutor and 50 or 100
+local FastKillMoveSpeed = BadExecutor and 100 or 1000
+local SpamVoidTweenSpeed = BadExecutor and 5000 or 100000
+local SpamVoidDepth = 500
+local FastKillCamHeight = 28
+local FastKillClearObstacles = not BadExecutor
+local FastKillTriggerRate = 0.04
+local GunSpamVoidIn, GunSpamVoidOut = 4.0, 2.0
+local KnifeSpamVoidIn, KnifeSpamVoidOut = 2.0, 1.0
 SpamVoidWeapon = "gun"
 ProtectOwnerEnabled = false
 ProtectOwnerConn = nil
@@ -342,7 +310,7 @@ local FastKillStableLook = Vector3.new(0, 0, -1)
 -- Whitelist / bot list
 local Whitelist = {} -- [name:lower()] = true
 local BotList = {}   -- [name:lower()] = true
-for i, name in ipairs(BotListOrdered or {}) do
+for i, name in ipairs(BotListOrdered) do
     if type(name) == "string" and name ~= "" then
         BotList[name:lower()] = true
     end
@@ -350,7 +318,7 @@ end
 -- Assign slot from BotListOrdered if this account is listed
 do
     local me = game:GetService("Players").LocalPlayer.Name:lower()
-    for i, name in ipairs(BotListOrdered or {}) do
+    for i, name in ipairs(BotListOrdered) do
         if type(name) == "string" and name:lower() == me then
             MySlot = i
             break
@@ -524,19 +492,6 @@ local EmoteOrder = {
     { key = "darktriad", id = Emotes.darktriad },
     { key = "vampire", id = Emotes.vampire },
 }
--- merge VAULT_EMOTES into EmoteOrder (working dance list)
-if VAULT_EMOTES then
-    for k, id in pairs(VAULT_EMOTES) do
-        local exists = false
-        for _, e in ipairs(EmoteOrder) do
-            if e.key == k then exists = true break end
-        end
-        if not exists then
-            EmoteOrder[#EmoteOrder + 1] = { key = k, id = id }
-        end
-    end
-end
-
 -- Default emote on execute: Vampire Upside Down Idle
 local DefaultEmoteKey = "vampire"
 local DefaultEmoteId = Emotes.vampire
@@ -3035,7 +2990,7 @@ function F.PlayEmote(id)
     end)
 end
 
-function pcall(function() if F.StartDefaultEmote then F.StartDefaultEmote() end end)
+function F.StartDefaultEmote()
     local id = DefaultEmoteId or Emotes.darktriad
     if not id or id == "" then return end
     DancePersistent = true
@@ -3054,7 +3009,7 @@ function F.EnsureDancePlaying()
             F.PlayEmote(LastDanceId)
         end
     elseif ExecuteEmoteForced then
-        pcall(function() if F.StartDefaultEmote then F.StartDefaultEmote() end end)
+        F.StartDefaultEmote()
     end
 end
 
@@ -9572,7 +9527,7 @@ c:Disconnect()
     end
     local function refreshPlayerNames()
         playerItems = {}
-        for _, plr in ipairs((Players and Players:GetPlayers()) or {}) do
+        for _, plr in ipairs(Players:GetPlayers()) do
             if plr ~= LocalPlayer then
                 playerItems[#playerItems + 1] = plr.Name
             end
@@ -9598,7 +9553,7 @@ c:Disconnect()
             local cam = workspace.CurrentCamera
             if not cam then return end
             local best, bd = nil, 9e9
-            for _, plr in ipairs((Players and Players:GetPlayers()) or {}) do
+            for _, plr in ipairs(Players:GetPlayers()) do
                 if plr ~= LocalPlayer and F.isFullyAlive and F.isFullyAlive(plr) then
                     if not (F.GetRelation and F.GetRelation(plr) == "friendly") then
                         local h = plr.Character and plr.Character:FindFirstChild("Head")
@@ -9652,8 +9607,7 @@ c:Disconnect()
         local src = getgenv()._NAMELESS_SAMPLE_UI
         if not src or #src < 1000 then error("embedded sample UI missing") end
         local fn = loadstring(src)
-        if type(fn) ~= "function" then return nil end
-        return fn()
+        return fn and fn()
     end)
     if not ok or not library then
 return false
@@ -9691,9 +9645,9 @@ return false
         end,
     })
     pcall(function()
-        secFH:slider({ name = "forcehit fov", flag = "fh_fovv", min = 5, max = 90, default = ForceHitFOV or 20, callback = function(v) ForceHitFOV = v end })
+        secFH:slider({ name = "forcehit fov", flag = "fh_fovv", min = 5, max = 90, default = ForceHitFOV or 20, callback = function(v) ForceHitFOV = v end})
     end)
-    secFH:toggle({ name = "forcehit tracer", flag = "fh_tr", default = false, callback = function(v) ForceHitTracerEnabled = v end })
+    secFH:toggle({ name = "forcehit tracer", flag = "fh_tr", default = false, callback = function(v) ForceHitTracerEnabled = v end})
     secFH:toggle({
         name = "stomp-target (selected only)",
         flag = "fh_stomp",
@@ -9705,11 +9659,11 @@ return false
     })
     secFH:button({ name = "set forcehit keybind", callback = function()
         ForceHitKeyListening = true
-end })
+end})
     secFH:button({ name = "clear forcehit target", callback = function()
         ForceHitKeybindTarget = nil
         ForceHitCmdTarget = nil
-    end })
+    end})
 
     secFH:button({
         name = "forcehit once (target box)",
@@ -9755,33 +9709,29 @@ end })
     secAim:toggle({ name = "aimbot", flag = "aim", default = false, callback = function(v)
         GuiState.Aimbot = v
         if v then startAimbotLoop() else clearConn("aimbot") end
-    end })
+    end})
     secAim:toggle({ name = "aimbot hold mode", flag = "aim_hold", default = true, callback = function(v)
         GuiState.AimbotMode = v and "Hold" or "Toggle"
-    end })
+    end})
     secAim:button({ name = "set aimbot keybind", callback = function()
         listenKey("aimbot", function(k) GuiState.AimbotKey = k end)
-    end })
+    end})
 
     local secSp = tabMain:section({ name = "cframe speed / fly" })
     secSp:toggle({ name = "cframe speed", flag = "spd", default = false, callback = function(v)
         GuiState.CFrameSpeed = v
         if v then startSpeedLoop() else clearConn("speed") end
-    end })
+    end})
     pcall(function()
-        secSp:slider({ name = "speed value", flag = "spdv", min = 10, max = 200, default = 50, callback = function(v) GuiState.SpeedValue = v end })
-        secSp:slider({ name = "fly speed", flag = "flyv", min = 10, max = 200, default = 50, callback = function(v) GuiState.FlySpeed = v end })
+        secSp:slider({ name = "speed value", flag = "spdv", min = 10, max = 200, default = 50, callback = function(v) GuiState.SpeedValue = v end})
+        secSp:slider({ name = "fly speed", flag = "flyv", min = 10, max = 200, default = 50, callback = function(v) GuiState.FlySpeed = v end})
     end)
     secSp:toggle({ name = "cframe fly", flag = "fly", default = false, callback = function(v)
         GuiState.CFrameFly = v
         if v then startFlyLoop() else clearConn("fly") end
-    end })
-    secSp:button({ name = "set speed keybind", callback = function()
-        listenKey("speed", function(k) GuiState.SpeedKey = k end)
-    end })
-    secSp:button({ name = "set fly keybind", callback = function()
-        listenKey("fly", function(k) GuiState.FlyKey = k end)
-    end })
+    end})
+    secSp:button({ name = "set speed keybind", callback = function() listenKey("speed", function(k) GuiState.SpeedKey = k end) end})
+    secSp:button({ name = "set fly keybind", callback = function() listenKey("fly", function(k) GuiState.FlyKey = k end) end})
     pcall(function()
         secSp:dropdown({
             name = "stand fly mode",
@@ -9809,18 +9759,18 @@ end })
         if x == "" then x = selectedPlayer end
         if not x or x == "" or x == "(none)" then warn("[NAMELESS] type a username") return end
         if F.ControllerKill then F.ControllerKill(x, true) end
-    end })
+    end})
     secAK:button({ name = "kill (controller)", callback = function()
         local x = (rageTarget or ""):match("^%s*(.-)%s*$") or ""
         if x == "" then x = selectedPlayer end
         if not x or x == "" or x == "(none)" then warn("[NAMELESS] type a username") return end
         if F.ControllerKill then F.ControllerKill(x, false) end
-    end })
+    end})
     secAK:button({ name = "stop (controller)", callback = function()
         CurrentAction = "idle"
         TargetPlayer = nil
         if F.StopAll then pcall(F.StopAll) end
-    end })
+    end})
     secAK:button({ name = "force reset", callback = function()
         pcall(function()
             if replicatesignal then replicatesignal(LocalPlayer.Kill)
@@ -9829,18 +9779,18 @@ end })
                 if h then h.Health = 0 end
             end
         end)
-    end })
+    end})
 
     local secRage = tabRage:section({ name = "ragebot" })
-    secRage:toggle({ name = "cframe follow", flag = "r_cff", default = false, callback = function(v) CFrameFollowEnabled = v end })
-    secRage:toggle({ name = "cframe kill", flag = "r_cfk", default = false, callback = function(v) CFrameKillEnabled = v end })
-    secRage:toggle({ name = "orbit enabled", flag = "r_orb", default = true, callback = function(v) OrbitEnabled = v end })
+    secRage:toggle({ name = "cframe follow", flag = "r_cff", default = false, callback = function(v) CFrameFollowEnabled = v end})
+    secRage:toggle({ name = "cframe kill", flag = "r_cfk", default = false, callback = function(v) CFrameKillEnabled = v end})
+    secRage:toggle({ name = "orbit enabled", flag = "r_orb", default = true, callback = function(v) OrbitEnabled = v end})
     pcall(function()
-        secRage:slider({ name = "orbit height", flag = "oh", min = 0, max = 20, default = OrbitHeight or 3, callback = function(v) OrbitHeight = v end })
-        secRage:slider({ name = "orbit speed", flag = "os", min = 5, max = 80, default = OrbitSpeed or 30, callback = function(v) OrbitSpeed = v end })
-        secRage:slider({ name = "orbit distance", flag = "od", min = 3, max = 30, default = GunOrbitDist or 10, callback = function(v) GunOrbitDist = v end })
-        secRage:slider({ name = "spinbot speed", flag = "sbs", min = 1, max = 200, default = SpinbotSpeed or 25, callback = function(v) SpinbotSpeed = v end })
-        secRage:slider({ name = "killaura distance", flag = "kad", min = 10, max = 200, default = KillAuraRange or 80, callback = function(v) KillAuraRange = v end })
+        secRage:slider({ name = "orbit height", flag = "oh", min = 0, max = 20, default = OrbitHeight or 3, callback = function(v) OrbitHeight = v end})
+        secRage:slider({ name = "orbit speed", flag = "os", min = 5, max = 80, default = OrbitSpeed or 30, callback = function(v) OrbitSpeed = v end})
+        secRage:slider({ name = "orbit distance", flag = "od", min = 3, max = 30, default = GunOrbitDist or 10, callback = function(v) GunOrbitDist = v end})
+        secRage:slider({ name = "spinbot speed", flag = "sbs", min = 1, max = 200, default = SpinbotSpeed or 25, callback = function(v) SpinbotSpeed = v end})
+        secRage:slider({ name = "killaura distance", flag = "kad", min = 10, max = 200, default = KillAuraRange or 80, callback = function(v) KillAuraRange = v end})
         secRage:dropdown({
             name = "kill method",
             flag = "km",
@@ -9884,7 +9834,7 @@ end })
         playerDropdown = secPl:dropdown({
             name = "player select",
             flag = "rel_plr",
-            items = playerItems or { "(none)" },
+            items = playerItems,
             default = playerItems[1],
             callback = function(v)
                 selectedPlayer = v
@@ -9917,7 +9867,7 @@ end })
                 end
             end)
         end
-    end })
+    end})
 
     
     local secWL = tabRage:section({ name = "whitelist" })
@@ -9934,43 +9884,43 @@ end })
     secWL:button({ name = "whitelist", callback = function()
         local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
         doWhitelist(x)
-    end })
+    end})
     secWL:button({ name = "unwhitelist", callback = function()
         local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
         doUnwhitelist(x)
-    end })
+    end})
     secWL:button({ name = "whitelist selected player", callback = function()
         doWhitelist(selectedPlayer)
-    end })
+    end})
     secWL:button({ name = "unwhitelist selected player", callback = function()
         doUnwhitelist(selectedPlayer)
-    end })
+    end})
 
     local secView = tabRage:section({ name = "view / bring" })
     secView:button({ name = "view", callback = function()
         local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
         if not x or x == "" or x == "(none)" then warn("[NAMELESS] pick a player") return end
         runCmd("view " .. x)
-    end })
-    secView:button({ name = "unview", callback = function() runCmd("unview") end })
+    end})
+    secView:button({ name = "unview", callback = function() runCmd("unview") end})
     secView:button({ name = "bring", callback = function()
         local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
         if not x or x == "" or x == "(none)" then warn("[NAMELESS] pick a player") return end
         runCmd("bring " .. x)
-    end })
+    end})
 
     local secT = tabRage:section({ name = "toggles" })
-    secT:toggle({ name = "opt mode", flag = "opt", default = true, callback = function(v) if F.SetOptMode then F.SetOptMode(v) end end })
-    secT:toggle({ name = "rapid fire", flag = "rapid", default = true, callback = function(v) RapidFireEnabled = v end })
-    secT:toggle({ name = "spinbot", flag = "spinbot", default = false, callback = function(v) SpinbotEnabled = v end })
+    secT:toggle({ name = "opt mode", flag = "opt", default = true, callback = function(v) if F.SetOptMode then F.SetOptMode(v) end end})
+    secT:toggle({ name = "rapid fire", flag = "rapid", default = true, callback = function(v) RapidFireEnabled = v end})
+    secT:toggle({ name = "spinbot", flag = "spinbot", default = false, callback = function(v) SpinbotEnabled = v end})
     secT:toggle({ name = "killaura", flag = "ka", default = false, callback = function(v)
         if v and F.StartKillAura then F.StartKillAura() elseif F.StopKillAura then F.StopKillAura() end
-    end })
+    end})
     secT:toggle({ name = "antistomp", flag = "as", default = true, callback = function(v)
         if getgenv().FlashbackConfig then getgenv().FlashbackConfig.Enabled = v end
-    end })
+    end})
 
-    local danceItems = { "off", "vampire", "floss", "happier", "takel", "darktriad", "tornado", "skibidi", "kotonai", "spin", "armspin", "xavier", "headless", "headless_aura", "glitch", "spider", "plane", "aura", "dh_dance", "penguini", "human_tornado", "handstand", "mwahaha", "rat", "chillin", "kawaii" }
+    local danceItems = { "floss", "happier", "takel", "darktriad", "vampire", "off" }
     local secDanceR = tabRage:section({ name = "dance" })
     pcall(function()
         secDanceR:dropdown({
@@ -10015,23 +9965,23 @@ end })
         if x == "" then x = selectedPlayer end
         if not x or x == "" or x == "(none)" then warn("[NAMELESS] type username") return end
         runCmd("autokill " .. x)
-    end })
+    end})
     secCmdAK:button({ name = "kill", callback = function()
         local x = (rageTarget or ""):match("^%s*(.-)%s*$") or ""
         if x == "" then x = selectedPlayer end
         if not x or x == "" or x == "(none)" then warn("[NAMELESS] type username") return end
         runCmd("kill " .. x)
-    end })
-    secCmdAK:button({ name = "stop", callback = function() runCmd("stop") end })
+    end})
+    secCmdAK:button({ name = "stop", callback = function() runCmd("stop") end})
     secCmdAK:button({ name = "forcehit", callback = function()
         local x = (rageTarget or ""):match("^%s*(.-)%s*$") or selectedPlayer
         if x and x ~= "" and x ~= "(none)" then runCmd("forcehit " .. x) end
-    end })
+    end})
     secCmdAK:button({ name = "forcehit2", callback = function()
         local x = (rageTarget or ""):match("^%s*(.-)%s*$") or selectedPlayer
         if x and x ~= "" and x ~= "(none)" then runCmd("forcehit2 " .. x) end
-    end })
-    secCmdAK:button({ name = "unforcehit", callback = function() runCmd("unforcehit") end })
+    end})
+    secCmdAK:button({ name = "unforcehit", callback = function() runCmd("unforcehit") end})
 
     local secCmdPl = tabCmd:section({ name = "player select (bots)" })
     pcall(function()
@@ -10051,7 +10001,7 @@ end })
         secCmdPl:dropdown({
             name = "player select",
             flag = "cmd_rel_plr",
-            items = playerItems or { "(none)" },
+            items = playerItems,
             default = playerItems[1] or "(none)",
             callback = function(v)
                 selectedPlayer = v
@@ -10061,7 +10011,7 @@ end })
     end)
     secCmdPl:button({ name = "refresh player list", callback = function()
         refreshPlayerNames()
-end })
+end})
 
     
     local secCmdWL = tabCmd:section({ name = "whitelist (bots)" })
@@ -10078,26 +10028,26 @@ end })
     secCmdWL:button({ name = "whitelist", callback = function()
         local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
         doWhitelist(x)
-    end })
+    end})
     secCmdWL:button({ name = "unwhitelist", callback = function()
         local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
         doUnwhitelist(x)
-    end })
+    end})
     secCmdWL:button({ name = "wl (chat)", callback = function()
         local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
         if x and x ~= "" then runCmd("wl " .. x) end
-    end })
+    end})
     secCmdWL:button({ name = "unwl (chat)", callback = function()
         local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
         if x and x ~= "" then runCmd("unwl " .. x) end
-    end })
+    end})
 
     local secForm = tabCmd:section({ name = "formations" })
     for _, c in ipairs({
         "summon", "return", "around", "back", "bline", "pole", "line", "circle",
         "orbit", "orbit 2", "orbit 3", "rline", "lline", "stackon",
     }) do
-        secForm:button({ name = c, callback = function() runCmd(c) end })
+        secForm:button({ name = c, callback = function() runCmd(c) end})
     end
 
     local secCombat = tabCmd:section({ name = "combat" })
@@ -10116,7 +10066,7 @@ end })
             else
                 runCmd(c)
             end
-        end })
+        end})
     end
 
     local secMisc = tabCmd:section({ name = "misc" })
@@ -10125,7 +10075,7 @@ end })
         "blackscreen on", "blackscreen off", "antilag on", "antilag off",
         "sentry on", "sentry off", "reset", "reclaim", "void", "dance off",
     }) do
-        secMisc:button({ name = c, callback = function() runCmd(c) end })
+        secMisc:button({ name = c, callback = function() runCmd(c) end})
     end
 
     local secDanceC = tabCmd:section({ name = "dance" })
@@ -10159,23 +10109,23 @@ end })
             else
                 runCmd(c)
             end
-        end })
+        end})
     end
 
     local secBots = tabCmd:section({ name = "bot list" })
     local botNames = {}
     if BotListOrdered then
-        for _, n in ipairs(BotListOrdered or {}) do
+        for _, n in ipairs(BotListOrdered) do
             if type(n) == "string" and n ~= "" then botNames[#botNames + 1] = n end
         end
     end
     if #botNames == 0 then botNames = { "(set bots)" } end
-    for _, n in ipairs(botNames or {}) do
+    for _, n in ipairs(botNames) do
         local online = Players:FindFirstChild(n) and "ONLINE" or "offline"
         secBots:button({ name = n .. " [" .. online .. "]", callback = function()
             selectedPlayer = n
             rageTarget = n
-        end })
+        end})
     end
 
     -- live refresh on player join/leave
@@ -10937,7 +10887,7 @@ return
         local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if cr and r then
             local slot = MySlot or 1
-            local ang = (slot - 1) * (math.pi * 2 / math.max(MaxBots or 20, 1))
+            local ang = (slot - 1) * (math.pi * 2 / 10)
             local off = Vector3.new(math.cos(ang) * 4, 0, math.sin(ang) * 4)
             pcall(function()
                 if FollowConnection then FollowConnection:Disconnect() FollowConnection = nil end
@@ -11019,7 +10969,7 @@ if cmd == "stop" or cmd == "idle" then
     elseif cmd == "dance" then
         if args[2] == "off" or args[2] == "stop" then
             -- resume default execute emote (do not leave idle)
-            pcall(function() if F.StartDefaultEmote then F.StartDefaultEmote() end end)
+            F.StartDefaultEmote()
         elseif args[2] then
             local key = args[2]
             local found = false
