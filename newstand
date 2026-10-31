@@ -1,92 +1,176 @@
 --[[
     NAMELESS LITE STAND
-    Max 10 bots | Limited commands | No camera lock | No tween kill
-    Prefix: NAMELESS | !
+    Max 20 bots | Limited commands
+    Prefix: NAMELESS.HVH | !  or  !
 ]]
 
 if getgenv().NAMELESS_LITE_BOOT then
     pcall(function()
-        if getgenv().NAMELESS_LITE_UNLOAD then getgenv().NAMELESS_LITE_UNLOAD() end
+        local u = getgenv().NAMELESS_LITE_UNLOAD
+        if type(u) == "function" then u() end
     end)
 end
 getgenv().NAMELESS_LITE_BOOT = true
 
+local F = {}
+
+
 ------------------------ CONFIG ------------------------
 local ControllerName = "godlyseananners9"
 local OriginalControllerName = ControllerName
-local BotListOrdered = {
+local BotList = {
     "JadeVenture3876",
     "cepit775B9",
     "UHCaltForShewwsh7",
-    "", "", "", "", "", "", "",
+    "tvastroo7391", "KINGSnakelady1995", "MechaXerath5324", "", "", "", "",
     "", "", "", "", "", "", "",
     "", "",
 }
 local MaxBots = 20
 local PREFIX = "NAMELESS.HVH | !"
 ForceHitCmdTarget = nil
-local MaxBots = 20
-local FollowBack, FollowHeight, FollowSpacing = 5, 3, 3.5
-local StackHeight = 3.2
-local KillPosition = "Top"
-local KillDistance = 10
-local OrbitSpeed, OrbitHeight, GunOrbitDist = 30, 3, 10
-local WaitFFDelay = 2.35
-local RapidFireEnabled = true
-local RapidFireVolleys = 3
-local ForceHitFireRate = 0.0
-local KillAuraRange, KillAuraDelay = 80, 0.06
-local OptMode, OptCullRange = true, 50
-local ProtectOwnerEnabled = false
-local SpinbotEnabled = false
-local SpinbotSpeed = 25
-local CtrlOrbitMode = 1 -- 1 horizontal, 2 vertical, 3 pulse in/out
-local CtrlOrbitDist = 10
-local CtrlOrbitSpeed = 10
-local CtrlOrbitInDist = 5
-local CtrlOrbitOutDist = 10
-FlyMode = "Hover"
-local FLY_MODE_OFFSET = {
-    Hover = { y = 2.5, back = 0 },
-    Glide = { y = 4, back = 1 },
-    Fly = { y = 12, back = 2 },
-    Heaven = { y = 45, back = 0 },
-    gogo = { y = 1.2, back = -1.5 },
-}
---------------------------------------------------------
-getgenv().glue_active = false
-getgenv().glue_offset_z = 3
-getgenv().glue_position = "Back"
-getgenv().use_unc_method = sethiddenproperty ~= nil
-getgenv().connection_loop = nil
-getgenv().KnifeRage = { Enabled = false, Interval = 0.12, CycleStart = tick() }
-getgenv().target_players = getgenv().target_players or {}
-NoclipEnabled = true
-CFrameFollowEnabled = false
-CFrameKillEnabled = false
-StompHeight = 3.4
-FormationTarget = nil
-FormationType = "around"
-FormationRows, FormationPerRow = 1, 50
-HeightPerRow = 3
-CustomGlueCF = nil
-GlueTargetPlayer = nil
 
+local VAULT_EMOTES = {
+    ["tornado"] = "rbxassetid://135373056067761",
+    ["skibidi"] = "rbxassetid://127154705636043",
+    ["kotonai"] = "rbxassetid://83558835860072",
+    ["spin"] = "rbxassetid://2516930867",
+    ["armspin"] = "rbxassetid://900850443",
+    ["xavier"] = "rbxassetid://90802740360125",
+    ["headless1"] = "rbxassetid://102316572910864",
+    ["headless2"] = "rbxassetid://113923411401265",
+    ["headless_freestyle"] = "rbxassetid://93812617855212",
+    ["headless_baller"] = "rbxassetid://106775793056597",
+    ["headless_chill"] = "rbxassetid://70910259430368",
+    ["headless_pose"] = "rbxassetid://128238620435715",
+    ["headless"] = "rbxassetid://124867258365082",
+    ["headless_pushup"] = "rbxassetid://72742846788078",
+    ["headless_med"] = "rbxassetid://125973137149810",
+    ["headless_flex"] = "rbxassetid://128614920168305",
+    ["headless_sit"] = "rbxassetid://80040448997448",
+    ["headless_aura"] = "rbxassetid://98893149829644",
+    ["headless_zen"] = "rbxassetid://137275141227243",
+    ["head_loop"] = "rbxassetid://107431480470988",
+    ["head_poop"] = "rbxassetid://82634894325877",
+    ["head_armroll"] = "rbxassetid://123410142940842",
+    ["headless_dwerk"] = "rbxassetid://70808617005150",
+    ["headless_flex2"] = "rbxassetid://70480222544121",
+    ["headless_follow"] = "rbxassetid://74784275429427",
+    ["headless_chase"] = "rbxassetid://92587008873915",
+    ["headless_dunk"] = "rbxassetid://133849580193807",
+    ["headless_korblox"] = "rbxassetid://97069996546256",
+    ["worship"] = "rbxassetid://116988148875769",
+    ["headless_ball"] = "rbxassetid://134801596045887",
+    ["headless_juggle"] = "rbxassetid://110307029446528",
+    ["glitch"] = "rbxassetid://136168809732700",
+    ["spider"] = "rbxassetid://113923275362771",
+    ["tornado2"] = "rbxassetid://86806707642727",
+    ["headspin"] = "rbxassetid://84962043563270",
+    ["kawaii"] = "rbxassetid://134158414691793",
+    ["box"] = "rbxassetid://80007036319743",
+    ["sliced"] = "rbxassetid://101359105365571",
+    ["chillin"] = "rbxassetid://139303960137368",
+    ["motorcycle"] = "rbxassetid://91127325280565",
+    ["chicken"] = "rbxassetid://109440710171976",
+    ["float_up"] = "rbxassetid://77202519147824",
+    ["loading"] = "rbxassetid://73427334946341",
+    ["plane"] = "rbxassetid://118953599654100",
+    ["rotating"] = "rbxassetid://111837740238997",
+    ["sleepy"] = "rbxassetid://128596207712728",
+    ["aura"] = "rbxassetid://105274889965322",
+    ["noggin"] = "rbxassetid://102414724686360",
+    ["fan"] = "rbxassetid://130864341071646",
+    ["rat"] = "rbxassetid://137848451890166",
+    ["dh_dance"] = "rbxassetid://107883894275340",
+    ["float_head"] = "rbxassetid://82892160853081",
+    ["arm_spin"] = "rbxassetid://95419822203554",
+    ["spin2"] = "rbxassetid://124865481751043",
+    ["mwahaha"] = "rbxassetid://94430046835624",
+    ["handstand"] = "rbxassetid://130153009143999",
+    ["dance"] = "rbxassetid://118683780156744",
+    ["penguini"] = "rbxassetid://86612834365351",
+    ["human_tornado"] = "rbxassetid://94566164803307",
+    ["floss"] = "rbxassetid://10714340543",
+    ["vampire"] = "rbxassetid://70751304705790",
+}
+local CurrentDance = nil
+local LastDanceId = nil
+local DancePersistent = false
+local DefaultEmoteId = VAULT_EMOTES["vampire"]
+
+if not DefaultEmoteId then DefaultEmoteId = VAULT_EMOTES["vampire"] end
 
 local Players = game:GetService("Players")
 pcall(function() workspace.FallenPartsDestroyHeight = -0/0 end)
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local LocalPlayer = Players.LocalPlayer
+
+-- Dances
+local CurrentDance = nil
+local LastDanceId = nil
+local DancePersistent = false
+
+F.PlayEmote = function(id)
+    if not id then return end
+    LastDanceId = id
+    DancePersistent = true
+    local char = LocalPlayer and LocalPlayer.Character
+    local hum = char and char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    local animator = hum:FindFirstChildOfClass("Animator") or Instance.new("Animator", hum)
+    pcall(function()
+        if CurrentDance then CurrentDance:Stop() end
+        local a = Instance.new("Animation")
+        a.AnimationId = id
+        CurrentDance = animator:LoadAnimation(a)
+        CurrentDance.Looped = true
+        CurrentDance.Priority = Enum.AnimationPriority.Action4
+        CurrentDance:Play()
+    end)
+end
+
+F.StopEmote = function()
+    DancePersistent = false
+    LastDanceId = nil
+    if CurrentDance then pcall(function() CurrentDance:Stop() end) CurrentDance = nil end
+end
+
+F.StartDefaultEmote = function()
+    if DefaultEmoteId then F.PlayEmote(DefaultEmoteId) end
+end
+
+if LocalPlayer then
+    LocalPlayer.CharacterAdded:Connect(function()
+        task.delay(0.5, function()
+            if DancePersistent and LastDanceId then
+                F.PlayEmote(LastDanceId)
+            else
+                F.StartDefaultEmote()
+            end
+        end)
+    end)
+end
+
+task.spawn(function()
+    while task.wait(2.5) do
+        if DancePersistent and LastDanceId then
+            if not (CurrentDance and CurrentDance.IsPlaying) then
+                pcall(F.PlayEmote, LastDanceId)
+            end
+        end
+    end
+end)
+
+
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local MainEvent = ReplicatedStorage:FindFirstChild("MainEvent") or ReplicatedStorage:WaitForChild("MainEvent", 10)
 
-local F = {}
 local ExtraOwners = {}
 local Whitelist = {}
 local BotSet = {}
 local BotOrder = {}
-for i, n in ipairs(BotList) do
+for i, n in ipairs(BotList or {}) do
     if type(n) == "string" and n ~= "" then
         local k = n:lower()
         BotSet[k] = true
@@ -99,7 +183,7 @@ Whitelist[ControllerName:lower()] = true
 Whitelist[LocalPlayer.Name:lower()] = true
 
 local MySlot = 1
-for i, n in ipairs(BotOrder) do
+for i, n in ipairs(BotOrder or {}) do
     if n:lower() == LocalPlayer.Name:lower() then MySlot = i break end
 end
 
@@ -126,9 +210,9 @@ local StompOnKill = true
 local WaitFFUntil = 0
 local _lastFHFire = 0
 
-local function lower(s) return tostring(s or ""):lower() end
+local lower = function(s) return tostring(s or ""):lower() end
 
-function F.IsOwner(p)
+F.IsOwner = function(p)
     if not p then return false end
     local n = p.Name:lower()
     local d = p.DisplayName and p.DisplayName:lower() or ""
@@ -137,15 +221,15 @@ function F.IsOwner(p)
     return false
 end
 
-function F.IsControllerClient()
+F.IsControllerClient = function()
     return LocalPlayer.Name:lower() == ControllerName:lower()
 end
 
-function F.IsStandClient()
+F.IsStandClient = function()
     return BotSet[LocalPlayer.Name:lower()] == true and not F.IsControllerClient()
 end
 
-function F.GetController()
+F.GetController = function()
     local want = ControllerName:lower()
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Name:lower() == want then return p end
@@ -154,12 +238,12 @@ function F.GetController()
     return Players:FindFirstChild(ControllerName)
 end
 
-function F.isWhitelisted(p)
+F.isWhitelisted = function(p)
     if not p then return false end
     return Whitelist[p.Name:lower()] == true or BotSet[p.Name:lower()] == true or F.IsOwner(p)
 end
 
-function F.BotChat(msg)
+F.BotChat = function(msg)
     pcall(function()
         local TCS = game:GetService("TextChatService")
         local ch = TCS and TCS:FindFirstChild("TextChannels") and TCS.TextChannels:FindFirstChild("RBXGeneral")
@@ -172,12 +256,12 @@ function F.BotChat(msg)
     end)
 end
 
-function F.root()
+F.root = function()
     local c = LocalPlayer.Character
     return c and c:FindFirstChild("HumanoidRootPart")
 end
 
-function F.isKnocked(char)
+F.isKnocked = function(char)
     local be = char and char:FindFirstChild("BodyEffects")
     if not be then return false end
     local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
@@ -185,7 +269,7 @@ function F.isKnocked(char)
     return (ko and ko.Value) or (dead and dead.Value)
 end
 
-function F.isFullyAlive(p)
+F.isFullyAlive = function(p)
     local c = p and p.Character
     if not c then return false end
     local h = c:FindFirstChildOfClass("Humanoid")
@@ -194,7 +278,7 @@ function F.isFullyAlive(p)
     return c:FindFirstChild("HumanoidRootPart") ~= nil
 end
 
-function F.HasWallBetween(a, b)
+F.HasWallBetween = function(a, b)
     local ok, hit = pcall(function()
         local params = RaycastParams.new()
         params.FilterType = Enum.RaycastFilterType.Exclude
@@ -209,30 +293,42 @@ function F.HasWallBetween(a, b)
 end
 
 -- Guns
-local GUN_ALIASES = {
-    uzi = {"uzi", "[uzi]", "smg"},
-    rev = {"revolver", "[revolver]", "rev"},
-    db = {"double-barrel", "doublebarrel", "[double-barrel]", "db"},
-    sg = {"shotgun", "[shotgun]", "sg"},
-    tacticalsg = {"tacticalshotgun", "tactical shotgun", "[tactical shotgun]", "tacticalsg", "tactical"},
-    silencer = {"silencer", "[silencer]"},
-}
+local GUN_ALIASES = {}
+GUN_ALIASES["uzi"] = {"uzi", "smg"}
+GUN_ALIASES["rev"] = {"revolver", "rev"}
+GUN_ALIASES["db"] = {"double-barrel", "doublebarrel", "db"}
+GUN_ALIASES["sg"] = {"shotgun", "sg"}
+GUN_ALIASES["tacticalsg"] = {"tacticalshotgun", "tacticalsg", "tactical"}
+GUN_ALIASES["silencer"] = {"silencer"}
 
-function F.CollectGuns()
+F.CollectGuns = function()
     local guns = {}
-    local char, bag = LocalPlayer.Character, LocalPlayer:FindFirstChild("Backpack")
-    local function add(t)
-        if t and t:IsA("Tool") and not t.Name:lower():find("knife") then guns[#guns + 1] = t end
+    local addTool = function(tool)
+        if not tool then return end
+        if not tool:IsA("Tool") then return end
+        local nm = tool.Name:lower()
+        if nm:find("knife") or nm:find("combat") then return end
+        guns[#guns + 1] = tool
     end
-    if char then for _, t in ipairs(char:GetChildren()) do add(t) end end
-    if bag then for _, t in ipairs(bag:GetChildren()) do add(t) end end
+    local char = LocalPlayer and LocalPlayer.Character
+    local bag = LocalPlayer and LocalPlayer:FindFirstChild("Backpack")
+    if char then
+        for _, child in ipairs(char:GetChildren()) do
+            addTool(child)
+        end
+    end
+    if bag then
+        for _, child in ipairs(bag:GetChildren()) do
+            addTool(child)
+        end
+    end
     return guns
 end
 
-function F.FindGunByKey(key)
+F.FindGunByKey = function(key)
     local aliases = GUN_ALIASES[lower(key)]
     if not aliases then return nil end
-    for _, tool in ipairs(F.CollectGuns()) do
+    for _, tool in ipairs(F.CollectGuns() or {}) do
         local n = tool.Name:lower()
         for _, a in ipairs(aliases) do
             if n == a or n:find(a, 1, true) then return tool end
@@ -241,7 +337,7 @@ function F.FindGunByKey(key)
     return nil
 end
 
-function F.SelectGun(key)
+F.SelectGun = function(key)
     key = lower(key)
     if not GUN_ALIASES[key] then
         F.BotChat("Selected gun = " .. key .. " not found!")
@@ -260,7 +356,7 @@ function F.SelectGun(key)
     return false
 end
 
-function F.EquipGun()
+F.EquipGun = function()
     if SelectedGunKey then
         local t = F.FindGunByKey(SelectedGunKey)
         if t then pcall(function() t.Parent = LocalPlayer.Character end) LockedGunTool = t return t end
@@ -274,7 +370,7 @@ function F.EquipGun()
     return nil
 end
 
-function F.EquipKnife()
+F.EquipKnife = function()
     local char = LocalPlayer.Character
     local bag = LocalPlayer:FindFirstChild("Backpack")
     local knife = char and (char:FindFirstChild("[Knife]") or char:FindFirstChild("Knife"))
@@ -284,7 +380,7 @@ function F.EquipKnife()
 end
 
 -- ForceHit (NeverLarp-style packet)
-function F.FireForceHit(target)
+F.FireForceHit = function(target)
     if not MainEvent or not target then return false end
     local now = tick()
     if ForceHitFireRate > 0 and now - (_lastFHFire or 0) < ForceHitFireRate then return false end
@@ -316,10 +412,10 @@ end
 local _ReloadLast = {}
 local _ReloadCD = 0.8
 local LastReload = 0
-function F.TryReload()
+F.TryReload = function()
     local char = LocalPlayer.Character
     if not char then return end
-    local function checkTool(tool)
+    local checkTool = function(tool)
         if not tool or not tool:IsA("Tool") then return end
         if tool.Name:lower():find("knife") then return end
         local last = _ReloadLast[tool.Name] or 0
@@ -404,7 +500,7 @@ getgenv().get_position_offset = function()
     return CFrame.new(0, 0, d)
 end
 
-function F.SetPhysicsRepRootPart(selfRoot, targetPart)
+F.SetPhysicsRepRootPart = function(selfRoot, targetPart)
     if not selfRoot or not targetPart then return end
     if sethiddenproperty then
         pcall(function()
@@ -421,7 +517,7 @@ function F.SetPhysicsRepRootPart(selfRoot, targetPart)
     end)
 end
 
-function F.ForceLocalVisibility(char)
+F.ForceLocalVisibility = function(char)
     char = char or LocalPlayer.Character
     if not char then return end
     for _, d in ipairs(char:GetDescendants()) do
@@ -433,7 +529,7 @@ function F.ForceLocalVisibility(char)
     end
 end
 
-function F.resolveTargetRoot()
+F.resolveTargetRoot = function()
     if GlueMode == "follow" then
         local c = F.GetController()
         return c and c.Character and c.Character:FindFirstChild("HumanoidRootPart")
@@ -449,18 +545,18 @@ function F.resolveTargetRoot()
     end
 end
 
-function F.GetSummonWorldCF()
+F.GetSummonWorldCF = function()
     return F.GetSummonCF and F.GetSummonCF() or nil
 end
 
-function F.GetFormationCF()
+F.GetFormationCF = function()
     if FormationType == "corbit" then
         return F.GetControllerOrbitCF and F.GetControllerOrbitCF() or nil
     end
     return F.GetAroundCF and F.GetAroundCF() or nil
 end
 
-function F.GetGunOrbitCF(tRoot)
+F.GetGunOrbitCF = function(tRoot)
     if not OrbitEnabled then
         local look = tRoot.CFrame.LookVector
         local pos = tRoot.Position - look * (GunOrbitDist or 10) + Vector3.new(0, OrbitHeight or 3, 0)
@@ -473,7 +569,7 @@ function F.GetGunOrbitCF(tRoot)
     )
 end
 
-function F.GetKnifeSurfaceCF(tRoot)
+F.GetKnifeSurfaceCF = function(tRoot)
     local dist, s = getgenv().glue_offset_z or 3, MySlot or 1
     local off
     if s == 1 then off = Vector3.new(0, dist, 0)
@@ -566,7 +662,7 @@ getgenv().unc_connection = function()
     end)
 end
 
-function F.StartGlue(mode, targetPlayer)
+F.StartGlue = function(mode, targetPlayer)
     GlueMode = mode or "follow"
     GlueTargetPlayer = targetPlayer
     getgenv().glue_active = true
@@ -577,7 +673,7 @@ function F.StartGlue(mode, targetPlayer)
     getgenv().unc_connection()
 end
 
-function F.StopGlue()
+F.StopGlue = function()
     getgenv().glue_active = false
     if getgenv().KnifeRage then getgenv().KnifeRage.Enabled = false end
     if getgenv().connection_loop then
@@ -595,7 +691,7 @@ function F.StopGlue()
     GlueMode = nil
 end
 
-function F.StartGlueFollow()
+F.StartGlueFollow = function()
     -- alias used by summon/around/protect
     local ctrl = F.GetController()
     if CurrentAction == "formation" then
@@ -608,7 +704,7 @@ function F.StartGlueFollow()
     end
 end
 
-function F.NL_ForceKill(char)
+F.NL_ForceKill = function(char)
     if not char then return end
     if replicatesignal then pcall(replicatesignal, LocalPlayer.Kill) return end
     local h = char:FindFirstChildOfClass("Humanoid")
@@ -616,7 +712,7 @@ function F.NL_ForceKill(char)
     pcall(function() char:BreakJoints() end)
 end
 
-function F.HookKO(char)
+F.HookKO = function(char)
     if not char then return end
     task.spawn(function()
         local be = char:WaitForChild("BodyEffects", 4)
@@ -630,7 +726,7 @@ function F.HookKO(char)
     end)
 end
 
-function F.StartAntiStomp()
+F.StartAntiStomp = function()
     task.spawn(function()
         while task.wait(0.15) do
             local char = LocalPlayer.Character
@@ -666,7 +762,7 @@ function F.StartAntiStomp()
     end)
 end
 
-function F.CreateBlackScreen()
+F.CreateBlackScreen = function()
     if BlackScreenGui then return end
     pcall(function()
         local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 3)
@@ -695,18 +791,18 @@ function F.CreateBlackScreen()
     end)
 end
 
-function F.DestroyBlackScreen()
+F.DestroyBlackScreen = function()
     if BlackScreenGui then
         pcall(function() BlackScreenGui:Destroy() end)
         BlackScreenGui = nil
     end
 end
 
-function F.SetBlackScreen(on)
+F.SetBlackScreen = function(on)
     if on then F.CreateBlackScreen() else F.DestroyBlackScreen() end
 end
 
-function F.GetSummonCF()
+F.GetSummonCF = function()
     local c = F.GetController()
     local cr = c and c.Character and c.Character:FindFirstChild("HumanoidRootPart")
     if not cr then return nil end
@@ -721,7 +817,7 @@ function F.GetSummonCF()
     return CFrame.new(pos, pos + look)
 end
 
-function F.GetAroundCF()
+F.GetAroundCF = function()
     local c = F.GetController()
     local cr = c and c.Character and c.Character:FindFirstChild("HumanoidRootPart")
     if not cr then return nil end
@@ -736,7 +832,7 @@ function F.GetAroundCF()
 end
 
 -- Controller orbit formations (all bots different phase)
-function F.GetControllerOrbitCF()
+F.GetControllerOrbitCF = function()
     local c = F.GetController()
     local cr = c and c.Character and c.Character:FindFirstChild("HumanoidRootPart")
     if not cr then return nil end
@@ -770,7 +866,7 @@ function F.GetControllerOrbitCF()
     return CFrame.new(pos, origin)
 end
 
-function F.StartControllerOrbit(mode)
+F.StartControllerOrbit = function(mode)
     if F.IsControllerClient() then return end
     F.StopAll()
     CtrlOrbitMode = tonumber(mode) or 1
@@ -781,7 +877,7 @@ function F.StartControllerOrbit(mode)
     F.StartGlue("formation", F.GetController())
 end
 
-function F.StopAll()
+F.StopAll = function()
     CurrentAction = "idle"
     TargetPlayer = nil
     TargetList = {}
@@ -792,7 +888,7 @@ function F.StopAll()
     if ProtectOwnerConn then ProtectOwnerConn:Disconnect() ProtectOwnerConn = nil end
 end
 
-function F.StartFollow()
+F.StartFollow = function()
     if F.IsControllerClient() then return end
     F.StopAll()
     CurrentAction = "follow"
@@ -800,7 +896,7 @@ function F.StartFollow()
     F.StartGlue("follow", F.GetController())
 end
 
-function F.StartAround()
+F.StartAround = function()
     if F.IsControllerClient() then return end
     F.StopAll()
     CurrentAction = "formation"
@@ -810,20 +906,20 @@ function F.StartAround()
     F.StartGlue("formation", F.GetController())
 end
 
-function F.StartProtectOwner()
+F.StartProtectOwner = function()
     if F.IsControllerClient() then return end
     ProtectOwnerEnabled = true
     CurrentAction = "follow"
     F.StartGlue("follow", F.GetController())
 end
 
-function F.StopProtectOwner()
+F.StopProtectOwner = function()
     ProtectOwnerEnabled = false
     if CurrentAction == "protect" then F.StopAll() end
 end
 
 -- Kill positions
-function F.GetKillCF(tRoot)
+F.GetKillCF = function(tRoot)
     if not tRoot then return nil end
     local dist = KillDistance or 10
     local pos = KillPosition or "Top"
@@ -843,7 +939,7 @@ function F.GetKillCF(tRoot)
     return CFrame.new(p, origin)
 end
 
-function F.DoStomp(target)
+F.DoStomp = function(target)
     local tc = target and target.Character
     if not tc then return end
     local ut = tc:FindFirstChild("UpperTorso") or tc:FindFirstChild("HumanoidRootPart")
@@ -855,7 +951,7 @@ function F.DoStomp(target)
     end
 end
 
-function F.StartKill(targets, auto)
+F.StartKill = function(targets, auto)
     if F.IsControllerClient() then return end
     if type(targets) ~= "table" then targets = { targets } end
     if #targets == 0 then return end
@@ -932,7 +1028,7 @@ function F.StartKill(targets, auto)
     end)
 end
 
-function F.StartKillAura()
+F.StartKillAura = function()
     if KillAuraConnection then KillAuraConnection:Disconnect() end
     KillAuraEnabled = true
     local last = 0
@@ -961,12 +1057,12 @@ function F.StartKillAura()
     end)
 end
 
-function F.StopKillAura()
+F.StopKillAura = function()
     KillAuraEnabled = false
     if KillAuraConnection then KillAuraConnection:Disconnect() KillAuraConnection = nil end
 end
 
-function F.SetOptMode(on)
+F.SetOptMode = function(on)
     OptMode = on and true or false
     if not OptMode then return end
     pcall(function() settings().Rendering.QualityLevel = Enum.QualityLevel.Level01 end)
@@ -1001,7 +1097,7 @@ function F.SetOptMode(on)
     end)
 end
 
-function F.FindPlayer(name)
+F.FindPlayer = function(name)
     if not name then return nil end
     name = lower(name)
     for _, p in ipairs(Players:GetPlayers()) do
@@ -1011,7 +1107,7 @@ function F.FindPlayer(name)
     return nil
 end
 
-function F.ParseTargets(args, startIdx)
+F.ParseTargets = function(args, startIdx)
     local out = {}
     for i = startIdx, #args do
         local p = F.FindPlayer(args[i])
@@ -1020,7 +1116,7 @@ function F.ParseTargets(args, startIdx)
     return out
 end
 
-function F.ParseBody(message)
+F.ParseBody = function(message)
     if not message then return nil end
     local raw = tostring(message):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
     local lower = raw:lower()
@@ -1044,7 +1140,7 @@ function F.ParseBody(message)
     return nil
 end
 
-function F.OnChatted(player, message)
+F.OnChatted = function(player, message)
     if not player or not F.IsOwner(player) then return end
     -- Only stands execute stand actions (controller chat is the signal)
     if F.IsControllerClient() then return end
@@ -1075,6 +1171,17 @@ function F.OnChatted(player, message)
             local slot = MySlot or 1
             local ang = (slot - 1) * (math.pi * 2 / 8)
             pcall(function() r.CFrame = CFrame.new(cr.Position + Vector3.new(math.cos(ang)*4, 0, math.sin(ang)*4)) end)
+        end
+        return
+    elseif cmd == "dance" then
+        if args[2] == "off" or args[2] == "stop" then
+            F.StartDefaultEmote()
+        elseif args[2] and VAULT_EMOTES[args[2]] then
+            F.PlayEmote(VAULT_EMOTES[args[2]])
+        elseif args[2] and tonumber(args[2]) then
+            F.PlayEmote("rbxassetid://" .. args[2])
+        else
+            F.PlayEmote(DefaultEmoteId)
         end
         return
     elseif cmd == "stop" or cmd == "idle" then
@@ -1215,7 +1322,7 @@ end)
 
 
 -- Chat hooks (legacy Chatted + TextChatService)
-local function HookPlayerChat(p)
+local HookPlayerChat = function(p)
     if not p then return end
     p.Chatted:Connect(function(msg)
         F.OnChatted(p, msg)
@@ -1278,7 +1385,7 @@ getgenv().NAMELESS_LITE_UNLOAD = function()
 end
 
 
-local function AnnounceLoaded()
+local AnnounceLoaded = function()
     local msg = "Stand loaded successfully!"
     pcall(function()
         local TCS = game:GetService("TextChatService")
@@ -1295,5 +1402,9 @@ local function AnnounceLoaded()
     end)
 end
 task.defer(AnnounceLoaded)
+task.defer(function()
+    task.wait(1)
+    pcall(function() if F.IsStandClient and F.IsStandClient() and F.StartDefaultEmote then F.StartDefaultEmote() end end)
+end)
 
 print("[NAMELESS LITE] loaded")
