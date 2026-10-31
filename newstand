@@ -1,5 +1,5 @@
 --[[
-    NAMELESS.HVH — Stand Controller
+    NAMELESS.HVH - Stand Controller
 ]]
 ------------------------ EDIT THESE ------------------------
 local ControllerName = "godlyseananners9"
@@ -28,6 +28,69 @@ ForceHit2Active = false
 ForceHit1Active = false
 StompSelectedTarget = false
 ForceHitStompTarget = nil
+
+
+local VAULT_EMOTES = {
+    ["tornado"] = "rbxassetid://135373056067761",
+    ["skibidi"] = "rbxassetid://127154705636043",
+    ["kotonai"] = "rbxassetid://83558835860072",
+    ["spin"] = "rbxassetid://2516930867",
+    ["armspin"] = "rbxassetid://900850443",
+    ["xavier"] = "rbxassetid://90802740360125",
+    ["headless1"] = "rbxassetid://102316572910864",
+    ["headless2"] = "rbxassetid://113923411401265",
+    ["headless_freestyle"] = "rbxassetid://93812617855212",
+    ["headless_baller"] = "rbxassetid://106775793056597",
+    ["headless_chill"] = "rbxassetid://70910259430368",
+    ["headless_pose"] = "rbxassetid://128238620435715",
+    ["headless"] = "rbxassetid://124867258365082",
+    ["headless_pushup"] = "rbxassetid://72742846788078",
+    ["headless_med"] = "rbxassetid://125973137149810",
+    ["headless_flex"] = "rbxassetid://128614920168305",
+    ["headless_sit"] = "rbxassetid://80040448997448",
+    ["headless_aura"] = "rbxassetid://98893149829644",
+    ["headless_zen"] = "rbxassetid://137275141227243",
+    ["head_loop"] = "rbxassetid://107431480470988",
+    ["head_poop"] = "rbxassetid://82634894325877",
+    ["head_armroll"] = "rbxassetid://123410142940842",
+    ["headless_dwerk"] = "rbxassetid://70808617005150",
+    ["headless_flex2"] = "rbxassetid://70480222544121",
+    ["headless_follow"] = "rbxassetid://74784275429427",
+    ["headless_chase"] = "rbxassetid://92587008873915",
+    ["headless_dunk"] = "rbxassetid://133849580193807",
+    ["headless_korblox"] = "rbxassetid://97069996546256",
+    ["worship"] = "rbxassetid://116988148875769",
+    ["headless_ball"] = "rbxassetid://134801596045887",
+    ["headless_juggle"] = "rbxassetid://110307029446528",
+    ["glitch"] = "rbxassetid://136168809732700",
+    ["spider"] = "rbxassetid://113923275362771",
+    ["tornado2"] = "rbxassetid://86806707642727",
+    ["headspin"] = "rbxassetid://84962043563270",
+    ["kawaii"] = "rbxassetid://134158414691793",
+    ["box"] = "rbxassetid://80007036319743",
+    ["sliced"] = "rbxassetid://101359105365571",
+    ["chillin"] = "rbxassetid://139303960137368",
+    ["motorcycle"] = "rbxassetid://91127325280565",
+    ["chicken"] = "rbxassetid://109440710171976",
+    ["float_up"] = "rbxassetid://77202519147824",
+    ["loading"] = "rbxassetid://73427334946341",
+    ["plane"] = "rbxassetid://118953599654100",
+    ["rotating"] = "rbxassetid://111837740238997",
+    ["sleepy"] = "rbxassetid://128596207712728",
+    ["aura"] = "rbxassetid://105274889965322",
+    ["noggin"] = "rbxassetid://102414724686360",
+    ["fan"] = "rbxassetid://130864341071646",
+    ["rat"] = "rbxassetid://137848451890166",
+    ["dh_dance"] = "rbxassetid://107883894275340",
+    ["float_head"] = "rbxassetid://82892160853081",
+    ["arm_spin"] = "rbxassetid://95419822203554",
+    ["spin2"] = "rbxassetid://124865481751043",
+    ["mwahaha"] = "rbxassetid://94430046835624",
+    ["handstand"] = "rbxassetid://130153009143999",
+    ["dance"] = "rbxassetid://118683780156744",
+    ["penguini"] = "rbxassetid://86612834365351",
+    ["human_tornado"] = "rbxassetid://94566164803307",
+}
 
 getgenv().SIZE_X, getgenv().SIZE_Y, getgenv().SIZE_Z = 50, 50, 50
 getgenv().KnifeHitboxEnabled = true
@@ -1109,7 +1172,7 @@ function F.StripAllCharacters()
     end
 end
 
--- Optimization state (batched — no full workspace scan per tick)
+-- Optimization state (batched - no full workspace scan per tick)
 OptBuildingGreyDone = false
 OptSoundHooked = false
 OptCullIndex = 1
@@ -1195,7 +1258,7 @@ function F.GreyBuildingsBatch(budget)
 end
 
 function F.RebuildCullCache()
-    -- Build list of world BaseParts once (or rarely) — not every tick
+    -- Build list of world BaseParts once (or rarely) - not every tick
     local cache = {}
     local charSet = {}
     for _, plr in ipairs(Players:GetPlayers()) do
@@ -1596,7 +1659,7 @@ function F.GetSummonWorldCF()
     local perRow = math.max(1, math.floor(FormationPerRow or 50))
     local col, row
     if rows <= 1 then
-        -- One single row — unlimited slots across
+        -- One single row - unlimited slots across
         col = slot - 1
         row = 0
     else
@@ -1670,13 +1733,13 @@ function F.GetFormationCF()
     local ft = FormationType or "bline"
     local space = FormationSpacing or 3.5
 
-    -- !bline — single line behind controller
+    -- !bline - single line behind controller
     if ft == "bline" then
         local pos = origin - look * (FollowBack + space * (i + 1)) + Vector3.new(0, FollowHeight, 0)
         return CFrame.new(pos, pos + look)
     end
 
-    -- !back — square grid behind controller
+    -- !back - square grid behind controller
     if ft == "back" then
         local side = math.max(2, math.ceil(math.sqrt(math.max(slot, 4))))
         local col = i % side
@@ -1688,14 +1751,14 @@ function F.GetFormationCF()
         return CFrame.new(pos, pos + look)
     end
 
-    -- !pole — stack on heads (on top of each other)
+    -- !pole - stack on heads (on top of each other)
     if ft == "pole" or ft == "stackon" then
         local h = (StackHeight or 3.2) * slot
         local pos = origin + Vector3.new(0, h, 0)
         return CFrame.new(pos, pos + look)
     end
 
-    -- !around — 4 cardinals then stack upward on those pillars
+    -- !around - 4 cardinals then stack upward on those pillars
     if ft == "around" then
         local dist, baseH = 5, 5
         local dirs = {
@@ -1711,7 +1774,7 @@ function F.GetFormationCF()
         return CFrame.new(pos, pos + look)
     end
 
-    -- !line — left/right wings, extras stack up
+    -- !line - left/right wings, extras stack up
     if ft == "line" then
         local wing = ((slot - 1) % 2) + 1
         local stack = math.floor((slot - 1) / 2)
@@ -1773,8 +1836,8 @@ getgenv().unc_connection = function()
         local selfRoot = getgenv().get_root_part()
         local targetRoot = F.resolveTargetRoot()
         if not selfRoot then return end
-        -- Fast kill drives CFrame itself — still keep PhysicsRep on target for replication
-        -- Kill / autokill always driven by FastKillStep — do not glue-orbit
+        -- Fast kill drives CFrame itself - still keep PhysicsRep on target for replication
+        -- Kill / autokill always driven by FastKillStep - do not glue-orbit
         if CurrentAction == "kill" or CurrentAction == "autokill" then
             if targetRoot then
                 F.SetPhysicsRepRootPart(selfRoot, targetRoot)
@@ -1810,7 +1873,7 @@ getgenv().unc_connection = function()
             F.SetPhysicsRepRootPart(selfRoot, targetRoot)
             selfRoot.CanCollide = false
         elseif targetRoot and useCFrameOnly then
-            -- Still spoof for replication — pure CFrame alone is invisible to others
+            -- Still spoof for replication - pure CFrame alone is invisible to others
             F.SetPhysicsRepRootPart(selfRoot, targetRoot)
             selfRoot.CanCollide = false
         else
@@ -1877,7 +1940,7 @@ function F.AimMouseAtTarget(target)
     end)
 end
 
--- Camera lock: sticky on TargetPlayer only — no switching; unlock immediately on death/KO
+-- Camera lock: sticky on TargetPlayer only - no switching; unlock immediately on death/KO
 function F.StartCameraLock(target)
     if LiteMode then return end
     if CameraConnection then CameraConnection:Disconnect() CameraConnection = nil end
@@ -1994,7 +2057,7 @@ function F.EquipSlotNumber(n)
 end
 function F.StopSlotSpam() SlotSpamRunning = false end
 function F.StartSlotSpam()
-    -- fully disabled — switching guns kicks
+    -- fully disabled - switching guns kicks
     SlotSpamRunning = false
 end
 
@@ -2275,7 +2338,7 @@ function F.GetSummonCFQuick()
 end
 
 function F.NL_ForceKill(char)
-    -- Antistomp force-kill (stands + controller). KO only — normal Reset still works when not KO.
+    -- Antistomp force-kill (stands + controller). KO only - normal Reset still works when not KO.
     if not char then return end
     if replicatesignal then pcall(replicatesignal, LocalPlayer.Kill) return end
     local h = char:FindFirstChildOfClass("Humanoid")
@@ -2478,62 +2541,55 @@ end
 -- NeverLarp-style auto reload: only when Ammo IntValue is 0
 local _ReloadLast = {} -- [toolName] = tick
 local _ReloadCD = 0.8
+
 function F.TryReload()
     local char = LocalPlayer.Character
     if not char then return end
-    local function checkTool(tool)
-        if not tool or not tool:IsA("Tool") then return end
-        if tool.Name:lower():find("knife") then return end
-        local last = _ReloadLast[tool.Name] or 0
-        if tick() - last < _ReloadCD then return end
-        local scr = tool:FindFirstChild("Script")
-        local ammo = scr and scr:FindFirstChild("Ammo")
-        if not ammo then
-            -- some tools store Ammo directly under tool
-            ammo = tool:FindFirstChild("Ammo") or tool:FindFirstChild("AMMO")
-        end
-        if ammo and ammo:IsA("IntValue") and ammo.Value == 0 then
-            _ReloadLast[tool.Name] = tick()
-            LastReload = tick()
-            pcall(function()
-                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
-                task.wait(0.03)
-                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
-            end)
-        elseif not ammo then
-            -- fallback: throttle generic R if no Ammo value found while killing
-            if tick() - LastReload > 1.5 then
-                LastReload = tick()
-                pcall(function()
-                    VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
-                    task.wait(0.03)
-                    VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
-                end)
+    local TOOLS = { "[Revolver]", "[DoubleBarrel]", "[TacticalShotgun]", "[SMG]", "[Shotgun]", "[Silencer]", "[Uzi]" }
+    for _, name in ipairs(TOOLS) do
+        local tool = char:FindFirstChild(name)
+        if tool then
+            local last = (_ReloadLast and _ReloadLast[name]) or 0
+            if tick() - last >= (_ReloadCD or 1) then
+                local scr = tool:FindFirstChild("Script")
+                local ammo = scr and scr:FindFirstChild("Ammo")
+                if ammo and ammo:IsA("IntValue") and ammo.Value == 0 then
+                    if not _ReloadLast then _ReloadLast = {} end
+                    _ReloadLast[name] = tick()
+                    pcall(function()
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
+                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
+                    end)
+                end
             end
         end
     end
+    -- also any equipped tool with Ammo 0
     for _, tool in ipairs(char:GetChildren()) do
-        if tool:IsA("Tool") then checkTool(tool) end
-    end
-    local bag = LocalPlayer:FindFirstChild("Backpack")
-    if bag then
-        for _, tool in ipairs(bag:GetChildren()) do
-            if tool:IsA("Tool") then checkTool(tool) end
+        if tool:IsA("Tool") and not tool.Name:lower():find("knife") then
+            local scr = tool:FindFirstChild("Script")
+            local ammo = scr and scr:FindFirstChild("Ammo")
+            if ammo and ammo:IsA("IntValue") and ammo.Value == 0 then
+                local n = tool.Name
+                local last = (_ReloadLast and _ReloadLast[n]) or 0
+                if tick() - last >= 1 then
+                    if not _ReloadLast then _ReloadLast = {} end
+                    _ReloadLast[n] = tick()
+                    pcall(function()
+                        VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
+                        VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
+                    end)
+                end
+            end
         end
     end
 end
 
--- continuous NeverLarp autoreload while killing/aura/gun mode
-if getgenv()._NamelessAutoReloadConn then
-    pcall(function() getgenv()._NamelessAutoReloadConn:Disconnect() end)
-end
+if getgenv()._NamelessAutoReloadConn then pcall(function() getgenv()._NamelessAutoReloadConn:Disconnect() end) end
 getgenv()._NamelessAutoReloadConn = RunService.RenderStepped:Connect(function()
-    if not UseGun then return end
-    if CurrentAction == "kill" or CurrentAction == "autokill" or CurrentAction == "bring"
-        or KillAuraEnabled or (getgenv().KillAura and getgenv().KillAura.Enabled) then
-        F.TryReload()
-    end
+    F.TryReload()
 end)
+
 
 function F.getEquippedCombatTool()
     local char = LocalPlayer.Character
@@ -2988,8 +3044,8 @@ function F.StopContinuousAutostomp()
     if AutoStompConnection then AutoStompConnection:Disconnect() AutoStompConnection = nil end
 end
 
--- Fast kill cycle (pure CFrame — glue fully off):
--- 1) Snap BEHIND target (stable look — does not break if target stops walking)
+-- Fast kill cycle (pure CFrame - glue fully off):
+-- 1) Snap BEHIND target (stable look - does not break if target stops walking)
 -- 2) Approach at FastKillMoveSpeed; triggerbot at FastKillHitDist
 -- 3) Fly FRONT at FastKillMoveSpeed
 -- 4) Repeat until dead
@@ -3524,7 +3580,7 @@ function F.CreateBlackScreen()
     t1.Font = Enum.Font.GothamBold
     t1.TextSize = 18
     t1.TextColor3 = Color3.fromRGB(220, 220, 230)
-    t1.Text = "Stand script enabled — control via chat on main account"
+    t1.Text = "Stand script enabled - control via chat on main account"
     t1.Parent = f
     local t2 = Instance.new("TextLabel")
     t2.Size = UDim2.new(1, -40, 0, 28)
@@ -3533,7 +3589,7 @@ function F.CreateBlackScreen()
     t2.Font = Enum.Font.Gotham
     t2.TextSize = 14
     t2.TextColor3 = Color3.fromRGB(160, 160, 170)
-    t2.Text = "Made by AI — expect bugs | slot " .. tostring(MySlot)
+    t2.Text = "Made by AI - expect bugs | slot " .. tostring(MySlot)
     t2.Parent = f
     BlackScreenGui = g
 end
@@ -3729,6 +3785,10 @@ function F.ForceHitValidTarget(p)
     local my = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     local th = p.Character and (p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("HumanoidRootPart"))
     if not my or not th then return false end
+    -- controller GUI forcehit: max 200 studs
+    if F.IsControllerClient and F.IsControllerClient() then
+        if (my.Position - th.Position).Magnitude > 200 then return false end
+    end
     if F.HasWallBetween and F.HasWallBetween(my.Position, th.Position) then return false end
     return true
 end
@@ -3834,7 +3894,20 @@ task.spawn(function()
 end)
 
 
--- Controller local combat (Ragebot UI — does not command bots)
+-- Controller local combat (Ragebot UI - does not command bots)
+
+function F.ControllerForceHitAllowed(target)
+    if not target or not target.Parent then return false end
+    if not F.isFullyAlive or not F.isFullyAlive(target) then return false end
+    if target.Character and F.isKnocked and F.isKnocked(target.Character) then return false end
+    local my = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local th = target.Character and (target.Character:FindFirstChild("Head") or target.Character:FindFirstChild("HumanoidRootPart"))
+    if not my or not th then return false end
+    if (my.Position - th.Position).Magnitude > 200 then return false end
+    if F.HasWallBetween and F.HasWallBetween(my.Position, th.Position) then return false end
+    return true
+end
+
 function F.ControllerKill(name, auto)
     if not F.IsControllerClient or not F.IsControllerClient() then return end
     local p = F.FindPlayer and F.FindPlayer(name)
@@ -3858,10 +3931,12 @@ function F.ControllerKill(name, auto)
                 task.wait(1.2)
             else
                 -- clear ForceHitCmdTarget lock so controller FH is not filtered
-                local prev = ForceHitCmdTarget
-                ForceHitCmdTarget = nil
-                pcall(function() if F.FireForceHit then F.FireForceHit(p) end end)
-                ForceHitCmdTarget = prev
+                if F.ControllerForceHitAllowed and F.ControllerForceHitAllowed(p) then
+                    local prev = ForceHitCmdTarget
+                    ForceHitCmdTarget = nil
+                    pcall(function() if F.FireForceHit then F.FireForceHit(p) end end)
+                    ForceHitCmdTarget = prev
+                end
             end
             if not auto then
                 task.wait(0.35)
@@ -3874,6 +3949,143 @@ function F.ControllerKill(name, auto)
         end
     end)
 end
+
+
+function F.StartAutoHeal()
+    if getgenv()._NamelessAutoHeal then return end
+    getgenv()._NamelessAutoHeal = RunService.Heartbeat:Connect(function()
+        local char = LocalPlayer.Character
+        if not char then return end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hum or hum.Health <= 0 then return end
+        local maxh = hum.MaxHealth
+        if maxh <= 0 then return end
+        local pct = hum.Health / maxh
+        local trig = AutoHealTriggerPct or 0.30
+        if pct <= trig and pct > 0 then
+            -- try eat / med
+            pcall(function()
+                if MainEvent then
+                    MainEvent:FireServer("BuyBurger")
+                    MainEvent:FireServer("Purchase", "Burger")
+                end
+            end)
+            local bag = LocalPlayer:FindFirstChild("Backpack")
+            for _, container in ipairs({ char, bag }) do
+                if container then
+                    for _, t in ipairs(container:GetChildren()) do
+                        if t:IsA("Tool") then
+                            local n = t.Name:lower()
+                            if n:find("burger") or n:find("pizza") or n:find("taco") or n:find("health") or n:find("apple") then
+                                pcall(function() t.Parent = char end)
+                                pcall(function() t:Activate() end)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end)
+end
+task.defer(function() task.wait(1) F.StartAutoHeal() end)
+
+
+function F.SetDesync(on)
+    getgenv().NamelessDesync = on and true or false
+    pcall(function()
+        if setfflag then
+            if on then
+                setfflag("GameNetCompressionLodByteBudgetThresholdPct", "0")
+                setfflag("PhysicsSenderMaxBandwidthBps", "0")
+                setfflag("NextGenReplicatorEnabledWrite4", "1")
+            else
+                setfflag("GameNetCompressionLodByteBudgetThresholdPct", "1")
+                setfflag("PhysicsSenderMaxBandwidthBps", "1000")
+                setfflag("NextGenReplicatorEnabledWrite4", "1")
+            end
+        end
+    end)
+end
+
+function F.SetFakePos(on)
+    getgenv().NamelessFakePos = on and true or false
+    if getgenv()._FakePosConn then
+        pcall(function() getgenv()._FakePosConn:Disconnect() end)
+        getgenv()._FakePosConn = nil
+    end
+    if not on then return end
+    local last = nil
+    getgenv()._FakePosConn = RunService.Heartbeat:Connect(function()
+        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not r then return end
+        if not last then last = r.CFrame end
+        -- hold server-visible-ish lag: periodically write old CF then restore (client fake)
+        pcall(function()
+            r.CFrame = last
+            RunService.RenderStepped:Wait()
+            last = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.CFrame or last
+        end)
+    end)
+end
+
+-- Voidspam tween config
+VoidTweenIn = VoidTweenIn or 0.15
+VoidTweenOut = VoidTweenOut or 0.1
+VoidTweenDist = VoidTweenDist or 200
+VoidTweenSpeed = VoidTweenSpeed or 1000
+
+
+task.spawn(function()
+    if not (F.IsControllerClient and F.IsControllerClient()) then return end
+    local StarterGui = game:GetService("StarterGui")
+    local function getHeadshot(userId)
+        local ok, content = pcall(function()
+            return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
+        end)
+        return ok and content or nil
+    end
+    local function sendNoti(player)
+        pcall(function()
+            StarterGui:SetCore("SendNotification", {
+                Title = player.DisplayName,
+                Text = string.format("%s is in this server", player.Name),
+                Icon = getHeadshot(player.UserId) or "rbxassetid://128056089",
+                Duration = 30,
+            })
+        end)
+    end
+    local staffFound = false
+    for _, plr in ipairs(Players:GetPlayers()) do
+        local ok, inGroup = pcall(function() return plr:IsInGroup(339846382) end)
+        if ok and inGroup then
+            staffFound = true
+            sendNoti(plr)
+        end
+    end
+    Players.PlayerAdded:Connect(function(plr)
+        task.wait(1)
+        local ok, inGroup = pcall(function() return plr:IsInGroup(339846382) end)
+        if ok and inGroup then
+            sendNoti(plr)
+            pcall(function()
+                StarterGui:SetCore("SendNotification", {
+                    Title = "Leave the game",
+                    Text = "STAFF DETECTED IN SERVER",
+                    Duration = 60,
+                })
+            end)
+        end
+    end)
+    if staffFound then
+        pcall(function()
+            StarterGui:SetCore("SendNotification", {
+                Title = "Leave the game",
+                Text = "STAFF DETECTED IN SERVER",
+                Duration = 60,
+            })
+        end)
+    end
+end)
 
 function F.CreateNamelessGui()
     -- Embedded Sample UI (single-script, controller only)
@@ -9252,7 +9464,7 @@ end
 return library]=]
     end
     if not getgenv()._NAMELESS_GUI_BUILDER then
-        getgenv()._NAMELESS_GUI_BUILDER = [[-- Nameless.HVH Sample-UI builder (embedded)
+        getgenv()._NAMELESS_GUI_BUILDER = [=[-- Nameless.HVH Sample-UI builder (embedded)
 return function(F, ctx)
     local Players = game:GetService("Players")
     local LocalPlayer = Players.LocalPlayer
@@ -9275,6 +9487,30 @@ return function(F, ctx)
     local function clearConn(name)
         if GuiConns[name] then pcall(function() GuiConns[name]:Disconnect() end) GuiConns[name] = nil end
     end
+    
+    local function doWhitelist(name)
+        name = tostring(name or ""):match("^%s*(.-)%s*$") or ""
+        if name == "" or name == "(none)" then return end
+        if F.isProtectedWhitelistName and F.isProtectedWhitelistName(name) then return end
+        if F.addWhitelistName then F.addWhitelistName(name)
+        else
+            Whitelist = Whitelist or {}
+            Whitelist[name:lower()] = true
+        end
+        if F.ChatCommand then F.ChatCommand("wl " .. name) end
+    end
+    local function doUnwhitelist(name)
+        name = tostring(name or ""):match("^%s*(.-)%s*$") or ""
+        if name == "" or name == "(none)" then return end
+        if F.isProtectedWhitelistName and F.isProtectedWhitelistName(name) then return end
+        if F.removeWhitelistName then F.removeWhitelistName(name)
+        else
+            Whitelist = Whitelist or {}
+            Whitelist[name:lower()] = nil
+        end
+        if F.ChatCommand then F.ChatCommand("unwl " .. name) end
+    end
+
     local function runCmd(line)
         if F.ChatCommand then F.ChatCommand(line) end
         if SyncBotsEnabled and F.RunSilent then F.RunSilent(line) end
@@ -9428,6 +9664,46 @@ end})
         ForceHitKeybindTarget = nil
         ForceHitCmdTarget = nil
     end})
+
+    secFH:button({
+        name = "forcehit once (target box)",
+        callback = function()
+            local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
+            if x and x ~= "" and x ~= "(none)" then
+                if F.ChatCommand then F.ChatCommand("forcehit " .. x) end
+            end
+        end,
+    })
+    secFH:button({
+        name = "forcehit2 loop (target box)",
+        callback = function()
+            local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
+            if x and x ~= "" and x ~= "(none)" then
+                if F.ChatCommand then F.ChatCommand("forcehit2 " .. x) end
+            end
+        end,
+    })
+
+    
+    local secDesync = tabMain:section({ name = "desync" })
+    secDesync:toggle({
+        name = "fflag desync",
+        flag = "desync_ff",
+        default = false,
+        callback = function(v) if F.SetDesync then F.SetDesync(v) end end,
+    })
+    secDesync:toggle({
+        name = "fakepos",
+        flag = "desync_fp",
+        default = false,
+        callback = function(v) if F.SetFakePos then F.SetFakePos(v) end end,
+    })
+    local secVoid = tabMain:section({ name = "voidspam tween" })
+    pcall(function()
+        secVoid:slider({ name = "void in", flag = "v_in", min = 1, max = 50, default = 15, callback = function(v) VoidTweenIn = v/100 end })
+        secVoid:slider({ name = "void out", flag = "v_out", min = 1, max = 50, default = 10, callback = function(v) VoidTweenOut = v/100 end })
+        secVoid:slider({ name = "void dist", flag = "v_dist", min = 50, max = 500, default = 200, callback = function(v) VoidTweenDist = v end })
+    end)
 
     local secAim = tabMain:section({ name = "aimbot" })
     secAim:toggle({ name = "aimbot", flag = "aim", default = false, callback = function(v)
@@ -9593,6 +9869,33 @@ end})
         end
     end})
 
+    
+    local secWL = tabRage:section({ name = "whitelist" })
+    pcall(function()
+        if secWL.textbox then
+            secWL:textbox({
+                name = "username",
+                flag = "rage_wl_name",
+                placeholder = "username",
+                callback = function(txt) rageTarget = tostring(txt or "") end,
+            })
+        end
+    end)
+    secWL:button({ name = "whitelist", callback = function()
+        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
+        doWhitelist(x)
+    end})
+    secWL:button({ name = "unwhitelist", callback = function()
+        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
+        doUnwhitelist(x)
+    end})
+    secWL:button({ name = "whitelist selected player", callback = function()
+        doWhitelist(selectedPlayer)
+    end})
+    secWL:button({ name = "unwhitelist selected player", callback = function()
+        doUnwhitelist(selectedPlayer)
+    end})
+
     local secView = tabRage:section({ name = "view / bring" })
     secView:button({ name = "view", callback = function()
         local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
@@ -9710,6 +10013,35 @@ end})
         refreshPlayerNames()
 end})
 
+    
+    local secCmdWL = tabCmd:section({ name = "whitelist (bots)" })
+    pcall(function()
+        if secCmdWL.textbox then
+            secCmdWL:textbox({
+                name = "username",
+                flag = "cmd_wl_name",
+                placeholder = "username",
+                callback = function(txt) rageTarget = tostring(txt or "") end,
+            })
+        end
+    end)
+    secCmdWL:button({ name = "whitelist", callback = function()
+        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
+        doWhitelist(x)
+    end})
+    secCmdWL:button({ name = "unwhitelist", callback = function()
+        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
+        doUnwhitelist(x)
+    end})
+    secCmdWL:button({ name = "wl (chat)", callback = function()
+        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
+        if x and x ~= "" then runCmd("wl " .. x) end
+    end})
+    secCmdWL:button({ name = "unwl (chat)", callback = function()
+        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
+        if x and x ~= "" then runCmd("unwl " .. x) end
+    end})
+
     local secForm = tabCmd:section({ name = "formations" })
     for _, c in ipairs({
         "summon", "return", "around", "back", "bline", "pole", "line", "circle",
@@ -9807,7 +10139,7 @@ end})
     getgenv().library = library
 return true
 end
-]]
+]=]
     end
     do
         local loadedUI = false
@@ -10134,26 +10466,22 @@ F.StartKill = function(targets, isAuto)
                 local ff = char and char:FindFirstChildOfClass("ForceField")
                 local alive = F.isFullyAlive(t)
                 if alive and not ff then
-                    -- first time fully alive: start wait clock
-                    if not WaitFFUntil then
-                        WaitFFUntil = tick() + (WaitFFDelay or 1.8)
-                    end
-                    if tick() >= WaitFFUntil then
-                        WaitFFUntil = nil
-                        StompDoneForCycle = false
-                        KillPhase = "attack"
-                        FastKillPhase, FastKillFrontCF, FastKillTweening, FastKillTweenFrom = "behind", nil, false, nil
-                        FastKillLastStep = 0
-                        SpamVoidPhase = "surface"
-                        F.StartGlue(UseGun and "gun" or "knife", t)
-                        F.StartCameraLock(t)
-                        F.StopSlotSpam()
-                        CurrentAction = "autokill"
-                        F.StartKillAttackLoop()
-                    end
+                    -- resume as soon as forcefield is gone (no timed wait)
+                    WaitFFUntil = nil
+                    StompDoneForCycle = false
+                    KillPhase = "attack"
+                    FastKillPhase, FastKillFrontCF, FastKillTweening, FastKillTweenFrom = "behind", nil, false, nil
+                    FastKillLastStep = 0
+                    SpamVoidPhase = "surface"
+                    F.StartGlue(UseGun and "gun" or "knife", t)
+                    F.StartCameraLock(t)
+                    F.StopSlotSpam()
+                    CurrentAction = "autokill"
+                    F.StartKillAttackLoop()
                 else
-                    WaitFFUntil = nil -- reset clock if FF returns / not alive
-                    task.wait(0.15)
+                    -- still dead or forcefield present: do not shoot
+                    WaitFFUntil = nil
+                    task.wait(0.05)
                 end
             end
             task.wait(KillPhase == "attack" and 0.05 or 0.08)
@@ -10413,13 +10741,14 @@ return
         if should then fn(targets) end
     end
     
-    if cmd == "unforcehit" or cmd == "ufh" then
+        if cmd == "unforcehit" or cmd == "ufh" then
         ForceHitCmdTarget = nil
         ForceHit1Active = false
         ForceHit2Active = false
         return
     end
     if cmd == "forcehit" or cmd == "fh" then
+        -- ONCE: follow 7 studs behind, DB, shoot, stomp, return to owner
         local name = args[2]
         if not name then
             ForceHitCmdTarget = nil
@@ -10428,85 +10757,9 @@ return
         end
         local p = F.FindPlayer and F.FindPlayer(name)
         if not p then return end
-        ForceHitCmdTarget = p
         ForceHit2Active = false
         ForceHit1Active = true
-        UseGun = true
-        -- equip uzi or revolver only
-        local equipped = false
-        if F.SelectGun then
-            if F.SelectGun("uzi") then equipped = true
-            elseif F.SelectGun("rev") or F.SelectGun("revolver") then equipped = true
-            end
-        end
-        if not equipped then
-            local guns = F.CollectGuns and F.CollectGuns() or {}
-            for _, g in ipairs(guns) do
-                local n = g.Name:lower()
-                if n:find("uzi") or n:find("revolver") or n:find("[rev]") then
-                    if F.EquipOnlyTool then F.EquipOnlyTool(g) else pcall(function() g.Parent = LocalPlayer.Character end) end
-                    equipped = true
-                    break
-                end
-            end
-        end
-        CurrentAction = "forcehit1"
-        -- one loop at a time
-        getgenv()._FH1_GEN = (getgenv()._FH1_GEN or 0) + 1
-        local gen = getgenv()._FH1_GEN
-        task.spawn(function()
-            while ForceHit1Active and gen == getgenv()._FH1_GEN and ForceHitCmdTarget and ForceHitCmdTarget.Parent do
-                local t = ForceHitCmdTarget
-                local tChar = t.Character
-                if not tChar then task.wait(0.1)
-                else
-                    local knocked = F.isKnocked and F.isKnocked(tChar)
-                    local alive = F.isFullyAlive and F.isFullyAlive(t)
-                    if knocked or not alive then
-                        -- one bot stomps
-                        if F.DoStomp then pcall(F.DoStomp, t) end
-                        task.wait(0.35)
-                        ForceHit1Active = false
-                        ForceHitCmdTarget = nil
-                        break
-                    end
-                    local ctrl = F.GetController and F.GetController()
-                    local cr = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
-                    local tr = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("Head")
-                    local my = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    local near = true
-                    if cr and tr then
-                        near = (cr.Position - tr.Position).Magnitude <= 80
-                    end
-                    local wall = false
-                    if my and tr and F.HasWallBetween then
-                        wall = F.HasWallBetween(my.Position, tr.Position)
-                    end
-                    if near and not wall then
-                        pcall(function()
-                            if F.FireForceHit then F.FireForceHit(t) end
-                        end)
-                    end
-                    task.wait(0.05)
-                end
-            end
-            if gen == getgenv()._FH1_GEN then
-                ForceHit1Active = false
-            end
-        end)
-        return
-    end
-    if cmd == "forcehit2" or cmd == "fh2" then
-        local name = args[2]
-        if not name then return end
-        local p = F.FindPlayer and F.FindPlayer(name)
-        if not p then return end
-        -- cancel previous runs
-        ForceHit1Active = false
-        ForceHit2Active = false
-        task.wait()
         ForceHitCmdTarget = p
-        ForceHit2Active = true
         UseGun = true
         if F.SelectGun then
             if not F.SelectGun("db") then
@@ -10514,19 +10767,18 @@ return
                 if guns[1] and F.EquipOnlyTool then F.EquipOnlyTool(guns[1]) end
             end
         end
-        TargetPlayer = p
-        CurrentAction = "forcehit2"
-        getgenv()._FH2_GEN = (getgenv()._FH2_GEN or 0) + 1
-        local gen = getgenv()._FH2_GEN
+        CurrentAction = "forcehit1"
+        getgenv()._FH1_GEN = (getgenv()._FH1_GEN or 0) + 1
+        local gen = getgenv()._FH1_GEN
         task.spawn(function()
             local followDist = 7
-            while ForceHit2Active and gen == getgenv()._FH2_GEN and ForceHitCmdTarget and ForceHitCmdTarget.Parent do
+            while ForceHit1Active and gen == getgenv()._FH1_GEN and ForceHitCmdTarget and ForceHitCmdTarget.Parent do
                 local t = ForceHitCmdTarget
                 local tChar = t.Character
-                if not tChar then task.wait(0.1)
+                if not tChar then
+                    task.wait(0.1)
                 else
                     local knocked = F.isKnocked and F.isKnocked(tChar)
-                    local alive = not (F.isFullyAlive) or F.isFullyAlive(t)
                     if knocked or (F.isFullyAlive and not F.isFullyAlive(t)) then
                         break
                     end
@@ -10539,19 +10791,110 @@ return
                     task.wait(0.05)
                 end
             end
-            if gen ~= getgenv()._FH2_GEN then return end
+            if gen ~= getgenv()._FH1_GEN then return end
             local t = ForceHitCmdTarget
             if t and t.Character and F.DoStomp then
                 pcall(F.DoStomp, t)
                 task.wait(0.4)
             end
+            ForceHit1Active = false
+            ForceHitCmdTarget = nil
+            CurrentAction = "idle"
+            if F.StartFollow then pcall(F.StartFollow) end
+        end)
+        return
+    end
+    if cmd == "forcehit2" or cmd == "fh2" then
+        -- CONTINUOUS: follow 7 studs, DB, shoot, stomp, wait respawn, repeat
+        local name = args[2]
+        if not name then return end
+        local p = F.FindPlayer and F.FindPlayer(name)
+        if not p then return end
+        ForceHit1Active = false
+        ForceHit2Active = false
+        task.wait()
+        ForceHitCmdTarget = p
+        ForceHit2Active = true
+        UseGun = true
+        CurrentAction = "forcehit2"
+        getgenv()._FH2_GEN = (getgenv()._FH2_GEN or 0) + 1
+        local gen = getgenv()._FH2_GEN
+        task.spawn(function()
+            local followDist = 7
+            while ForceHit2Active and gen == getgenv()._FH2_GEN do
+                local t = ForceHitCmdTarget
+                if not t or not t.Parent then
+                    -- try re-find by name
+                    t = F.FindPlayer and F.FindPlayer(name)
+                    ForceHitCmdTarget = t
+                end
+                if not t or not t.Parent then
+                    task.wait(0.5)
+                else
+                    if F.SelectGun then
+                        pcall(function()
+                            if not F.SelectGun("db") then
+                                local guns = F.CollectGuns and F.CollectGuns() or {}
+                                if guns[1] and F.EquipOnlyTool then F.EquipOnlyTool(guns[1]) end
+                            end
+                        end)
+                    end
+                    -- attack until KO
+                    while ForceHit2Active and gen == getgenv()._FH2_GEN and t.Parent do
+                        local tChar = t.Character
+                        if not tChar then task.wait(0.15) break end
+                        local knocked = F.isKnocked and F.isKnocked(tChar)
+                        if knocked or (F.isFullyAlive and not F.isFullyAlive(t)) then
+                            if F.DoStomp then pcall(F.DoStomp, t) end
+                            task.wait(0.5)
+                            break
+                        end
+                        local tr = tChar:FindFirstChild("HumanoidRootPart")
+                        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if tr and r then
+                            r.CFrame = tr.CFrame * CFrame.new(0, 0, followDist)
+                        end
+                        pcall(function() if F.FireForceHit then F.FireForceHit(t) end end)
+                        task.wait(0.05)
+                    end
+                    -- wait for respawn / FF gone then continue
+                    if not ForceHit2Active or gen ~= getgenv()._FH2_GEN then break end
+                    task.wait(2.0)
+                end
+            end
             if gen == getgenv()._FH2_GEN then
                 ForceHit2Active = false
                 ForceHitCmdTarget = nil
                 CurrentAction = "idle"
-                if F.StartFollow then F.StartFollow() end
+                if F.StartFollow then pcall(F.StartFollow) end
             end
         end)
+        return
+    end
+
+
+    if cmd == "safe" then
+        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if r then
+            pcall(function() r.CFrame = CFrame.new(322.43, 34.99, -604.27) end)
+        end
+        return
+    end
+    if cmd == "teleport" or cmd == "tpbots" then
+        -- teleport to controller in spread positions, no follow glue
+        local ctrl = F.GetController and F.GetController()
+        local cr = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
+        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if cr and r then
+            local slot = MySlot or 1
+            local ang = (slot - 1) * (math.pi * 2 / 10)
+            local off = Vector3.new(math.cos(ang) * 4, 0, math.sin(ang) * 4)
+            pcall(function()
+                if FollowConnection then FollowConnection:Disconnect() FollowConnection = nil end
+                CurrentAction = "idle"
+                r.CFrame = CFrame.new(cr.Position + off)
+            end)
+        end
         return
     end
 
@@ -10628,11 +10971,22 @@ if cmd == "stop" or cmd == "idle" then
             -- resume default execute emote (do not leave idle)
             F.StartDefaultEmote()
         elseif args[2] then
+            local key = args[2]
             local found = false
-            for _, e in ipairs(EmoteOrder) do
-                if e.key == args[2] then F.PlayEmote(e.id) found = true break end
+            if VAULT_EMOTES and VAULT_EMOTES[key] then
+                F.PlayEmote(VAULT_EMOTES[key])
+                found = true
             end
-            if not found then F.PlayEmote(DefaultEmoteId) end
+            if not found and EmoteOrder then
+                for _, e in ipairs(EmoteOrder) do
+                    if e.key == key then F.PlayEmote(e.id) found = true break end
+                end
+            end
+            if not found then
+                -- try rbxassetid number
+                if tonumber(key) then F.PlayEmote("rbxassetid://" .. key) found = true end
+            end
+            if not found and DefaultEmoteId then F.PlayEmote(DefaultEmoteId) end
         else
             F.PlayEmote(EmoteOrder[math.random(1, #EmoteOrder)].id)
         end
@@ -11112,7 +11466,7 @@ pcall(function()
         local ok, err = pcall(F.CreateNamelessGui)
         if not ok then warn("[NAMELESS] GUI failed: " .. tostring(err)) end
         if BotEspEnabled then pcall(F.RefreshBotEsp) end
-        local msg = "Controller ready — " .. LocalPlayer.Name .. " | bots listed: " .. tostring(#BotListOrdered)
+        local msg = "Controller ready - " .. LocalPlayer.Name .. " | bots listed: " .. tostring(#BotListOrdered)
 pcall(function()
             game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
                 Text = msg, Color = Color3.fromRGB(180, 220, 255), Font = Enum.Font.SourceSansBold, TextSize = 16,
