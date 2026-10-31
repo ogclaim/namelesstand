@@ -2,14 +2,15 @@
     NAMELESS.HVH - Stand Controller
 ]]
 ------------------------ EDIT THESE ------------------------
-local ControllerName = "godlyseananners9"
+local ControllerName = "imitationed"
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
-    "JadeVenture3876",
-    "cepit775B9",
-    "UHCaltForShewwsh7",
-    "AbyssalTyphon232",
-    "tvastroo7391",
+    "Zeavi2067",
+	"Voidf5446",
+	"Skybla1919",
+	"Boonlo8950",
+	"Frosb4622",
+	"Witkni3416",
 }
 local PREFIX = "NAMELESS.HVH | !"
 -------------------------------------------------------------
