@@ -249,12 +249,12 @@ local KA_OrbitSpeed = 1000
 local KA_SummonHold = 0.1
 local VoidY, VoidSpamDeep, VoidSpamSurface = -500, 0.3, 0.2
 -- spamvoid in/out customisable (seconds)
-local SpamVoidInTime = 0.30   -- time spent in void
+local SpamVoidInTime = 0.20   -- time spent in void
 local SpamVoidOutTime = 0.1  -- time on surface after void before next shot
-local WaitFFDelay = 2      -- fixed forcefield wait (not in commands)
+local WaitFFDelay = 0.1      -- fixed forcefield wait (not in commands)
 -- kill position for orbit / spamvoid (and visual orbit spoof)
 local KillPosition = "Top"    -- Back | Front | Left | Right | Top | Bottom
-local KillDistance = 15       -- studs from target for orbit/spamvoid
+local KillDistance = 6       -- studs from target for orbit/spamvoid
 -- tween path direction (independent of KillPosition)
 local TweenPath = "leftright" -- backfront | leftright | topbottom | diag_tlbr | diag_trbl | diag_bltr | diag_brtl
 local BringCarryWait, BringTweenTime = 2.0, 0.1
