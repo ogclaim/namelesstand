@@ -1,4 +1,4 @@
---[[
+--[[ test
     Stand Script - Owner controls alts via chat commands
     Prefix: !
     Commands: ,auto <partialName> | ,stop | ,say | ,rejoin | ,spectate <altName> | ,unspectate | ,listalts
