@@ -1,6 +1,6 @@
 --[[
     Stand Script - Owner controls alts via chat commands
-    Prefix: !
+    Prefix: ,
     Commands: ,auto <partialName> | ,stop | ,say | ,rejoin | ,spectate <altName> | ,unspectate | ,listalts
     Comms: Chat-based (all clients receive all players' Chatted events)
     Alt deployment: separate Roblox processes via Account Manager
