@@ -33,43 +33,6 @@ local PREFIX = "NAMELESS.HVH | !"
 getgenv().NAMELESS_BOOT = true
 MenuKey = MenuKey or Enum.KeyCode.LeftShift
 
--- Ping spoof: bots only (controller skipped)
-task.spawn(function()
-    task.wait(1)
-    pcall(function()
-        local lp = game:GetService("Players").LocalPlayer
-        local ctrl = tostring(ControllerName or ""):lower()
-        if lp and lp.Name:lower() == ctrl then
-            getgenv().NamelessPingSpoof = false
-            return -- controller: no ping spoof
-        end
-        local MainEvent = game:GetService("ReplicatedStorage"):FindFirstChild("MainEvent")
-            or game:GetService("ReplicatedStorage"):WaitForChild("MainEvent", 8)
-        if not MainEvent then return end
-        getgenv().NamelessPingSpoof = true
-        getgenv().NamelessPingValue = 30
-        pcall(function()
-            if hookfunction then
-                local old
-                old = hookfunction(MainEvent.FireServer, function(self, ...)
-                    local args = {...}
-                    if getgenv().NamelessPingSpoof and args[1] == "GetPing" and not (checkcaller and checkcaller()) then
-                        return
-                    end
-                    return old(self, ...)
-                end)
-            end
-        end)
-        while true do
-            if getgenv().NamelessPingSpoof then
-                pcall(function() MainEvent:FireServer("GetPing", (getgenv().NamelessPingValue or 30) / 1000) end)
-            end
-            task.wait(1)
-        end
-    end)
-end)
-
-
 -- Chat tag for Nameless users + local chat spy
 getgenv().NAMELESS_USERS = getgenv().NAMELESS_USERS or {}
 getgenv().NAMELESS_USERS[game:GetService("Players").LocalPlayer.Name] = true
@@ -277,8 +240,6 @@ OptConn = nil
 VisualStripEnabled = false
 VisualStripConn = nil
 SelectedGunKey = nil
-PingSpoofEnabled = false
-PingSpoofValue = 30
 _OrigWarn = warn
 
 ForceHitFOV, DefaultFOV = 20, 70
@@ -1564,14 +1525,6 @@ return
     end)
 end
 
-function F.SetPingSpoof(on)
-    PingSpoofEnabled = on and true or false
-    if getgenv().NamelessPingSpoof then
-        getgenv().NamelessPingSpoof.PingSpoofEnabled = PingSpoofEnabled
-        getgenv().NamelessPingSpoof.PingValue = PingSpoofValue or 30
-    end
-end
-
 function F.StartProtectOwner()
     ProtectOwnerEnabled = true
     if ProtectOwnerConn then pcall(function() ProtectOwnerConn:Disconnect() end) ProtectOwnerConn = nil end
@@ -1593,41 +1546,6 @@ function F.StopProtectOwner()
     ProtectOwnerEnabled = false
     if ProtectOwnerConn then pcall(function() ProtectOwnerConn:Disconnect() end) ProtectOwnerConn = nil end
 end
-
-task.spawn(function()
-    local Config = { PingSpoofEnabled = false, PingValue = 30 }
-    getgenv().NamelessPingSpoof = Config
-    PingSpoofEnabled = false
-    PingSpoofValue = 30
-    local ME = ReplicatedStorage:FindFirstChild("MainEvent") or ReplicatedStorage:WaitForChild("MainEvent", 15)
-    if not ME then return end
-    pcall(function()
-        local mt = getrawmetatable(game)
-        if not mt then return end
-        setreadonly(mt, false)
-        local oldnc = mt.__namecall
-        mt.__namecall = function(self, ...)
-            local args = {...}
-            local method = getnamecallmethod()
-            if method == "FireServer" and self == ME and args[1] == "GetPing" then
-                if (Config.PingSpoofEnabled or PingSpoofEnabled) and not checkcaller() then
-                    return
-                end
-            end
-            return oldnc(self, ...)
-        end
-        setreadonly(mt, true)
-    end)
-    while true do
-        Config.PingSpoofEnabled = PingSpoofEnabled
-        Config.PingValue = PingSpoofValue or 30
-        if Config.PingSpoofEnabled and ME then
-            pcall(function() ME:FireServer("GetPing", (Config.PingValue or 30) / 1000) end)
-        end
-        task.wait(1.0)
-    end
-end)
-
 
     for _, name in ipairs(BotListOrdered or {}) do
         if type(name) == "string" and name ~= "" then
@@ -11770,11 +11688,6 @@ if not KillAuraEnabled then F.StartKillAura() end
                 F.StartKillAura()
             end
         end
-    elseif cmd == "pingspoof" or cmd == "pspoof" then
-        PingSpoofValue = 30
-        F.SetPingSpoof(true)
-    elseif cmd == "unpspoof" or cmd == "unpingspoof" or cmd == "unpingspoofer" then
-        F.SetPingSpoof(false)
     elseif cmd == "visualstrip" or cmd == "vstrip" or cmd == "grey" then
         if args[2] == "off" then F.SetVisualStrip(false)
         elseif args[2] == "on" then F.SetVisualStrip(true)
