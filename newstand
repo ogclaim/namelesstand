@@ -1,6 +1,6 @@
 --[[
     Stand Script - Owner controls alts via chat commands
-    Prefix: ,
+    Prefix: !
     Commands: ,auto <partialName> | ,stop | ,say | ,rejoin | ,spectate <altName> | ,unspectate | ,listalts
     Comms: Chat-based (all clients receive all players' Chatted events)
     Alt deployment: separate Roblox processes via Account Manager
@@ -93,7 +93,7 @@ end
 -- ==== CONFIG ====
 -- HARDCODE YOUR OWNER USERID HERE. This MUST be the same on alts too.
 -- Example: local OWNER_USERID = 4080683211
-local OWNER_USERID = 34695329  -- <-- main account's UserId
+local OWNER_USERID = 4678237563  -- <-- main account's UserId
 local OWNER_USERIDS = { OWNER_USERID }  -- recognized owner accounts
 local function isOwnerUid(uid)
     -- HARD LOCKED to the hardcoded list above. The old dynamic whitelist
@@ -105,7 +105,7 @@ local function isOwnerUid(uid)
     return false
 end
 -- Your alt account UserIds (for formation/role assignment)
-local ALT_USERIDS = {11056427975, 11498491557, 7207926683, 4629790199, 3821844934, 3160591384, 7858750955}
+local ALT_USERIDS = {11425076899, 11498491557, 7207926683, 4629790199, 3821844934, 3160591384, 7858750955}
 -- Chat prefix - accepts both , and .
 local PREFIX_CHARS = ","  -- added "." below in parseCommand
 -- Staff group IDs - alts/owner will notify (no kick) when any member joins
