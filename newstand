@@ -105,7 +105,7 @@ local function isOwnerUid(uid)
     return false
 end
 -- Your alt account UserIds (for formation/role assignment)
-local ALT_USERIDS = {11425076899, 11498491557, 7207926683, 4629790199, 3821844934, 3160591384, 7858750955}
+local ALT_USERIDS = {, 11056427975, 7207926683, 4629790199, 3821844934, 3160591384, 7858750955}
 -- Chat prefix - accepts both , and .
 local PREFIX_CHARS = ","  -- added "." below in parseCommand
 -- Staff group IDs - alts/owner will notify (no kick) when any member joins
