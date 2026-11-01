@@ -2,22 +2,120 @@
     NAMELESS.HVH - Stand Controller
 ]]
 ------------------------ EDIT THESE ------------------------
-local ControllerName = "imitationed"
+local ControllerName = "godlyseananners9"
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
-    "Zeavi2067",
-	"Voidf5446",
-	"Skybla1919",
-	"Boonlo8950",
-	"Frosb4622",
-	"Witkni3416",
-	"Kiptwist5311",
-	"Warneed6752",
+    "JadeVenture3876",
+    "cepit775B9",
+    "UHCaltForShewwsh7",
+    "", -- 4
+    "", -- 5
+    "", -- 6
+    "", -- 7
+    "", -- 8
+    "", -- 9
+    "", -- 10
+    "", -- 11
+    "", -- 12
+    "", -- 13
+    "", -- 14
+    "", -- 15
+    "", -- 16
+    "", -- 17
+    "", -- 18
+    "", -- 19
+    "", -- 20
 }
+local MaxBots = 20
 local PREFIX = "NAMELESS.HVH | !"
 -------------------------------------------------------------
 
 getgenv().NAMELESS_BOOT = true
+MenuKey = MenuKey or Enum.KeyCode.LeftShift
+
+-- Ping spoof: bots only (controller skipped)
+task.spawn(function()
+    task.wait(1)
+    pcall(function()
+        local lp = game:GetService("Players").LocalPlayer
+        local ctrl = tostring(ControllerName or ""):lower()
+        if lp and lp.Name:lower() == ctrl then
+            getgenv().NamelessPingSpoof = false
+            return -- controller: no ping spoof
+        end
+        local MainEvent = game:GetService("ReplicatedStorage"):FindFirstChild("MainEvent")
+            or game:GetService("ReplicatedStorage"):WaitForChild("MainEvent", 8)
+        if not MainEvent then return end
+        getgenv().NamelessPingSpoof = true
+        getgenv().NamelessPingValue = 30
+        pcall(function()
+            if hookfunction then
+                local old
+                old = hookfunction(MainEvent.FireServer, function(self, ...)
+                    local args = {...}
+                    if getgenv().NamelessPingSpoof and args[1] == "GetPing" and not (checkcaller and checkcaller()) then
+                        return
+                    end
+                    return old(self, ...)
+                end)
+            end
+        end)
+        while true do
+            if getgenv().NamelessPingSpoof then
+                pcall(function() MainEvent:FireServer("GetPing", (getgenv().NamelessPingValue or 30) / 1000) end)
+            end
+            task.wait(1)
+        end
+    end)
+end)
+
+
+-- Chat tag for Nameless users + local chat spy
+getgenv().NAMELESS_USERS = getgenv().NAMELESS_USERS or {}
+getgenv().NAMELESS_USERS[game:GetService("Players").LocalPlayer.Name] = true
+-- broadcast presence via attribute on character
+task.spawn(function()
+    local lp = game:GetService("Players").LocalPlayer
+    local function tagChar(char)
+        if not char then return end
+        pcall(function() char:SetAttribute("NamelessUser", true) end)
+    end
+    if lp.Character then tagChar(lp.Character) end
+    lp.CharacterAdded:Connect(tagChar)
+end)
+
+local function isNamelessPlayer(plr)
+    if not plr then return false end
+    if getgenv().NAMELESS_USERS[plr.Name] then return true end
+    local c = plr.Character
+    if c and c:GetAttribute("NamelessUser") then return true end
+    return false
+end
+
+-- Chat spy: print all chats with [NAMELESS USER] tag when applicable
+pcall(function()
+    local Players = game:GetService("Players")
+    local function onChatted(plr, msg)
+        local tag = isNamelessPlayer(plr) and "[NAMELESS USER] " or ""
+        local line = string.format("%s%s: %s", tag, plr.Name, tostring(msg))
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+                Text = line,
+                Color = isNamelessPlayer(plr) and Color3.fromRGB(220, 60, 60) or Color3.fromRGB(200, 200, 200),
+                Font = Enum.Font.SourceSans,
+                TextSize = 15,
+            })
+        end)
+        print(line)
+    end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        plr.Chatted:Connect(function(msg) onChatted(plr, msg) end)
+    end
+    Players.PlayerAdded:Connect(function(plr)
+        plr.Chatted:Connect(function(msg) onChatted(plr, msg) end)
+    end)
+end)
+
 getgenv()._NL = getgenv()._NL or {}
 local NL = getgenv()._NL
 local F = {}
@@ -229,11 +327,26 @@ FastKillLastStep = 0
 FastKillLastTrigger = 0
 
 
+-- Fast kill defaults (declared before lite overrides)
+local FastKillBehindDist = 100
+local FastKillHitDist = 6
+local FastKillHitHold = 0.05
+local FastKillFrontDist = 100
+local FastKillMoveSpeed = 1000
+local SpamVoidTweenSpeed = 100000
+local SpamVoidDepth = 500
+local FastKillCamHeight = 28
+local FastKillClearObstacles = true
+local FastKillTriggerRate = 0.04
+local GunSpamVoidIn, GunSpamVoidOut = 4.0, 2.0
+local KnifeSpamVoidIn, KnifeSpamVoidOut = 2.0, 1.0
+
 -- ========== LITE / MOBILE MODE ==========
 -- Detects mobile / low-end (Delta cloud phones, tablets) and cuts CPU/GPU load.
 -- ForceHit + KillAura stay enabled.
 local LiteMode = false
-local function detectLiteDevice()
+local detectLiteDevice
+detectLiteDevice = function()
     local lite = false
     pcall(function()
         local UIS = game:GetService("UserInputService")
@@ -276,30 +389,32 @@ local ExecutorName = ""
 pcall(function()
     ExecutorName = tostring((identifyexecutor and identifyexecutor()) or (getexecutorname and getexecutorname()) or ""):lower()
 end)
-local BadExecutor = LiteMode
-    or (ExecutorName:find("xeno") ~= nil)
-    or (ExecutorName:find("solara") ~= nil)
-    or (ExecutorName:find("electron") ~= nil)
-    or (ExecutorName:find("jjsploit") ~= nil)
+local BadExecutor = false
+if LiteMode then BadExecutor = true end
+if type(ExecutorName) == "string" then
+    if ExecutorName:find("xeno") or ExecutorName:find("solara") or ExecutorName:find("electron") or ExecutorName:find("jjsploit") then
+        BadExecutor = true
+    end
+end
 pcall(function()
     if getgenv().FORCE_BAD_EXEC == true then BadExecutor = true end
     if getgenv().FORCE_BAD_EXEC == false then BadExecutor = false end
 end)
 
--- Fast kill / knife-tween config
+-- Fast kill / knife-tween config (adjust for executor)
 -- Good exec: 100 back/front @ 1000 | Bad/mobile: 50/50 @ 100
-local FastKillBehindDist = BadExecutor and 50 or 100
-local FastKillHitDist = 6
-local FastKillHitHold = 0.05
-local FastKillFrontDist = BadExecutor and 50 or 100
-local FastKillMoveSpeed = BadExecutor and 100 or 1000
-local SpamVoidTweenSpeed = BadExecutor and 5000 or 100000
-local SpamVoidDepth = 500
-local FastKillCamHeight = 28
-local FastKillClearObstacles = not BadExecutor
-local FastKillTriggerRate = 0.04
-local GunSpamVoidIn, GunSpamVoidOut = 4.0, 2.0
-local KnifeSpamVoidIn, KnifeSpamVoidOut = 2.0, 1.0
+FastKillBehindDist = BadExecutor and 50 or 100
+FastKillHitDist = 6
+FastKillHitHold = 0.05
+FastKillFrontDist = BadExecutor and 50 or 100
+FastKillMoveSpeed = BadExecutor and 100 or 1000
+SpamVoidTweenSpeed = BadExecutor and 5000 or 100000
+SpamVoidDepth = 500
+FastKillCamHeight = 28
+FastKillClearObstacles = not BadExecutor
+FastKillTriggerRate = 0.04
+GunSpamVoidIn, GunSpamVoidOut = 4.0, 2.0
+KnifeSpamVoidIn, KnifeSpamVoidOut = 2.0, 1.0
 SpamVoidWeapon = "gun"
 ProtectOwnerEnabled = false
 ProtectOwnerConn = nil
@@ -313,7 +428,7 @@ local FastKillStableLook = Vector3.new(0, 0, -1)
 -- Whitelist / bot list
 local Whitelist = {} -- [name:lower()] = true
 local BotList = {}   -- [name:lower()] = true
-for i, name in ipairs(BotListOrdered) do
+for i, name in ipairs(BotListOrdered or {}) do
     if type(name) == "string" and name ~= "" then
         BotList[name:lower()] = true
     end
@@ -321,7 +436,7 @@ end
 -- Assign slot from BotListOrdered if this account is listed
 do
     local me = game:GetService("Players").LocalPlayer.Name:lower()
-    for i, name in ipairs(BotListOrdered) do
+    for i, name in ipairs(BotListOrdered or {}) do
         if type(name) == "string" and name:lower() == me then
             MySlot = i
             break
@@ -495,6 +610,19 @@ local EmoteOrder = {
     { key = "darktriad", id = Emotes.darktriad },
     { key = "vampire", id = Emotes.vampire },
 }
+-- merge VAULT_EMOTES into EmoteOrder (working dance list)
+if VAULT_EMOTES then
+    for k, id in pairs(VAULT_EMOTES) do
+        local exists = false
+        for _, e in ipairs(EmoteOrder) do
+            if e.key == k then exists = true break end
+        end
+        if not exists then
+            EmoteOrder[#EmoteOrder + 1] = { key = k, id = id }
+        end
+    end
+end
+
 -- Default emote on execute: Vampire Upside Down Idle
 local DefaultEmoteKey = "vampire"
 local DefaultEmoteId = Emotes.vampire
@@ -1404,6 +1532,9 @@ VisualStripConn = Players.PlayerAdded:Connect(function(plr)
 end
 
 function F.SetOptMode(on)
+    -- opt mode is bots-only; controller ignores
+    if F.IsControllerClient and F.IsControllerClient() then return end
+
     OptMode = on and true or false
     if OptConn then
         pcall(function() OptConn:Disconnect() end)
@@ -2728,6 +2859,10 @@ task.spawn(function()
 end)
 
 function F.FireForceHit(target)
+    if not MainEvent then
+        MainEvent = game:GetService("ReplicatedStorage"):FindFirstChild("MainEvent")
+            or game:GetService("ReplicatedStorage"):FindFirstChild("MainRemoteEvent")
+    end
     if not MainEvent or not target then return false end
     -- optional lock: only the cmd target
     if ForceHitCmdTarget and ForceHitCmdTarget.Parent then
@@ -3012,7 +3147,7 @@ function F.EnsureDancePlaying()
             F.PlayEmote(LastDanceId)
         end
     elseif ExecuteEmoteForced then
-        F.StartDefaultEmote()
+        pcall(function() if F.StartDefaultEmote then F.StartDefaultEmote() end end)
     end
 end
 
@@ -3555,8 +3690,6 @@ F.ChatCommand = function(cmdLine)
     end
     -- also run locally for controller-side silent tools
     pcall(function() F.RunSilent(cmdLine) end)
-    if not sent then
-end
 end
 
 -- Black screen for stands/bots
@@ -3711,389 +3844,821 @@ function F.OnBotJoined(plr)
     end
 end
 
+
+
 function F.DestroyBotGui()
-    if BotGui then BotGui:Destroy() BotGui = nil end
-    GuiWindow = nil
+    pcall(function()
+        if getgenv().library and getgenv().library.unload then
+            getgenv().library:unload()
+        end
+    end)
+    if BotGui then pcall(function() BotGui:Destroy() end) BotGui = nil end
     MenuOpen = false
 end
 
-function F.clearGuiConn(k)
-    if GuiConns[k] then GuiConns[k]:Disconnect() GuiConns[k] = nil end
-end
 
+-- ========== FORCEHIT / DESYNC / VISUAL / CONTROLLER KILL (working wiring) ==========
+ForceHitFOV = ForceHitFOV or 20
+ForceHitFOVEnabled = ForceHitFOVEnabled or false
+ForceHitKeybindTarget = ForceHitKeybindTarget or nil
+ForceHitKeyCode = ForceHitKeyCode or Enum.KeyCode.Q
+ForceHitFireRate = ForceHitFireRate or 0.05
+if ForceHitConn then pcall(function() ForceHitConn:Disconnect() end) ForceHitConn = nil end
 
--- FOV ForceHit + keybind target + tracer (controller)
-function F.GetPlayersInFOV()
+function F.GetClosestInFOV()
     local cam = workspace.CurrentCamera
-    if not cam then return {} end
-    local list = {}
-    local fov = ForceHitFOV or 20
-    local center = cam.ViewportSize / 2
+    if not cam then return nil end
+    local best, bd = nil, ForceHitFOV or 20
     for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and not F.isWhitelisted(plr) and F.isFullyAlive and F.isFullyAlive(plr) then
-            local part = plr.Character and (plr.Character:FindFirstChild("Head") or plr.Character:FindFirstChild("HumanoidRootPart"))
-            if part then
-                local sp, onScreen = cam:WorldToViewportPoint(part.Position)
-                if onScreen and sp.Z > 0 then
-                    local dist = (Vector2.new(sp.X, sp.Y) - Vector2.new(center.X, center.Y)).Magnitude
-                    local radius = math.clamp(200 - fov * 4, 40, 160)
-                    if dist <= radius then
-                        list[#list + 1] = { p = plr, d = dist }
-                    end
-                end
-            end
-        end
-    end
-    table.sort(list, function(a, b) return a.d < b.d end)
-    return list
-end
-
-function F.DrawFHTracer(fromPos, toPos)
-    if not ForceHitTracerEnabled then return end
-    if not F.IsControllerClient or not F.IsControllerClient() then return end
-    pcall(function()
-        local a0 = Instance.new("Part")
-        a0.Anchored = true
-        a0.CanCollide = false
-        a0.Transparency = 1
-        a0.Size = Vector3.new(0.1, 0.1, 0.1)
-        a0.CFrame = CFrame.new(fromPos)
-        a0.Parent = workspace.Terrain
-        local a1 = a0:Clone()
-        a1.CFrame = CFrame.new(toPos)
-        a1.Parent = workspace.Terrain
-        local att0 = Instance.new("Attachment", a0)
-        local att1 = Instance.new("Attachment", a1)
-        local beam = Instance.new("Beam")
-        beam.Attachment0 = att0
-        beam.Attachment1 = att1
-        beam.Width0 = 0.08
-        beam.Width1 = 0.02
-        beam.FaceCamera = true
-        beam.Color = ColorSequence.new(Color3.fromRGB(255, 128, 0))
-        beam.Parent = a0
-        task.delay(0.08, function()
-            pcall(function() a0:Destroy() end)
-            pcall(function() a1:Destroy() end)
-        end)
-    end)
-end
-
-function F.ForceHitValidTarget(p)
-    if not p or not p.Parent then return false end
-    if F.GetRelation and F.GetRelation(p) == "friendly" then return false end
-    if F.isWhitelisted and F.isWhitelisted(p) then return false end
-    if not F.isFullyAlive or not F.isFullyAlive(p) then return false end
-    if F.isKnocked and p.Character and F.isKnocked(p.Character) then return false end
-    local my = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    local th = p.Character and (p.Character:FindFirstChild("Head") or p.Character:FindFirstChild("HumanoidRootPart"))
-    if not my or not th then return false end
-    -- controller GUI forcehit: max 200 studs
-    if F.IsControllerClient and F.IsControllerClient() then
-        if (my.Position - th.Position).Magnitude > 200 then return false end
-    end
-    if F.HasWallBetween and F.HasWallBetween(my.Position, th.Position) then return false end
-    return true
-end
-
-task.spawn(function()
-    while task.wait(0.03) do
-        if not (F.IsControllerClient and F.IsControllerClient()) then
-            -- stands skip
-        else
-            if FOVCircle then
-                F.UpdateFOVCircle(ForceHitFOVEnabled and ForceHitFOVCircleVisible)
-            end
-            local target = nil
-            if ForceHitFOVEnabled then
-                local hits = F.GetPlayersInFOV()
-                for _, h in ipairs(hits) do
-                    if F.ForceHitValidTarget(h.p) then target = h.p break end
-                end
-            elseif ForceHitKeybindTarget and ForceHitKeybindTarget.Parent then
-                if F.ForceHitValidTarget(ForceHitKeybindTarget) then
-                    target = ForceHitKeybindTarget
-                else
-                    -- knocked / dead / wall: keep selection but do not shoot
-                    target = nil
-                end
-            end
-            if target then
-                if false and ForceHitTracerEnabled then
-                    local my = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                    local th = target.Character and target.Character:FindFirstChild("Head")
-                    if my and th then F.DrawFHTracer(my.Position, th.Position) end
-                end
-                if F.FireForceHit then F.FireForceHit(target) end
-            end
-        end
-    end
-end)
-
--- Keybind: press once = select nearest (sticky). press again = clear. no auto-switch.
-task.spawn(function()
-    local UIS = game:GetService("UserInputService")
-    UIS.InputBegan:Connect(function(input, gp)
-        if gp then return end
-        if not (F.IsControllerClient and F.IsControllerClient()) then return end
-        if ForceHitKeyListening then
-            if input.UserInputType == Enum.UserInputType.Keyboard then
-                ForceHitKeyCode = input.KeyCode
-                ForceHitKeyListening = false
-end
-            return
-        end
-        if input.KeyCode == ForceHitKeyCode and not ForceHitFOVEnabled then
-            if ForceHitKeybindTarget and ForceHitKeybindTarget.Parent then
-                ForceHitKeybindTarget = nil
-return
-            end
-            local mouse = LocalPlayer:GetMouse()
-            local best, bd = nil, 9e9
-            local cam = workspace.CurrentCamera
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= LocalPlayer and F.ForceHitValidTarget(plr) then
-                    local h = plr.Character and plr.Character:FindFirstChild("Head")
-                    if h and cam then
-                        local sp = cam:WorldToViewportPoint(h.Position)
-                        local d = (Vector2.new(sp.X, sp.Y) - Vector2.new(mouse.X, mouse.Y)).Magnitude
-                        if d < bd then best, bd = plr, d end
-                    end
-                end
-            end
-            if best then
-                ForceHitKeybindTarget = best
-end
-        end
-    end)
-end)
-
-
-task.spawn(function()
-    while true do
-        task.wait(0.15)
-        if StompSelectedTarget then
-            local t = ForceHitStompTarget or ForceHitCmdTarget or ForceHitKeybindTarget
-            if t and t.Character then
-                local be = t.Character:FindFirstChild("BodyEffects")
-                local ko = be and (be:FindFirstChild("K.O") or be:FindFirstChild("KO"))
-                if ko and ko.Value then
-                    if F.DoStomp then pcall(F.DoStomp, t) end
-                    task.wait(0.45)
-                    -- return to owner (controller)
-                    if F.StartFollow then
-                        pcall(F.StartFollow)
-                    else
-                        local ctrl = F.GetController and F.GetController()
-                        local cr = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
-                        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-                        if cr and r then pcall(function() r.CFrame = cr.CFrame * CFrame.new(0, 3, 5) end) end
-                    end
-                    StompSelectedTarget = false
-                end
-            end
-        end
-    end
-end)
-
-
--- Controller local combat (Ragebot UI - does not command bots)
-
-function F.ControllerForceHitAllowed(target)
-    if not target or not target.Parent then return false end
-    if not F.isFullyAlive or not F.isFullyAlive(target) then return false end
-    if target.Character and F.isKnocked and F.isKnocked(target.Character) then return false end
-    local my = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    local th = target.Character and (target.Character:FindFirstChild("Head") or target.Character:FindFirstChild("HumanoidRootPart"))
-    if not my or not th then return false end
-    if (my.Position - th.Position).Magnitude > 200 then return false end
-    if F.HasWallBetween and F.HasWallBetween(my.Position, th.Position) then return false end
-    return true
-end
-
-function F.ControllerKill(name, auto)
-    if not F.IsControllerClient or not F.IsControllerClient() then return end
-    local p = F.FindPlayer and F.FindPlayer(name)
-    if not p then return end
-    UseGun = true
-    -- equip uzi/rev for controller
-    if F.SelectGun then
-        if not F.SelectGun("uzi") then F.SelectGun("rev") end
-    end
-    TargetPlayer = p
-    getgenv()._CTRL_KILL_GEN = (getgenv()._CTRL_KILL_GEN or 0) + 1
-    local gen = getgenv()._CTRL_KILL_GEN
-    CurrentAction = auto and "ctrl_autokill" or "ctrl_kill"
-    task.spawn(function()
-        while gen == getgenv()._CTRL_KILL_GEN and (CurrentAction == "ctrl_autokill" or CurrentAction == "ctrl_kill") do
-            if not p or not p.Parent then break end
-            local char = p.Character
-            if char and F.isKnocked and F.isKnocked(char) then
-                if F.DoStomp then pcall(F.DoStomp, p) end
-                if not auto then break end
-                task.wait(1.2)
+        if plr ~= LocalPlayer and F.isFullyAlive and F.isFullyAlive(plr) then
+            if F.isWhitelisted and F.isWhitelisted(plr) then
+                -- skip
             else
-                -- clear ForceHitCmdTarget lock so controller FH is not filtered
-                if F.ControllerForceHitAllowed and F.ControllerForceHitAllowed(p) then
-                    local prev = ForceHitCmdTarget
-                    ForceHitCmdTarget = nil
-                    pcall(function() if F.FireForceHit then F.FireForceHit(p) end end)
-                    ForceHitCmdTarget = prev
-                end
-            end
-            if not auto then
-                task.wait(0.35)
-                break
-            end
-            task.wait(0.05)
-        end
-        if gen == getgenv()._CTRL_KILL_GEN then
-            CurrentAction = "idle"
-        end
-    end)
-end
-
-
-function F.StartAutoHeal()
-    if getgenv()._NamelessAutoHeal then return end
-    getgenv()._NamelessAutoHeal = RunService.Heartbeat:Connect(function()
-        local char = LocalPlayer.Character
-        if not char then return end
-        local hum = char:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health <= 0 then return end
-        local maxh = hum.MaxHealth
-        if maxh <= 0 then return end
-        local pct = hum.Health / maxh
-        local trig = AutoHealTriggerPct or 0.30
-        if pct <= trig and pct > 0 then
-            -- try eat / med
-            pcall(function()
-                if MainEvent then
-                    MainEvent:FireServer("BuyBurger")
-                    MainEvent:FireServer("Purchase", "Burger")
-                end
-            end)
-            local bag = LocalPlayer:FindFirstChild("Backpack")
-            for _, container in ipairs({ char, bag }) do
-                if container then
-                    for _, t in ipairs(container:GetChildren()) do
-                        if t:IsA("Tool") then
-                            local n = t.Name:lower()
-                            if n:find("burger") or n:find("pizza") or n:find("taco") or n:find("health") or n:find("apple") then
-                                pcall(function() t.Parent = char end)
-                                pcall(function() t:Activate() end)
-                            end
+                local head = plr.Character and plr.Character:FindFirstChild("Head")
+                if head then
+                    local sp, onScreen = cam:WorldToViewportPoint(head.Position)
+                    if onScreen then
+                        local center = cam.ViewportSize / 2
+                        local d = (Vector2.new(sp.X, sp.Y) - center).Magnitude
+                        if d < bd then
+                            bd = d
+                            best = plr
                         end
                     end
                 end
             end
         end
-    end)
+    end
+    return best
 end
-task.defer(function() task.wait(1) F.StartAutoHeal() end)
 
+function F.GetForceHitTarget()
+    if ForceHitCmdTarget and ForceHitCmdTarget.Parent and F.isFullyAlive and F.isFullyAlive(ForceHitCmdTarget) then
+        return ForceHitCmdTarget
+    end
+    if ForceHitKeybindTarget and ForceHitKeybindTarget.Parent and F.isFullyAlive and F.isFullyAlive(ForceHitKeybindTarget) then
+        return ForceHitKeybindTarget
+    end
+    if ForceHitFOVEnabled then
+        return F.GetClosestInFOV()
+    end
+    return nil
+end
 
-function F.SetDesync(on)
-    getgenv().NamelessDesync = on and true or false
-    pcall(function()
-        if setfflag then
-            if on then
-                setfflag("GameNetCompressionLodByteBudgetThresholdPct", "0")
-                setfflag("PhysicsSenderMaxBandwidthBps", "0")
-                setfflag("NextGenReplicatorEnabledWrite4", "1")
-            else
-                setfflag("GameNetCompressionLodByteBudgetThresholdPct", "1")
-                setfflag("PhysicsSenderMaxBandwidthBps", "1000")
-                setfflag("NextGenReplicatorEnabledWrite4", "1")
+function F.StartForceHitLoop()
+    if ForceHitConn then return end
+    ForceHitConn = RunService.Heartbeat:Connect(function()
+        local target = F.GetForceHitTarget()
+        if not target then return end
+        if F.HasWallBetween and LocalPlayer.Character then
+            local a = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            local b = target.Character and target.Character:FindFirstChild("Head")
+            if a and b and F.HasWallBetween(a.Position, b.Position) then return end
+        end
+        if F.FireForceHit then
+            pcall(F.FireForceHit, target)
+        elseif F.forceHitTick then
+            pcall(F.forceHitTick, target)
+        end
+        if F.TryReload then pcall(F.TryReload) end
+        -- stomp target option
+        if StompSelectedTarget and target.Character then
+            local be = target.Character:FindFirstChild("BodyEffects")
+            local ko = be and (be:FindFirstChild("K.O") or be:FindFirstChild("KO"))
+            if ko and ko.Value and MainEvent then
+                pcall(function()
+                    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    local ut = target.Character:FindFirstChild("UpperTorso") or target.Character:FindFirstChild("HumanoidRootPart")
+                    if hrp and ut then
+                        local saved = hrp.CFrame
+                        hrp.CFrame = CFrame.new(ut.Position + Vector3.new(0, 3.4, 0))
+                        for _ = 1, 5 do MainEvent:FireServer("Stomp") end
+                        hrp.CFrame = saved
+                    end
+                end)
             end
         end
     end)
 end
 
-function F.SetFakePos(on)
-    getgenv().NamelessFakePos = on and true or false
-    if getgenv()._FakePosConn then
-        pcall(function() getgenv()._FakePosConn:Disconnect() end)
-        getgenv()._FakePosConn = nil
+F.StartForceHitLoop()
+
+-- Keybind: set / clear forcehit target
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+    if input.KeyCode == (ForceHitKeyCode or Enum.KeyCode.Q) then
+        if ForceHitKeybindTarget then
+            ForceHitKeybindTarget = nil
+        else
+            ForceHitKeybindTarget = F.GetClosestInFOV()
+            -- if none in FOV, pick closest world target
+            if not ForceHitKeybindTarget then
+                local best, bd = nil, 200
+                local my = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if my then
+                    for _, plr in ipairs(Players:GetPlayers()) do
+                        if plr ~= LocalPlayer and F.isFullyAlive and F.isFullyAlive(plr) then
+                            local r = plr.Character and plr.Character:FindFirstChild("HumanoidRootPart")
+                            if r then
+                                local d = (r.Position - my.Position).Magnitude
+                                if d < bd then bd = d best = plr end
+                            end
+                        end
+                    end
+                end
+                ForceHitKeybindTarget = best
+            end
+        end
     end
+end)
+
+-- Controller local kill (no chat)
+function F.ControllerKill(name, isAuto)
+    local target = nil
+    if typeof(name) == "Instance" then
+        target = name
+    else
+        if F.FindPlayerAny then target = F.FindPlayerAny(name) end
+        if not target then
+            local nl = tostring(name or ""):lower()
+            for _, plr in ipairs(Players:GetPlayers()) do
+                if plr.Name:lower() == nl or (plr.DisplayName and plr.DisplayName:lower() == nl) then
+                    target = plr
+                    break
+                end
+            end
+        end
+    end
+    if not target then
+        warn("[NAMELESS] ControllerKill: target not found: " .. tostring(name))
+        return
+    end
+    getgenv()._CTRL_KILL_GEN = (getgenv()._CTRL_KILL_GEN or 0) + 1
+    local gen = getgenv()._CTRL_KILL_GEN
+    ForceHitCmdTarget = target
+    ForceHitKeybindTarget = target
+    ForceHitFOVEnabled = true
+    CurrentAction = isAuto and "autokill" or "kill"
+    TargetPlayer = target
+    -- equip first tool / gun
+    pcall(function()
+        local char = LocalPlayer.Character
+        local bag = LocalPlayer:FindFirstChild("Backpack")
+        if char and bag then
+            for _, tool in ipairs(bag:GetChildren()) do
+                if tool:IsA("Tool") and tool.Name ~= "[Knife]" and not tool.Name:lower():find("knife") then
+                    hum = char:FindFirstChildOfClass("Humanoid")
+                    if hum then hum:EquipTool(tool) end
+                    break
+                end
+            end
+        end
+    end)
+    task.spawn(function()
+        while getgenv()._CTRL_KILL_GEN == gen do
+            if not target.Parent then break end
+            local alive = true
+            if F.isFullyAlive then
+                alive = F.isFullyAlive(target)
+            else
+                local h = target.Character and target.Character:FindFirstChildOfClass("Humanoid")
+                alive = h and h.Health > 0
+            end
+            if not alive then
+                if not isAuto then break end
+                task.wait(0.15)
+            else
+                -- skip forcefield
+                local ff = target.Character and target.Character:FindFirstChildOfClass("ForceField")
+                if not ff then
+                    if F.FireForceHit then pcall(F.FireForceHit, target) end
+                    if F.forceHitTick then pcall(F.forceHitTick, target) end
+                    if F.TryReload then pcall(F.TryReload) end
+                end
+            end
+            RunService.Heartbeat:Wait()
+        end
+        if getgenv()._CTRL_KILL_GEN == gen then
+            ForceHitCmdTarget = nil
+            if CurrentAction == "autokill" or CurrentAction == "kill" then
+                CurrentAction = "idle"
+            end
+        end
+    end)
+end
+
+
+-- Desync
+getgenv().NamelessDesync = getgenv().NamelessDesync or {
+    VoidSpam = false, VoidSpamKey = Enum.KeyCode.V,
+    FakePos = false, FakePosKey = Enum.KeyCode.F,
+    NetDesync = false, NetDesyncKey = Enum.KeyCode.N,
+    VoidIn = 0.15, VoidOut = 0.10, VoidDist = 200,
+}
+
+function F.SetFakePos(on)
+    getgenv().FakePosToggleEnabled = on and true or false
+    if getgenv()._FakePosConn then pcall(function() getgenv()._FakePosConn:Disconnect() end) getgenv()._FakePosConn = nil end
     if not on then return end
-    local last = nil
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if hrp then getgenv().FakePosServerPos = hrp.Position end
     getgenv()._FakePosConn = RunService.Heartbeat:Connect(function()
+        if not getgenv().FakePosToggleEnabled then return end
         local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not r then return end
-        if not last then last = r.CFrame end
-        -- hold server-visible-ish lag: periodically write old CF then restore (client fake)
+        if not getgenv().FakePosServerPos then getgenv().FakePosServerPos = r.Position return end
+        local real = r.CFrame
+        pcall(function() r.CFrame = CFrame.new(getgenv().FakePosServerPos) end)
+        RunService.RenderStepped:Wait()
+        pcall(function() r.CFrame = real end)
+    end)
+end
+
+function F.SetNetDesync(on)
+    getgenv().PhysicsRepDesyncEnabled = on and true or false
+    pcall(function()
+        if setfflag then
+            if on then
+                setfflag("GameNetCompressionLodByteBudgetThresholdPct", "0")
+                setfflag("PhysicsSenderMaxBandwidthBps", "0")
+            else
+                setfflag("GameNetCompressionLodByteBudgetThresholdPct", "1")
+                setfflag("PhysicsSenderMaxBandwidthBps", "1000")
+            end
+        end
+    end)
+    if getgenv()._NetDesyncConn then pcall(function() getgenv()._NetDesyncConn:Disconnect() end) getgenv()._NetDesyncConn = nil end
+    if not on then return end
+    getgenv()._NetDesyncConn = RunService.Heartbeat:Connect(function()
+        if not getgenv().PhysicsRepDesyncEnabled then return end
+        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if r and sethiddenproperty then
+            pcall(sethiddenproperty, r, "NetworkIsSleeping", true)
+        end
+    end)
+end
+
+function F.StartVoidSpam()
+    if getgenv()._VoidSpamRunning then return end
+    getgenv()._VoidSpamRunning = true
+    task.spawn(function()
+        local DS = getgenv().NamelessDesync or {}
+        while getgenv()._VoidSpamRunning do
+            local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+            if r then
+                local origin = r.CFrame
+                local goal = origin.Position + Vector3.new(0, -(DS.VoidDist or 200), 0)
+                local t0 = tick()
+                local vin = DS.VoidIn or 0.15
+                while tick() - t0 < vin and getgenv()._VoidSpamRunning do
+                    local a = math.min(1, (tick() - t0) / math.max(0.01, vin))
+                    pcall(function() r.CFrame = origin:Lerp(CFrame.new(goal), a) end)
+                    RunService.Heartbeat:Wait()
+                end
+                t0 = tick()
+                local vout = DS.VoidOut or 0.1
+                while tick() - t0 < vout and getgenv()._VoidSpamRunning do
+                    local a = math.min(1, (tick() - t0) / math.max(0.01, vout))
+                    pcall(function() r.CFrame = CFrame.new(goal):Lerp(origin, a) end)
+                    RunService.Heartbeat:Wait()
+                end
+            else
+                task.wait(0.1)
+            end
+        end
+    end)
+end
+
+function F.StopVoidSpam()
+    getgenv()._VoidSpamRunning = false
+end
+
+-- Visuals
+getgenv().NamelessVisual = getgenv().NamelessVisual or {}
+local function ensureVS()
+    local VS = getgenv().NamelessVisual
+    VS.Fullbright = VS.Fullbright or false
+    VS.NoFog = VS.NoFog or false
+    VS.NoShadows = VS.NoShadows or false
+    VS.MuteAll = VS.MuteAll or false
+    VS.NoParticles = VS.NoParticles or false
+    VS.GreyCharacters = VS.GreyCharacters or false
+    VS.SkyboxEnabled = VS.SkyboxEnabled or false
+    VS.SkyboxType = VS.SkyboxType or "realistic"
+    VS.WeatherEnabled = VS.WeatherEnabled or false
+    VS.WeatherRate = VS.WeatherRate or 100
+    VS.WeatherColor = VS.WeatherColor or Color3.fromRGB(180, 200, 255)
+    VS.Brightness = VS.Brightness or 2
+    return VS
+end
+ensureVS()
+
+SKYBOX_PRESETS = {
+    realistic = {
+        SkyboxBk = "rbxassetid://12216109205", SkyboxDn = "rbxassetid://12216109875",
+        SkyboxFt = "rbxassetid://12216109489", SkyboxLf = "rbxassetid://12216110170",
+        SkyboxRt = "rbxassetid://12216110471", SkyboxUp = "rbxassetid://12216108877",
+    },
+    nebula = {
+        SkyboxBk = "rbxassetid://15536110634", SkyboxDn = "rbxassetid://15536112543",
+        SkyboxFt = "rbxassetid://15536110634", SkyboxLf = "rbxassetid://15536110634",
+        SkyboxRt = "rbxassetid://15536110634", SkyboxUp = "rbxassetid://15536117282",
+    },
+    space = {
+        SkyboxBk = "rbxassetid://15502511288", SkyboxDn = "rbxassetid://15502508460",
+        SkyboxFt = "rbxassetid://15502510289", SkyboxLf = "rbxassetid://15502507918",
+        SkyboxRt = "rbxassetid://15502509398", SkyboxUp = "rbxassetid://15502511911",
+    },
+    sunset = {
+        SkyboxBk = "rbxassetid://653718931", SkyboxDn = "rbxassetid://653718790",
+        SkyboxFt = "rbxassetid://653719067", SkyboxLf = "rbxassetid://653719321",
+        SkyboxRt = "rbxassetid://653718931", SkyboxUp = "rbxassetid://653719321",
+    },
+    night = {
+        SkyboxBk = "rbxassetid://15536110634", SkyboxDn = "rbxassetid://15536112543",
+        SkyboxFt = "rbxassetid://15536110634", SkyboxLf = "rbxassetid://15536110634",
+        SkyboxRt = "rbxassetid://15536110634", SkyboxUp = "rbxassetid://15536117282",
+    },
+}
+
+function F.ApplySkybox(presetName)
+    local Lighting = game:GetService("Lighting")
+    local VS = ensureVS()
+    if presetName and presetName ~= "" then
+        VS.SkyboxType = presetName
+        VS.SkyboxEnabled = true
+    end
+    if not VS.SkyboxEnabled then
         pcall(function()
-            r.CFrame = last
-            RunService.RenderStepped:Wait()
-            last = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart") and LocalPlayer.Character.HumanoidRootPart.CFrame or last
+            local s = Lighting:FindFirstChild("NamelessSky")
+            if s then s:Destroy() end
+        end)
+        return
+    end
+    local name = VS.SkyboxType or "realistic"
+    local preset = SKYBOX_PRESETS[name] or SKYBOX_PRESETS.realistic
+    pcall(function()
+        -- remove all skies so ours shows
+        for _, c in ipairs(Lighting:GetChildren()) do
+            if c:IsA("Sky") then c:Destroy() end
+        end
+        local sky = Instance.new("Sky")
+        sky.Name = "NamelessSky"
+        sky.SkyboxBk = preset.SkyboxBk
+        sky.SkyboxDn = preset.SkyboxDn
+        sky.SkyboxFt = preset.SkyboxFt
+        sky.SkyboxLf = preset.SkyboxLf
+        sky.SkyboxRt = preset.SkyboxRt
+        sky.SkyboxUp = preset.SkyboxUp
+        sky.CelestialBodiesShown = true
+        sky.StarCount = 3000
+        sky.SkyboxOrientation = Vector3.new(0, 0, 0)
+        sky.Parent = Lighting
+        -- clear atmosphere fog that can hide sky
+        local atm = Lighting:FindFirstChildOfClass("Atmosphere")
+        if atm then
+            atm.Density = 0.1
+            atm.Haze = 0
+        end
+        Lighting.FogEnd = 100000
+    end)
+end
+
+function F.StopWeather()
+    if getgenv()._NamelessRainConn then
+        pcall(function() getgenv()._NamelessRainConn:Disconnect() end)
+        getgenv()._NamelessRainConn = nil
+    end
+    if getgenv()._NamelessRain then
+        pcall(function() getgenv()._NamelessRain:Destroy() end)
+        getgenv()._NamelessRain = nil
+    end
+    if getgenv()._NamelessRainFolder then
+        pcall(function() getgenv()._NamelessRainFolder:Destroy() end)
+        getgenv()._NamelessRainFolder = nil
+    end
+end
+
+function F.StartWeather()
+    F.StopWeather()
+    local VS = ensureVS()
+    if not VS.WeatherEnabled then return end
+
+    -- Exact NeverLarp rain particle setup
+    local part = Instance.new("Part")
+    part.Name = "NamelessRain"
+    part.Size = Vector3.new(40, 40, 85)
+    part.CanCollide = false
+    part.Massless = true
+    part.CastShadow = false
+    part.Transparency = 1
+    part.Anchored = true
+    part.Parent = workspace
+    getgenv()._NamelessRain = part
+    getgenv().WV_weatherPart = part
+
+    local pe = Instance.new("ParticleEmitter")
+    pe.Speed = NumberRange.new(60, 60)
+    pe.LockedToPart = true
+    pe.Rate = 600 * ((tonumber(VS.WeatherRate) or 100) / 100)
+    pe.Texture = "rbxassetid://1822883048"
+    pe.EmissionDirection = Enum.NormalId.Bottom
+    pe.Transparency = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 1),
+        NumberSequenceKeypoint.new(0.25, 0.78),
+        NumberSequenceKeypoint.new(0.75, 0.78),
+        NumberSequenceKeypoint.new(1, 1),
+    })
+    pe.Lifetime = NumberRange.new(0.8, 0.8)
+    pe.LightEmission = 0.05
+    pe.LightInfluence = 0.9
+    pe.Size = NumberSequence.new({
+        NumberSequenceKeypoint.new(0, 10),
+        NumberSequenceKeypoint.new(1, 10),
+    })
+    pe.Color = ColorSequence.new(VS.WeatherColor or Color3.fromRGB(255, 255, 255))
+    pe.Parent = part
+    getgenv()._NamelessRainParticle = pe
+    getgenv().WV_weatherParticle = pe
+
+    getgenv()._NamelessRainConn = RunService.Heartbeat:Connect(function()
+        local cam = workspace.CurrentCamera
+        local p = getgenv()._NamelessRain
+        if cam and p and p.Parent then
+            p.CFrame = CFrame.new(cam.CFrame.Position + Vector3.new(0, 20, 0))
+        end
+    end)
+end
+
+function F.ApplyWeather()
+    local VS = ensureVS()
+    if VS.WeatherEnabled then
+        F.StartWeather()
+    else
+        F.StopWeather()
+    end
+end
+
+function F.ApplyVisuals()
+    local VS = ensureVS()
+    local Lighting = game:GetService("Lighting")
+    pcall(function()
+        if VS.Fullbright then
+            Lighting.Brightness = VS.Brightness or 2
+            Lighting.ClockTime = 14
+            Lighting.GlobalShadows = false
+            Lighting.FogEnd = 9e9
+        end
+        if VS.NoFog then
+            Lighting.FogEnd = 9e9
+            Lighting.FogStart = 0
+        end
+        if VS.NoShadows then
+            Lighting.GlobalShadows = false
+        end
+    end)
+    if VS.MuteAll then
+        pcall(function()
+            for _, s in ipairs(game:GetDescendants()) do
+                if s:IsA("Sound") then s.Volume = 0 end
+            end
+        end)
+    end
+    if VS.NoParticles then
+        pcall(function()
+            for _, s in ipairs(workspace:GetDescendants()) do
+                if s:IsA("ParticleEmitter") or s:IsA("Trail") or s:IsA("Beam") then s.Enabled = false end
+            end
+        end)
+    end
+    if VS.GreyCharacters then
+        pcall(function()
+            for _, plr in ipairs(Players:GetPlayers()) do
+                local c = plr.Character
+                if c then
+                    for _, p in ipairs(c:GetDescendants()) do
+                        if p:IsA("BasePart") then
+                            p.Color = Color3.fromRGB(140, 140, 140)
+                            p.Material = Enum.Material.SmoothPlastic
+                        elseif p:IsA("Decal") or p:IsA("Shirt") or p:IsA("Pants") or p:IsA("ShirtGraphic") then
+                            p:Destroy()
+                        end
+                    end
+                end
+            end
+        end)
+    end
+    pcall(function() if F.ApplySkybox then F.ApplySkybox() end end)
+    pcall(function() if F.ApplyWeather then F.ApplyWeather() end end)
+end
+
+
+-- CFrame speed + fly (controller)
+GuiState = GuiState or {
+    CFrameSpeed = false, SpeedValue = 50, SpeedKey = Enum.KeyCode.LeftControl,
+    CFrameFly = false, FlySpeed = 50, FlyKey = Enum.KeyCode.LeftAlt,
+}
+if getgenv()._NamelessCFConn then pcall(function() getgenv()._NamelessCFConn:Disconnect() end) end
+if getgenv()._NamelessFlyConn then pcall(function() getgenv()._NamelessFlyConn:Disconnect() end) end
+
+function F.SetCFrameSpeed(on)
+    GuiState.CFrameSpeed = on and true or false
+    if getgenv()._NamelessCFConn then pcall(function() getgenv()._NamelessCFConn:Disconnect() end) getgenv()._NamelessCFConn = nil end
+    if not on then return end
+    getgenv()._NamelessCFConn = RunService.Heartbeat:Connect(function(dt)
+        if not GuiState.CFrameSpeed then return end
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health <= 0 then return end
+        local move = hum.MoveDirection
+        if move.Magnitude < 0.05 then return end
+        local spd = (GuiState.SpeedValue or 50) * (dt or 0.016) * 3
+        hrp.CFrame = hrp.CFrame + move.Unit * spd
+    end)
+end
+
+function F.SetCFrameFly(on)
+    GuiState.CFrameFly = on and true or false
+    if getgenv()._NamelessFlyConn then pcall(function() getgenv()._NamelessFlyConn:Disconnect() end) getgenv()._NamelessFlyConn = nil end
+    if not on then
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = false end
+        return
+    end
+    getgenv()._NamelessFlyConn = RunService.RenderStepped:Connect(function(dt)
+        if not GuiState.CFrameFly then return end
+        local char = LocalPlayer.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum then return end
+        hum.PlatformStand = true
+        local cam = workspace.CurrentCamera
+        if not cam then return end
+        local dir = Vector3.zero
+        if UserInputService:IsKeyDown(Enum.KeyCode.W) then dir = dir + cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.S) then dir = dir - cam.CFrame.LookVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.A) then dir = dir - cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.D) then dir = dir + cam.CFrame.RightVector end
+        if UserInputService:IsKeyDown(Enum.KeyCode.Space) then dir = dir + Vector3.new(0, 1, 0) end
+        if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then dir = dir - Vector3.new(0, 1, 0) end
+        local spd = (GuiState.FlySpeed or 50) * (dt or 0.016) * 3
+        if dir.Magnitude > 0 then
+            hrp.CFrame = hrp.CFrame + dir.Unit * spd
+        end
+        hrp.AssemblyLinearVelocity = Vector3.zero
+    end)
+end
+
+-- keybind hold/toggle for speed & fly
+UserInputService.InputBegan:Connect(function(input, gp)
+    if gp then return end
+    if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+    if GuiState and input.KeyCode == GuiState.SpeedKey then
+        F.SetCFrameSpeed(not GuiState.CFrameSpeed)
+    elseif GuiState and input.KeyCode == GuiState.FlyKey then
+        F.SetCFrameFly(not GuiState.CFrameFly)
+    end
+end)
+
+
+-- Aimbot + Triggerbot (controller Main)
+AimbotEnabled = AimbotEnabled or false
+AimbotKey = AimbotKey or Enum.KeyCode.E
+AimbotSmooth = AimbotSmooth or 0.25
+AimbotSticky = AimbotSticky ~= false
+AimbotWallCheck = AimbotWallCheck ~= false
+AimbotKnockCheck = AimbotKnockCheck ~= false
+AimbotTarget = nil
+
+TriggerbotEnabled = TriggerbotEnabled or false
+TriggerbotKey = TriggerbotKey or Enum.KeyCode.T
+TriggerbotRange = TriggerbotRange or 40
+TriggerbotLastShot = 0
+
+function F.AimbotGetTarget()
+    if AimbotSticky and AimbotTarget and AimbotTarget.Parent and F.isFullyAlive and F.isFullyAlive(AimbotTarget) then
+        return AimbotTarget
+    end
+    local cam = workspace.CurrentCamera
+    if not cam then return nil end
+    local best, bd = nil, 999
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and F.isFullyAlive and F.isFullyAlive(plr) then
+            if not (F.isWhitelisted and F.isWhitelisted(plr)) then
+                local head = plr.Character and plr.Character:FindFirstChild("Head")
+                if head then
+                    local sp, on = cam:WorldToViewportPoint(head.Position)
+                    if on then
+                        local d = (Vector2.new(sp.X, sp.Y) - cam.ViewportSize/2).Magnitude
+                        if d < bd then bd = d best = plr end
+                    end
+                end
+            end
+        end
+    end
+    if AimbotSticky then AimbotTarget = best end
+    return best
+end
+
+function F.SetAimbot(on)
+    AimbotEnabled = on and true or false
+    if getgenv()._AimbotConn then pcall(function() getgenv()._AimbotConn:Disconnect() end) getgenv()._AimbotConn = nil end
+    if not on then AimbotTarget = nil return end
+    getgenv()._AimbotConn = RunService.RenderStepped:Connect(function()
+        if not AimbotEnabled then return end
+        if not UserInputService:IsKeyDown(AimbotKey) and AimbotKey ~= Enum.KeyCode.Unknown then
+            -- hold mode when key is not Unknown; if always on key Unknown then always
+        end
+        local hold = UserInputService:IsKeyDown(AimbotKey)
+        if not hold then return end
+        local t = F.AimbotGetTarget()
+        if not t or not t.Character then return end
+        local head = t.Character:FindFirstChild("Head")
+        if not head then return end
+        if AimbotKnockCheck then
+            local be = t.Character:FindFirstChild("BodyEffects")
+            local ko = be and (be:FindFirstChild("K.O") or be:FindFirstChild("KO"))
+            if ko and ko.Value then return end
+        end
+        local cam = workspace.CurrentCamera
+        if not cam then return end
+        local goal = CFrame.new(cam.CFrame.Position, head.Position)
+        local s = math.clamp(tonumber(AimbotSmooth) or 0.25, 0.05, 1)
+        cam.CFrame = cam.CFrame:Lerp(goal, s)
+    end)
+end
+
+function F.SetTriggerbot(on)
+    TriggerbotEnabled = on and true or false
+    if getgenv()._TrigConn then pcall(function() getgenv()._TrigConn:Disconnect() end) getgenv()._TrigConn = nil end
+    if not on then return end
+    getgenv()._TrigConn = RunService.Heartbeat:Connect(function()
+        if not TriggerbotEnabled then return end
+        if TriggerbotKey ~= Enum.KeyCode.Unknown and not UserInputService:IsKeyDown(TriggerbotKey) then return end
+        local mouse = LocalPlayer:GetMouse()
+        if not mouse then return end
+        local target = mouse.Target
+        if not target then return end
+        local char = target:FindFirstAncestorOfClass("Model")
+        if not char then return end
+        local plr = Players:GetPlayerFromCharacter(char)
+        if not plr or plr == LocalPlayer then return end
+        if F.isWhitelisted and F.isWhitelisted(plr) then return end
+        if not (F.isFullyAlive and F.isFullyAlive(plr)) then return end
+        local now = tick()
+        if now - (TriggerbotLastShot or 0) < 0.05 then return end
+        TriggerbotLastShot = now
+        -- click / shoot
+        pcall(function()
+            mouse1press()
+            task.wait()
+            mouse1release()
+        end)
+        pcall(function()
+            if F.FireForceHit then F.FireForceHit(plr) end
         end)
     end)
 end
 
--- Voidspam tween config
-VoidTweenIn = VoidTweenIn or 0.15
-VoidTweenOut = VoidTweenOut or 0.1
-VoidTweenDist = VoidTweenDist or 200
-VoidTweenSpeed = VoidTweenSpeed or 1000
+-- Chat spy GUI
+function F.CreateChatSpy()
+    if getgenv()._NamelessChatSpyGui then return end
+    local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 3)
+    if not pg then return end
+    local gui = Instance.new("ScreenGui")
+    gui.Name = "NamelessChatSpy"
+    gui.ResetOnSpawn = false
+    gui.Parent = pg
+    getgenv()._NamelessChatSpyGui = gui
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.new(0, 320, 0, 220)
+    frame.Position = UDim2.new(0, 20, 0.55, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(15, 15, 18)
+    frame.BackgroundTransparency = 0.25
+    frame.BorderSizePixel = 0
+    frame.Parent = gui
+    local corner = Instance.new("UICorner")
+    corner.CornerRadius = UDim.new(0, 6)
+    corner.Parent = frame
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, -10, 0, 22)
+    title.Position = UDim2.new(0, 5, 0, 2)
+    title.BackgroundTransparency = 1
+    title.Text = "NAMELESS CHAT SPY"
+    title.TextColor3 = Color3.fromRGB(220, 60, 60)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 13
+    title.TextXAlignment = Enum.TextXAlignment.Left
+    title.Parent = frame
+    local scroll = Instance.new("ScrollingFrame")
+    scroll.Size = UDim2.new(1, -10, 1, -28)
+    scroll.Position = UDim2.new(0, 5, 0, 24)
+    scroll.BackgroundTransparency = 1
+    scroll.ScrollBarThickness = 4
+    scroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+    scroll.Parent = frame
+    local list = Instance.new("UIListLayout")
+    list.Padding = UDim.new(0, 2)
+    list.Parent = scroll
+    getgenv()._NamelessChatSpyScroll = scroll
+    getgenv()._NamelessChatSpyList = list
+end
 
+function F.ChatSpyAdd(line, isNameless)
+    if not getgenv()._NamelessChatSpyGui then return end
+    local scroll = getgenv()._NamelessChatSpyScroll
+    if not scroll then return end
+    local lbl = Instance.new("TextLabel")
+    lbl.Size = UDim2.new(1, -4, 0, 16)
+    lbl.BackgroundTransparency = 1
+    lbl.TextXAlignment = Enum.TextXAlignment.Left
+    lbl.Text = line
+    lbl.TextColor3 = isNameless and Color3.fromRGB(220, 80, 80) or Color3.fromRGB(210, 210, 210)
+    lbl.Font = Enum.Font.Code
+    lbl.TextSize = 12
+    lbl.TextWrapped = true
+    lbl.Parent = scroll
+    scroll.CanvasSize = UDim2.new(0, 0, 0, getgenv()._NamelessChatSpyList.AbsoluteContentSize.Y + 4)
+    scroll.CanvasPosition = Vector2.new(0, scroll.CanvasSize.Y.Offset)
+    -- limit messages
+    local kids = scroll:GetChildren()
+    local labels = {}
+    for _, c in ipairs(kids) do
+        if c:IsA("TextLabel") then labels[#labels+1] = c end
+    end
+    while #labels > 80 do
+        labels[1]:Destroy()
+        table.remove(labels, 1)
+    end
+end
 
-task.spawn(function()
-    if not (F.IsControllerClient and F.IsControllerClient()) then return end
-    local StarterGui = game:GetService("StarterGui")
-    local function getHeadshot(userId)
-        local ok, content = pcall(function()
-            return Players:GetUserThumbnailAsync(userId, Enum.ThumbnailType.HeadShot, Enum.ThumbnailSize.Size420x420)
-        end)
-        return ok and content or nil
-    end
-    local function sendNoti(player)
-        pcall(function()
-            StarterGui:SetCore("SendNotification", {
-                Title = player.DisplayName,
-                Text = string.format("%s is in this server", player.Name),
-                Icon = getHeadshot(player.UserId) or "rbxassetid://128056089",
-                Duration = 30,
-            })
-        end)
-    end
-    local staffFound = false
-    for _, plr in ipairs(Players:GetPlayers()) do
-        local ok, inGroup = pcall(function() return plr:IsInGroup(339846382) end)
-        if ok and inGroup then
-            staffFound = true
-            sendNoti(plr)
+function F.SetChatSpy(on)
+    if on then
+        F.CreateChatSpy()
+        getgenv().NamelessChatSpyEnabled = true
+    else
+        getgenv().NamelessChatSpyEnabled = false
+        if getgenv()._NamelessChatSpyGui then
+            pcall(function() getgenv()._NamelessChatSpyGui:Destroy() end)
+            getgenv()._NamelessChatSpyGui = nil
         end
+    end
+end
+
+-- hook chat into spy
+pcall(function()
+    local function onChat(plr, msg)
+        if not getgenv().NamelessChatSpyEnabled then return end
+        local isN = getgenv().NAMELESS_USERS and getgenv().NAMELESS_USERS[plr.Name]
+        local tag = isN and "[NAMELESS] " or ""
+        F.ChatSpyAdd(string.format("%s%s: %s", tag, plr.Name, tostring(msg)), isN)
+    end
+    for _, plr in ipairs(Players:GetPlayers()) do
+        plr.Chatted:Connect(function(m) onChat(plr, m) end)
     end
     Players.PlayerAdded:Connect(function(plr)
-        task.wait(1)
-        local ok, inGroup = pcall(function() return plr:IsInGroup(339846382) end)
-        if ok and inGroup then
-            sendNoti(plr)
-            pcall(function()
-                StarterGui:SetCore("SendNotification", {
-                    Title = "Leave the game",
-                    Text = "STAFF DETECTED IN SERVER",
-                    Duration = 60,
-                })
-            end)
-        end
+        plr.Chatted:Connect(function(m) onChat(plr, m) end)
     end)
-    if staffFound then
-        pcall(function()
-            StarterGui:SetCore("SendNotification", {
-                Title = "Leave the game",
-                Text = "STAFF DETECTED IN SERVER",
-                Duration = 60,
-            })
-        end)
-    end
 end)
 
 function F.CreateNamelessGui()
-    -- Embedded Sample UI (single-script, controller only)
-    if not getgenv()._NAMELESS_SAMPLE_UI then
-        getgenv()._NAMELESS_SAMPLE_UI = [=[local uis = game:GetService("UserInputService")
+    if not (F.IsControllerClient and F.IsControllerClient()) then return end
+    F.DestroyBotGui()
+
+    local Players = game:GetService("Players")
+    local UIS = game:GetService("UserInputService")
+    local RunService = game:GetService("RunService")
+    local LocalPlayer = Players.LocalPlayer
+
+    getgenv().NamelessDesync = getgenv().NamelessDesync or {
+        VoidSpam = false,
+        VoidSpamKey = Enum.KeyCode.V,
+        FakePos = false,
+        FakePosKey = Enum.KeyCode.F,
+        NetDesync = false,
+        NetDesyncKey = Enum.KeyCode.N,
+        VoidIn = 0.15,
+        VoidOut = 0.10,
+        VoidDist = 200,
+    }
+    local DS = getgenv().NamelessDesync
+    getgenv().NamelessVisual = getgenv().NamelessVisual or {}
+    local VS = getgenv().NamelessVisual
+    VS.Fullbright = VS.Fullbright or false
+    VS.NoFog = VS.NoFog or false
+    VS.NoShadows = VS.NoShadows or false
+    VS.MuteAll = VS.MuteAll or false
+    VS.NoParticles = VS.NoParticles or false
+    VS.GreyCharacters = VS.GreyCharacters or false
+    VS.SkyboxEnabled = VS.SkyboxEnabled or false
+    VS.SkyboxType = VS.SkyboxType or "realistic"
+    VS.WeatherEnabled = VS.WeatherEnabled or false
+    VS.WeatherRate = VS.WeatherRate or 100
+
+    -- Load Sample UI library (user provided)
+    local src = [=[local uis = game:GetService("UserInputService")
 local players = game:GetService("Players")
 local ws = game:GetService("Workspace")
 local http_service = game:GetService("HttpService")
@@ -4156,12 +4721,12 @@ local themes = {
 	preset = {
 		["outline"] = rgb(32, 32, 38), --
 		["inline"] = rgb(60, 55, 75), --
-		["accent"] = rgb(220, 35, 35), --
+		["accent"] = rgb(255, 128, 0), --
 		["contrast"] = rgb(35, 35, 47),
 		["text"] = rgb(170, 170, 170),
 		["unselected_text"] = rgb(90, 90, 90),
 		["text_outline"] = rgb(0, 0, 0),
-		["glow"] = rgb(220, 35, 35),
+		["glow"] = rgb(255, 128, 0),
 	},
 	utility = {
 		["outline"] = {
@@ -4194,7 +4759,7 @@ local themes = {
 }
 local keys = {
 	[Enum.KeyCode.LeftShift] = "LS",
-	[Enum.KeyCode.RightShift] = "RS",
+	[Enum.KeyCode.LeftShift] = "RS",
 	[Enum.KeyCode.LeftControl] = "LC",
 	[Enum.KeyCode.RightControl] = "RC",
 	[Enum.KeyCode.Insert] = "INS",
@@ -4247,31 +4812,30 @@ local keys = {
 	[Enum.KeyCode.Space] = "SPC",
 }
 library.__index = library
-pcall(function()
-	for _, path in next, library.folders do
-		if makefolder then makefolder(library.directory .. path) end
-	end
-end)
-pcall(function()
-	if isfile and writefile and getcustomasset and not isfile(library.directory .. "/fonts/main.ttf") then
-		writefile(library.directory .. "/fonts/main.ttf", game:HttpGet("https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/fs-tahoma-8px.ttf"))
-	end
-end)
-pcall(function()
-	if isfile and writefile and getcustomasset then
-		local tahoma = {
-			name = "SmallestPixel7",
-			faces = {{ name = "Regular", weight = 400, style = "normal", assetId = getcustomasset(library.directory .. "/fonts/main.ttf") }},
-		}
-		if not isfile(library.directory .. "/fonts/main_encoded.ttf") then
-			writefile(library.directory .. "/fonts/main_encoded.ttf", http_service:JSONEncode(tahoma))
-		end
-		library.font = Font.new(getcustomasset(library.directory .. "/fonts/main_encoded.ttf"), Enum.FontWeight.Regular)
-	end
-end)
-if not library.font then
-	library.font = Font.fromEnum(Enum.Font.Code)
+for _, path in next, library.folders do
+	makefolder(library.directory .. path)
 end
+if not isfile(library.directory .. "/fonts/main.ttf") then
+	writefile(
+		library.directory .. "/fonts/main.ttf",
+		game:HttpGet("https://github.com/i77lhm/storage/raw/refs/heads/main/fonts/fs-tahoma-8px.ttf")
+	)
+end
+local tahoma = {
+	name = "SmallestPixel7",
+	faces = {
+		{
+			name = "Regular",
+			weight = 400,
+			style = "normal",
+			assetId = getcustomasset(library.directory .. "/fonts/main.ttf"),
+		},
+	},
+}
+if not isfile(library.directory .. "/fonts/main_encoded.ttf") then
+	writefile(library.directory .. "/fonts/main_encoded.ttf", http_service:JSONEncode(tahoma))
+end
+library.font = Font.new(getcustomasset(library.directory .. "/fonts/main_encoded.ttf"), Enum.FontWeight.Regular)
 -- functions
 -- misc functions
 function library.to_screen_point(position)
@@ -5555,7 +6119,7 @@ function library:window(properties)
 		FontFace = library.font,
 		TextColor3 = Color3.fromRGB(170, 170, 170),
 		BorderColor3 = Color3.fromRGB(0, 0, 0),
-		Text = "ragebot list",
+		Text = "",
 		TextStrokeTransparency = 0.5,
 		BorderSizePixel = 0,
 		BackgroundTransparency = 1,
@@ -9465,315 +10029,224 @@ function library:panel(properties)
 	end
 end
 return library]=]
+    local fn, err = loadstring(src)
+    if type(fn) ~= "function" then
+        warn("[NAMELESS] library loadstring failed: " .. tostring(err))
+        return
     end
-    if not getgenv()._NAMELESS_GUI_BUILDER then
-        getgenv()._NAMELESS_GUI_BUILDER = [=[-- Nameless.HVH Sample-UI builder (embedded)
-return function(F, ctx)
-    local Players = game:GetService("Players")
-    local LocalPlayer = Players.LocalPlayer
-    local RunService = game:GetService("RunService")
-    local UserInputService = game:GetService("UserInputService")
+    local ok, library = pcall(fn)
+    if not ok or type(library) ~= "table" then
+        warn("[NAMELESS] library error: " .. tostring(library))
+        return
+    end
+    getgenv().library = library
 
-    GuiState = GuiState or {
-        Aimbot = false, AimbotMode = "Hold", AimbotKey = Enum.KeyCode.E,
-        CFrameSpeed = false, SpeedValue = 50, SpeedKey = Enum.KeyCode.LeftShift, SpeedKeyMode = "Hold",
-        CFrameFly = false, FlySpeed = 50, FlyKey = Enum.KeyCode.F, FlyKeyMode = "Toggle",
-    }
-    GuiConns = GuiConns or {}
-    PlayerRelation = PlayerRelation or {}
-    SyncBotsEnabled = SyncBotsEnabled or false
-    local rageTarget = ""
-    local selectedPlayer = ""
-    local playerItems = { "(none)" }
-    local playerDropdown = nil
+    -- Red accent if themes exist
+    pcall(function()
+        if library.set_theme then
+            library:set_theme("accent", Color3.fromRGB(220, 35, 35))
+        elseif themes and themes.preset then
+            themes.preset.accent = Color3.fromRGB(220, 35, 35)
+        end
+    end)
 
-    local function clearConn(name)
-        if GuiConns[name] then pcall(function() GuiConns[name]:Disconnect() end) GuiConns[name] = nil end
-    end
-    
-    local function doWhitelist(name)
-        name = tostring(name or ""):match("^%s*(.-)%s*$") or ""
-        if name == "" or name == "(none)" then return end
-        if F.isProtectedWhitelistName and F.isProtectedWhitelistName(name) then return end
-        if F.addWhitelistName then F.addWhitelistName(name)
-        else
-            Whitelist = Whitelist or {}
-            Whitelist[name:lower()] = true
-        end
-        if F.ChatCommand then F.ChatCommand("wl " .. name) end
-    end
-    local function doUnwhitelist(name)
-        name = tostring(name or ""):match("^%s*(.-)%s*$") or ""
-        if name == "" or name == "(none)" then return end
-        if F.isProtectedWhitelistName and F.isProtectedWhitelistName(name) then return end
-        if F.removeWhitelistName then F.removeWhitelistName(name)
-        else
-            Whitelist = Whitelist or {}
-            Whitelist[name:lower()] = nil
-        end
-        if F.ChatCommand then F.ChatCommand("unwl " .. name) end
-    end
-
-    local function runCmd(line)
-        if F.ChatCommand then F.ChatCommand(line) end
-        if SyncBotsEnabled and F.RunSilent then F.RunSilent(line) end
-    end
-    local function listenKey(label, apply)
-local c
-        c = UserInputService.InputBegan:Connect(function(input, gp)
-            if gp then return end
-            if input.UserInputType == Enum.UserInputType.Keyboard then
-                apply(input.KeyCode)
-c:Disconnect()
-            end
-        end)
-    end
-    local function refreshPlayerNames()
-        playerItems = {}
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if plr ~= LocalPlayer then
-                playerItems[#playerItems + 1] = plr.Name
-            end
-        end
-        table.sort(playerItems)
-        if #playerItems == 0 then playerItems = { "(none)" } end
-        if playerDropdown and playerDropdown.refresh_options then
-            pcall(function() playerDropdown:refresh_options(playerItems) end)
-        elseif playerDropdown and playerDropdown.set then
-            pcall(function() playerDropdown:set(playerItems[1]) end)
-        end
-        return playerItems
-    end
-
-    local function startAimbotLoop()
-        clearConn("aimbot")
-        GuiConns.aimbot = RunService.RenderStepped:Connect(function()
-            if not GuiState.Aimbot then return end
-            if GuiState.AimbotMode == "Hold" then
-                local k = GuiState.AimbotKey
-                if typeof(k) == "EnumItem" and k.EnumType == Enum.KeyCode and not UserInputService:IsKeyDown(k) then return end
-            end
-            local cam = workspace.CurrentCamera
-            if not cam then return end
-            local best, bd = nil, 9e9
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= LocalPlayer and F.isFullyAlive and F.isFullyAlive(plr) then
-                    if not (F.GetRelation and F.GetRelation(plr) == "friendly") then
-                        local h = plr.Character and plr.Character:FindFirstChild("Head")
-                        if h then
-                            local sp, on = cam:WorldToViewportPoint(h.Position)
-                            if on and sp.Z > 0 then
-                                local d = (Vector2.new(sp.X, sp.Y) - cam.ViewportSize / 2).Magnitude
-                                if d < bd then best, bd = h, d end
+    local Window = library:window({
+        name = "Nameless.HVH",
+        size = UDim2.fromOffset(560, 520),
+    })
+    -- Hide library default left playerlist
+    pcall(function()
+        if Window.toggle_playerlist then Window.toggle_playerlist(false) end
+        if Window.toggle_list then Window.toggle_list(false) end
+        task.defer(function()
+            pcall(function() if Window.toggle_playerlist then Window.toggle_playerlist(false) end end)
+            local function hideLists(parent)
+                if not parent then return end
+                for _, g in ipairs(parent:GetDescendants()) do
+                    if g:IsA("TextLabel") then
+                        local tx = string.lower(tostring(g.Text or ""))
+                        if tx:find("friendly") or tx:find("enemy") or tx == "neutral" then
+                            local root = g
+                            for _ = 1, 8 do
+                                if root.Parent and root.Parent ~= parent then
+                                    root = root.Parent
+                                else
+                                    break
+                                end
+                            end
+                            if root and root:IsA("GuiObject") then
+                                root.Visible = false
                             end
                         end
                     end
                 end
             end
-            if best then cam.CFrame = CFrame.new(cam.CFrame.Position, best.Position) end
+            hideLists(game:GetService("CoreGui"))
+            hideLists(LocalPlayer:FindFirstChild("PlayerGui"))
         end)
+    end)
+
+
+    local function runCmd(line)
+        if F.ChatCommand then F.ChatCommand(line) end
+        if SyncBotsEnabled and F.RunSilent then F.RunSilent(line) end
     end
-    local function startSpeedLoop()
-        clearConn("speed")
-        GuiConns.speed = RunService.Heartbeat:Connect(function()
-            if not GuiState.CFrameSpeed then return end
-            local k = GuiState.SpeedKey
-            if typeof(k) == "EnumItem" and k.EnumType == Enum.KeyCode and not UserInputService:IsKeyDown(k) then return end
-            local char = LocalPlayer.Character
-            local hum = char and char:FindFirstChildOfClass("Humanoid")
-            local root = char and char:FindFirstChild("HumanoidRootPart")
-            if hum and root and hum.MoveDirection.Magnitude > 0 then
-                root.CFrame = root.CFrame + hum.MoveDirection.Unit * ((GuiState.SpeedValue or 50) / 50)
+
+    local selectedPlayer = ""
+    local rageTarget = ""
+    local playerItems = {"(none)"}
+    local function refreshPlayers()
+        playerItems = {"(none)"}
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer then
+                playerItems[#playerItems + 1] = plr.Name
             end
-        end)
-    end
-    local function startFlyLoop()
-        clearConn("fly")
-        GuiConns.fly = RunService.Heartbeat:Connect(function()
-            if not GuiState.CFrameFly then return end
-            local cam = workspace.CurrentCamera
-            local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if not cam or not root then return end
-            local move = Vector3.zero
-            if UserInputService:IsKeyDown(Enum.KeyCode.W) then move = move + cam.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.S) then move = move - cam.CFrame.LookVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.A) then move = move - cam.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.D) then move = move + cam.CFrame.RightVector end
-            if UserInputService:IsKeyDown(Enum.KeyCode.Space) then move = move + Vector3.new(0, 1, 0) end
-            if UserInputService:IsKeyDown(Enum.KeyCode.LeftControl) then move = move - Vector3.new(0, 1, 0) end
-            if move.Magnitude > 0 then root.CFrame = root.CFrame + move.Unit * ((GuiState.FlySpeed or 50) / 40) end
-        end)
-    end
-
-    local ok, library = pcall(function()
-        if getgenv().library and getgenv().library.unload then pcall(function() getgenv().library:unload() end) end
-        local src = getgenv()._NAMELESS_SAMPLE_UI
-        if not src or #src < 1000 then error("embedded sample UI missing") end
-        local fn = loadstring(src)
-        return fn and fn()
-    end)
-    if not ok or not library then
-return false
-    end
-    pcall(function()
-        if library.update_theme then
-            library:update_theme("accent", Color3.fromRGB(220, 35, 35))
-            library:update_theme("glow", Color3.fromRGB(220, 35, 35))
         end
-    end)
+    end
+    refreshPlayers()
 
-    local window = library:window({ name = "Nameless.HVH", size = UDim2.new(0, 640, 0, 680) })
-    local tabMain = window:tab({ name = "Main" })
-    local tabRage = window:tab({ name = "Ragebot" })
-    local tabCmd = window:tab({ name = "Commands" })
+    -- ========== MAIN ==========
+    local tabMain = Window:tab({ name = "Main" })
 
-    -- MAIN forcehit + stomp target
-    local secFH = tabMain:section({ name = "forcehit" })
-    secFH:toggle({
-        name = "forcehit fov mode",
-        flag = "fh_fov",
-        default = false,
-        callback = function(v)
-            ForceHitFOVEnabled = v
-            if FOVCircle then F.UpdateFOVCircle(v and ForceHitFOVCircleVisible) end
-        end,
-    })
-    secFH:toggle({
-        name = "forcehit fov circle",
-        flag = "fh_circ",
-        default = true,
-        callback = function(v)
-            ForceHitFOVCircleVisible = v
-            if FOVCircle then F.UpdateFOVCircle(ForceHitFOVEnabled and v) end
-        end,
-    })
+    -- ForceHit settings
+    local secFH = tabMain:section({ name = "forcehit", side = "left" })
+    secFH:toggle({ name = "forcehit fov", flag = "fh_fov", default = ForceHitFOVEnabled, callback = function(v) ForceHitFOVEnabled = v end })
+    secFH:toggle({ name = "stomp-target", flag = "fh_stomp", default = StompSelectedTarget, callback = function(v)
+        StompSelectedTarget = v
+        ForceHitStompTarget = ForceHitKeybindTarget or ForceHitCmdTarget
+    end })
     pcall(function()
-        secFH:slider({ name = "forcehit fov", flag = "fh_fovv", min = 5, max = 90, default = ForceHitFOV or 20, callback = function(v) ForceHitFOV = v end})
+        secFH:slider({ name = "fov size", flag = "fh_fovsz", min = 5, max = 300, default = ForceHitFOV or 20, callback = function(v)
+            ForceHitFOV = v
+        end })
+        secFH:slider({ name = "fire rate", flag = "fh_rate", min = 0.02, max = 0.25, default = ForceHitFireRate or 0.05, callback = function(v)
+            ForceHitFireRate = v
+        end })
+        secFH:keybind({ name = "forcehit key", flag = "fh_key", default = ForceHitKeyCode or Enum.KeyCode.Q, callback = function(k)
+            if typeof(k) == "EnumItem" then ForceHitKeyCode = k end
+        end })
     end)
-    secFH:toggle({ name = "forcehit tracer", flag = "fh_tr", default = false, callback = function(v) ForceHitTracerEnabled = v end})
-    secFH:toggle({
-        name = "stomp-target (selected only)",
-        flag = "fh_stomp",
-        default = false,
-        callback = function(v)
-            StompSelectedTarget = v
-            ForceHitStompTarget = ForceHitKeybindTarget or ForceHitCmdTarget
-        end,
-    })
-    secFH:button({ name = "set forcehit keybind", callback = function()
-        ForceHitKeyListening = true
-end})
     secFH:button({ name = "clear forcehit target", callback = function()
         ForceHitKeybindTarget = nil
         ForceHitCmdTarget = nil
-    end})
+    end })
 
-    secFH:button({
-        name = "forcehit once (target box)",
-        callback = function()
-            local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
-            if x and x ~= "" and x ~= "(none)" then
-                if F.ChatCommand then F.ChatCommand("forcehit " .. x) end
-            end
-        end,
-    })
-    secFH:button({
-        name = "forcehit2 loop (target box)",
-        callback = function()
-            local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
-            if x and x ~= "" and x ~= "(none)" then
-                if F.ChatCommand then F.ChatCommand("forcehit2 " .. x) end
-            end
-        end,
-    })
-
-    
-    local secDesync = tabMain:section({ name = "desync" })
-    secDesync:toggle({
-        name = "fflag desync",
-        flag = "desync_ff",
-        default = false,
-        callback = function(v) if F.SetDesync then F.SetDesync(v) end end,
-    })
-    secDesync:toggle({
-        name = "fakepos",
-        flag = "desync_fp",
-        default = false,
-        callback = function(v) if F.SetFakePos then F.SetFakePos(v) end end,
-    })
-    local secVoid = tabMain:section({ name = "voidspam tween" })
+    -- Kill aura settings
+    local secKA = tabMain:section({ name = "kill aura", side = "left" })
+    secKA:toggle({ name = "killaura", flag = "ka", default = KillAuraEnabled, callback = function(v)
+        if v and F.StartKillAura then F.StartKillAura() elseif F.StopKillAura then F.StopKillAura() end
+    end })
     pcall(function()
-        secVoid:slider({ name = "void in", flag = "v_in", min = 1, max = 50, default = 15, callback = function(v) VoidTweenIn = v/100 end })
-        secVoid:slider({ name = "void out", flag = "v_out", min = 1, max = 50, default = 10, callback = function(v) VoidTweenOut = v/100 end })
-        secVoid:slider({ name = "void dist", flag = "v_dist", min = 50, max = 500, default = 200, callback = function(v) VoidTweenDist = v end })
+        secKA:slider({ name = "ka range", flag = "ka_rng", min = 10, max = 200, default = KillAuraRange or 80, callback = function(v)
+            KillAuraRange = v
+            if getgenv().KillAura then getgenv().KillAura.Range = v end
+        end })
+        secKA:slider({ name = "ka delay", flag = "ka_dly", min = 0.02, max = 0.3, default = KillAuraDelay or 0.06, callback = function(v)
+            KillAuraDelay = v
+            if getgenv().KillAura then getgenv().KillAura.Delay = v end
+        end })
     end)
 
-    local secAim = tabMain:section({ name = "aimbot" })
-    secAim:toggle({ name = "aimbot", flag = "aim", default = false, callback = function(v)
-        GuiState.Aimbot = v
-        if v then startAimbotLoop() else clearConn("aimbot") end
-    end})
-    secAim:toggle({ name = "aimbot hold mode", flag = "aim_hold", default = true, callback = function(v)
-        GuiState.AimbotMode = v and "Hold" or "Toggle"
-    end})
-    secAim:button({ name = "set aimbot keybind", callback = function()
-        listenKey("aimbot", function(k) GuiState.AimbotKey = k end)
-    end})
-
-    local secSp = tabMain:section({ name = "cframe speed / fly" })
-    secSp:toggle({ name = "cframe speed", flag = "spd", default = false, callback = function(v)
+    -- CFrame speed / fly
+    GuiState = GuiState or {
+        CFrameSpeed = false, SpeedValue = 50, SpeedKey = Enum.KeyCode.LeftControl,
+        CFrameFly = false, FlySpeed = 50, FlyKey = Enum.KeyCode.LeftAlt,
+    }
+    local secCF = tabMain:section({ name = "cframe movement", side = "right" })
+    secCF:toggle({ name = "cframe speed", flag = "cf_spd", default = false, callback = function(v)
         GuiState.CFrameSpeed = v
-        if v then startSpeedLoop() else clearConn("speed") end
-    end})
+        if F.SetCFrameSpeed then F.SetCFrameSpeed(v) end
+    end })
     pcall(function()
-        secSp:slider({ name = "speed value", flag = "spdv", min = 10, max = 200, default = 50, callback = function(v) GuiState.SpeedValue = v end})
-        secSp:slider({ name = "fly speed", flag = "flyv", min = 10, max = 200, default = 50, callback = function(v) GuiState.FlySpeed = v end})
+        secCF:slider({ name = "speed value", flag = "cf_spdv", min = 10, max = 500, default = GuiState.SpeedValue or 50, callback = function(v)
+            GuiState.SpeedValue = v
+        end })
+        secCF:keybind({ name = "speed key", flag = "cf_spdk", default = GuiState.SpeedKey or Enum.KeyCode.LeftControl, callback = function(k)
+            if typeof(k) == "EnumItem" then GuiState.SpeedKey = k end
+        end })
     end)
-    secSp:toggle({ name = "cframe fly", flag = "fly", default = false, callback = function(v)
+    secCF:toggle({ name = "cframe fly", flag = "cf_fly", default = false, callback = function(v)
         GuiState.CFrameFly = v
-        if v then startFlyLoop() else clearConn("fly") end
-    end})
-    secSp:button({ name = "set speed keybind", callback = function() listenKey("speed", function(k) GuiState.SpeedKey = k end) end})
-    secSp:button({ name = "set fly keybind", callback = function() listenKey("fly", function(k) GuiState.FlyKey = k end) end})
+        if F.SetCFrameFly then F.SetCFrameFly(v) end
+    end })
     pcall(function()
-        secSp:dropdown({
-            name = "stand fly mode",
-            flag = "sfly",
-            items = { "Hover", "Glide", "Fly", "Heaven", "gogo" },
-            default = FlyMode or "Hover",
-            callback = function(v) FlyMode = v end,
-        })
+        secCF:slider({ name = "fly speed", flag = "cf_flyv", min = 10, max = 500, default = GuiState.FlySpeed or 50, callback = function(v)
+            GuiState.FlySpeed = v
+        end })
+        secCF:keybind({ name = "fly key", flag = "cf_flyk", default = GuiState.FlyKey or Enum.KeyCode.LeftAlt, callback = function(k)
+            if typeof(k) == "EnumItem" then GuiState.FlyKey = k end
+        end })
     end)
 
-    -- RAGEBOT top: autokill by name
-    local secAK = tabRage:section({ name = "controller kill (you)" })
+    -- Toggles (no opt mode on controller)
+    local secTog = tabMain:section({ name = "toggles", side = "right" })
+    secTog:toggle({ name = "rapid fire", flag = "rapid", default = RapidFireEnabled, callback = function(v) RapidFireEnabled = v end })
+    secTog:toggle({ name = "spinbot", flag = "spin", default = SpinbotEnabled, callback = function(v) SpinbotEnabled = v end })
+    secTog:toggle({ name = "sync bots", flag = "sync", default = SyncBotsEnabled, callback = function(v) SyncBotsEnabled = v end })
+    secTog:toggle({ name = "chat spy", flag = "cspy", default = false, callback = function(v)
+        if F.SetChatSpy then F.SetChatSpy(v) end
+    end })
+
+    local secAim = tabMain:section({ name = "aimbot", side = "left" })
+    secAim:toggle({ name = "aimbot", flag = "aim_on", default = false, callback = function(v)
+        if F.SetAimbot then F.SetAimbot(v) end
+    end })
     pcall(function()
-        if secAK.textbox then
-            secAK:textbox({
-                name = "target username",
-                flag = "ak_name",
-                placeholder = "username",
-                callback = function(txt) rageTarget = tostring(txt or "") end,
-            })
-        end
+        secAim:slider({ name = "smoothness", flag = "aim_sm", min = 0.05, max = 1, default = AimbotSmooth or 0.25, callback = function(v) AimbotSmooth = v end })
+        secAim:keybind({ name = "aimbot key", flag = "aim_key", default = AimbotKey or Enum.KeyCode.E, callback = function(k)
+            if typeof(k) == "EnumItem" then AimbotKey = k end
+        end })
     end)
+    secAim:toggle({ name = "sticky", flag = "aim_st", default = true, callback = function(v) AimbotSticky = v end })
+    secAim:toggle({ name = "wall check", flag = "aim_wall", default = true, callback = function(v) AimbotWallCheck = v end })
+    secAim:toggle({ name = "knock check", flag = "aim_ko", default = true, callback = function(v) AimbotKnockCheck = v end })
+
+    local secTrig = tabMain:section({ name = "triggerbot", side = "right" })
+    secTrig:toggle({ name = "triggerbot", flag = "trig_on", default = false, callback = function(v)
+        if F.SetTriggerbot then F.SetTriggerbot(v) end
+    end })
+    pcall(function()
+        secTrig:keybind({ name = "trigger key", flag = "trig_key", default = TriggerbotKey or Enum.KeyCode.T, callback = function(k)
+            if typeof(k) == "EnumItem" then TriggerbotKey = k end
+        end })
+        secTrig:slider({ name = "trig range", flag = "trig_rng", min = 5, max = 100, default = TriggerbotRange or 40, callback = function(v) TriggerbotRange = v end })
+    end)
+
+    -- ========== RAGEBOT ==========
+    local tabRage = Window:tab({ name = "Ragebot" })
+    local secAK = tabRage:section({ name = "controller kill (silent)", side = "left" })
+    pcall(function()
+        secAK:textbox({ name = "target username", flag = "rage_user", placeholder = "username", callback = function(txt)
+            rageTarget = tostring(txt or "")
+        end })
+    end)
+    local function resolveRageTarget()
+        local x = (rageTarget and rageTarget ~= "" and rageTarget) or selectedPlayer
+        if not x or x == "" or x == "(none)" then return nil end
+        return x
+    end
     secAK:button({ name = "autokill (controller)", callback = function()
-        local x = (rageTarget or ""):match("^%s*(.-)%s*$") or ""
-        if x == "" then x = selectedPlayer end
-        if not x or x == "" or x == "(none)" then warn("[NAMELESS] type a username") return end
-        if F.ControllerKill then F.ControllerKill(x, true) end
-    end})
+        local x = resolveRageTarget()
+        if not x then warn("[NAMELESS] set a target username first") return end
+        if F.ControllerKill then
+            F.ControllerKill(x, true)
+        else
+            warn("[NAMELESS] ControllerKill missing")
+        end
+    end })
     secAK:button({ name = "kill (controller)", callback = function()
-        local x = (rageTarget or ""):match("^%s*(.-)%s*$") or ""
-        if x == "" then x = selectedPlayer end
-        if not x or x == "" or x == "(none)" then warn("[NAMELESS] type a username") return end
+        local x = resolveRageTarget()
+        if not x then warn("[NAMELESS] set a target username first") return end
         if F.ControllerKill then F.ControllerKill(x, false) end
-    end})
+    end })
     secAK:button({ name = "stop (controller)", callback = function()
         CurrentAction = "idle"
         TargetPlayer = nil
+        ForceHitCmdTarget = nil
+        ForceHitKeybindTarget = nil
+        getgenv()._CTRL_KILL_GEN = (getgenv()._CTRL_KILL_GEN or 0) + 1
         if F.StopAll then pcall(F.StopAll) end
-    end})
+    end })
     secAK:button({ name = "force reset", callback = function()
         pcall(function()
             if replicatesignal then replicatesignal(LocalPlayer.Kill)
@@ -9782,409 +10255,391 @@ end})
                 if h then h.Health = 0 end
             end
         end)
-    end})
+    end })
 
-    local secRage = tabRage:section({ name = "ragebot" })
-    secRage:toggle({ name = "cframe follow", flag = "r_cff", default = false, callback = function(v) CFrameFollowEnabled = v end})
-    secRage:toggle({ name = "cframe kill", flag = "r_cfk", default = false, callback = function(v) CFrameKillEnabled = v end})
-    secRage:toggle({ name = "orbit enabled", flag = "r_orb", default = true, callback = function(v) OrbitEnabled = v end})
+    -- Player relation list (moved from left library panel)
+    local secPL = tabRage:section({ name = "player list", side = "right" })
+    PlayerRelation = PlayerRelation or {}
+    local function setRel(name, rel)
+        if not name or name == "" then return end
+        PlayerRelation[name:lower()] = rel
+        if rel == "friendly" and F.addWhitelistName then pcall(F.addWhitelistName, name) end
+    end
+    local plPick = ""
     pcall(function()
-        secRage:slider({ name = "orbit height", flag = "oh", min = 0, max = 20, default = OrbitHeight or 3, callback = function(v) OrbitHeight = v end})
-        secRage:slider({ name = "orbit speed", flag = "os", min = 5, max = 80, default = OrbitSpeed or 30, callback = function(v) OrbitSpeed = v end})
-        secRage:slider({ name = "orbit distance", flag = "od", min = 3, max = 30, default = GunOrbitDist or 10, callback = function(v) GunOrbitDist = v end})
-        secRage:slider({ name = "spinbot speed", flag = "sbs", min = 1, max = 200, default = SpinbotSpeed or 25, callback = function(v) SpinbotSpeed = v end})
-        secRage:slider({ name = "killaura distance", flag = "kad", min = 10, max = 200, default = KillAuraRange or 80, callback = function(v) KillAuraRange = v end})
-        secRage:dropdown({
-            name = "kill method",
-            flag = "km",
-            items = { "orbit", "spamvoid", "tween" },
-            default = KillMethod or "orbit",
-            callback = function(v) if F.SetKillMethod then F.SetKillMethod(v) else KillMethod = v end end,
-        })
-        secRage:dropdown({
-            name = "kill position",
-            flag = "kp",
-            items = { "Top", "Bottom", "Back", "Front", "Left", "Right" },
-            default = KillPosition or "Top",
-            callback = function(v) KillPosition = v end,
-        })
-        secRage:dropdown({
-            name = "weapon",
-            flag = "rw",
-            items = { "gun", "knife" },
-            default = UseGun and "gun" or "knife",
-            callback = function(v) UseGun = (v == "gun") end,
-        })
-    end)
-
-    -- Players with type + dropdown + refresh that works
-    local secPl = tabRage:section({ name = "player select (controller)" })
-    pcall(function()
-        if secPl.textbox then
-            secPl:textbox({
-                name = "type username",
-                flag = "pl_type",
-                placeholder = "username",
-                callback = function(txt)
-                    selectedPlayer = tostring(txt or "")
-                    rageTarget = selectedPlayer
-                end,
-            })
-        end
-    end)
-    refreshPlayerNames()
-    pcall(function()
-        playerDropdown = secPl:dropdown({
-            name = "player select",
-            flag = "rel_plr",
+        refreshPlayers()
+        secPL:dropdown({
+            name = "select player",
+            flag = "pl_sel",
             items = playerItems,
-            default = playerItems[1],
+            default = "(none)",
             callback = function(v)
-                selectedPlayer = v
-                rageTarget = v
-            end,
-        })
-        secPl:dropdown({
-            name = "relation",
-            flag = "rel_val",
-            items = { "friendly", "neutral", "enemy" },
-            default = "neutral",
-            callback = function(v)
-                local n = selectedPlayer
-                if n and n ~= "" and n ~= "(none)" then
-                    PlayerRelation[n:lower()] = v
-                    local p = Players:FindFirstChild(n)
-                    if p and F.SetRelation then F.SetRelation(p, v) end
-                end
+                plPick = tostring(v or "")
+                selectedPlayer = plPick
+                if plPick ~= "(none)" then rageTarget = plPick end
             end,
         })
     end)
-    secPl:button({ name = "refresh player list", callback = function()
-        local names = refreshPlayerNames()
-        if playerDropdown then
-            pcall(function()
-                if playerDropdown.refresh_options then
-                    playerDropdown:refresh_options(names)
-                elseif playerDropdown.set then
-                    playerDropdown:set(names[1])
-                end
-            end)
-        end
-    end})
+    secPL:button({ name = "set friendly", callback = function() setRel(plPick, "friendly") end })
+    secPL:button({ name = "set neutral", callback = function() setRel(plPick, "neutral") end })
+    secPL:button({ name = "set enemy", callback = function() setRel(plPick, "enemy") end })
+    secPL:button({ name = "refresh players", callback = function()
+        refreshPlayers()
+        warn("[NAMELESS] players refreshed - reopen dropdown")
+    end })
 
-    
-    local secWL = tabRage:section({ name = "whitelist" })
+    local secWL = tabRage:section({ name = "whitelist", side = "right" })
+    local wlName = ""
     pcall(function()
-        if secWL.textbox then
-            secWL:textbox({
-                name = "username",
-                flag = "rage_wl_name",
-                placeholder = "username",
-                callback = function(txt) rageTarget = tostring(txt or "") end,
-            })
-        end
+        secWL:textbox({ name = "username", flag = "wl_user", placeholder = "username", callback = function(txt) wlName = tostring(txt or "") end })
     end)
     secWL:button({ name = "whitelist", callback = function()
-        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
-        doWhitelist(x)
-    end})
+        if wlName ~= "" and F.addWhitelistName then F.addWhitelistName(wlName) end
+    end })
     secWL:button({ name = "unwhitelist", callback = function()
-        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
-        doUnwhitelist(x)
-    end})
-    secWL:button({ name = "whitelist selected player", callback = function()
-        doWhitelist(selectedPlayer)
-    end})
-    secWL:button({ name = "unwhitelist selected player", callback = function()
-        doUnwhitelist(selectedPlayer)
-    end})
+        if wlName ~= "" and F.removeWhitelistName then F.removeWhitelistName(wlName) end
+    end })
 
-    local secView = tabRage:section({ name = "view / bring" })
-    secView:button({ name = "view", callback = function()
-        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
-        if not x or x == "" or x == "(none)" then warn("[NAMELESS] pick a player") return end
-        runCmd("view " .. x)
-    end})
-    secView:button({ name = "unview", callback = function() runCmd("unview") end})
-    secView:button({ name = "bring", callback = function()
-        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
-        if not x or x == "" or x == "(none)" then warn("[NAMELESS] pick a player") return end
-        runCmd("bring " .. x)
-    end})
-
-    local secT = tabRage:section({ name = "toggles" })
-    secT:toggle({ name = "opt mode", flag = "opt", default = true, callback = function(v) if F.SetOptMode then F.SetOptMode(v) end end})
-    secT:toggle({ name = "rapid fire", flag = "rapid", default = true, callback = function(v) RapidFireEnabled = v end})
-    secT:toggle({ name = "spinbot", flag = "spinbot", default = false, callback = function(v) SpinbotEnabled = v end})
-    secT:toggle({ name = "killaura", flag = "ka", default = false, callback = function(v)
-        if v and F.StartKillAura then F.StartKillAura() elseif F.StopKillAura then F.StopKillAura() end
-    end})
-    secT:toggle({ name = "antistomp", flag = "as", default = true, callback = function(v)
-        if getgenv().FlashbackConfig then getgenv().FlashbackConfig.Enabled = v end
-    end})
-
-    local danceItems = { "floss", "happier", "takel", "darktriad", "vampire", "off" }
-    local secDanceR = tabRage:section({ name = "dance" })
+    local secRage = tabRage:section({ name = "ragebot settings", side = "left" })
+    secRage:toggle({ name = "orbit enabled", flag = "r_orb", default = OrbitEnabled, callback = function(v) OrbitEnabled = v end })
     pcall(function()
-        secDanceR:dropdown({
-            name = "dance",
-            flag = "dance_r",
-            items = danceItems,
-            default = "vampire",
+        secRage:slider({ name = "orbit height", flag = "oh", min = 0, max = 20, default = OrbitHeight or 3, callback = function(v) OrbitHeight = v end })
+        secRage:slider({ name = "orbit speed", flag = "os", min = 5, max = 80, default = OrbitSpeed or 30, callback = function(v) OrbitSpeed = v end })
+        secRage:slider({ name = "orbit distance", flag = "od", min = 3, max = 30, default = GunOrbitDist or 10, callback = function(v) GunOrbitDist = v end })
+        secRage:slider({ name = "spinbot speed", flag = "sbs", min = 1, max = 200, default = SpinbotSpeed or 25, callback = function(v) SpinbotSpeed = v end })
+        secRage:slider({ name = "killaura distance", flag = "kad", min = 10, max = 200, default = KillAuraRange or 80, callback = function(v) KillAuraRange = v end })
+    end)
+
+    -- ========== DESYNC ==========
+    
+    local secKM = tabRage:section({ name = "kill methods", side = "right" })
+    secKM:button({ name = "method: orbit", callback = function()
+        if F.SetKillMethod then F.SetKillMethod("orbit") end
+        OrbitEnabled = true
+    end })
+    secKM:button({ name = "method: tween / knifetween", callback = function()
+        if F.SetKillMethod then F.SetKillMethod("tween") end
+        KnifeTweenEnabled = true
+        UseGun = false
+    end })
+    secKM:button({ name = "method: gun spamvoid", callback = function()
+        if F.SetKillMethod then F.SetKillMethod("spamvoid") end
+        UseGun = true
+        SpamVoidWeapon = "gun"
+    end })
+    secKM:button({ name = "method: knife spamvoid", callback = function()
+        if F.SetKillMethod then F.SetKillMethod("spamvoid") end
+        UseGun = false
+        SpamVoidWeapon = "knife"
+    end })
+
+    local tabDesync = Window:tab({ name = "Desync" })
+    local secVS = tabDesync:section({ name = "void spam", side = "left" })
+    secVS:toggle({ name = "void spam", flag = "ds_void", default = DS.VoidSpam, callback = function(v)
+        DS.VoidSpam = v
+        if v then if F.StartVoidSpam then F.StartVoidSpam() end
+        else if F.StopVoidSpam then F.StopVoidSpam() end end
+    end })
+    pcall(function()
+        secVS:keybind({ name = "voidspam key", flag = "ds_void_key", default = DS.VoidSpamKey, callback = function(k)
+            if typeof(k) == "EnumItem" then DS.VoidSpamKey = k end
+        end })
+    end)
+
+    local secFP = tabDesync:section({ name = "fake pos", side = "right" })
+    secFP:toggle({ name = "fake pos", flag = "ds_fp", default = DS.FakePos, callback = function(v)
+        DS.FakePos = v
+        if F.SetFakePos then F.SetFakePos(v) end
+    end })
+    pcall(function()
+        secFP:keybind({ name = "fakepos key", flag = "ds_fp_key", default = DS.FakePosKey, callback = function(k)
+            if typeof(k) == "EnumItem" then DS.FakePosKey = k end
+        end })
+    end)
+
+    local secND = tabDesync:section({ name = "network desync", side = "left" })
+    secND:toggle({ name = "network desync", flag = "ds_net", default = DS.NetDesync, callback = function(v)
+        DS.NetDesync = v
+        if F.SetNetDesync then F.SetNetDesync(v) end
+    end })
+    pcall(function()
+        secND:keybind({ name = "netdesync key", flag = "ds_net_key", default = DS.NetDesyncKey, callback = function(k)
+            if typeof(k) == "EnumItem" then DS.NetDesyncKey = k end
+        end })
+    end)
+
+    -- ========== VISUAL ==========
+    local tabVisual = Window:tab({ name = "Visual" })
+    local secVis = tabVisual:section({ name = "visual & audio", side = "left" })
+    secVis:toggle({ name = "fullbright", flag = "v_fb", default = VS.Fullbright, callback = function(v) VS.Fullbright = v if F.ApplyVisuals then F.ApplyVisuals() end end })
+    secVis:toggle({ name = "no fog", flag = "v_fog", default = VS.NoFog, callback = function(v) VS.NoFog = v if F.ApplyVisuals then F.ApplyVisuals() end end })
+    secVis:toggle({ name = "no shadows", flag = "v_sh", default = VS.NoShadows, callback = function(v) VS.NoShadows = v if F.ApplyVisuals then F.ApplyVisuals() end end })
+    secVis:toggle({ name = "mute all sounds", flag = "v_mute", default = VS.MuteAll, callback = function(v) VS.MuteAll = v if F.ApplyVisuals then F.ApplyVisuals() end end })
+    secVis:toggle({ name = "no particles", flag = "v_part", default = VS.NoParticles, callback = function(v) VS.NoParticles = v if F.ApplyVisuals then F.ApplyVisuals() end end })
+    secVis:toggle({ name = "grey characters", flag = "v_grey", default = VS.GreyCharacters, callback = function(v) VS.GreyCharacters = v if F.ApplyVisuals then F.ApplyVisuals() end end })
+
+    local secSky = tabVisual:section({ name = "skybox", side = "right" })
+    secSky:toggle({ name = "skybox enabled", flag = "v_sky", default = VS.SkyboxEnabled, callback = function(v)
+        VS.SkyboxEnabled = v
+        getgenv().NamelessVisual.SkyboxEnabled = v
+        if F.ApplySkybox then F.ApplySkybox() end
+    end })
+    pcall(function()
+        secSky:dropdown({
+            name = "skybox type",
+            flag = "v_skytype",
+            items = {"realistic", "nebula", "space", "sunset", "night"},
+            default = VS.SkyboxType or "realistic",
             callback = function(v)
-                if v == "off" then runCmd("dance off") else runCmd("dance " .. v) end
+                VS.SkyboxType = tostring(v)
+                VS.SkyboxEnabled = true
+                getgenv().NamelessVisual.SkyboxType = tostring(v)
+                getgenv().NamelessVisual.SkyboxEnabled = true
+                if F.ApplySkybox then F.ApplySkybox(tostring(v)) end
             end,
         })
     end)
 
-    -- COMMANDS
-    local secSync = tabCmd:section({ name = "sync / esp" })
-    secSync:toggle({
-        name = "sync bots (controller runs cmds too)",
-        flag = "sync_bots",
-        default = false,
-        callback = function(v) SyncBotsEnabled = v end,
-    })
-    secSync:toggle({
-        name = "bot esp",
-        flag = "bot_esp",
-        default = BotEspEnabled and true or false,
-        callback = function(v) if F.SetBotEsp then F.SetBotEsp(v) else BotEspEnabled = v if F.RefreshBotEsp then F.RefreshBotEsp() end end end,
-    })
+    local secRain = tabVisual:section({ name = "weather / rain", side = "right" })
+    secRain:toggle({ name = "rain enabled", flag = "v_rain", default = VS.WeatherEnabled, callback = function(v)
+        VS.WeatherEnabled = v
+        getgenv().NamelessVisual.WeatherEnabled = v
+        if F.ApplyWeather then F.ApplyWeather() end
+    end })
+    pcall(function()
+        secRain:slider({ name = "rain rate", flag = "v_rate", min = 10, max = 500, default = VS.WeatherRate or 100, callback = function(v)
+            VS.WeatherRate = v
+            getgenv().NamelessVisual.WeatherRate = v
+            if getgenv().NamelessVisual.WeatherEnabled and F.ApplyWeather then F.ApplyWeather() end
+        end })
+    end)
 
-    local secCmdAK = tabCmd:section({ name = "autokill / kill (bots)" })
+    -- ========== COMMANDS ==========
+    local tabCmd = Window:tab({ name = "Commands" })
+    local secCmd = tabCmd:section({ name = "bot commands", side = "left" })
+    local cmdTarget = ""
     pcall(function()
-        if secCmdAK.textbox then
-            secCmdAK:textbox({
-                name = "target username",
-                flag = "cmd_ak_name",
-                placeholder = "username",
-                callback = function(txt) rageTarget = tostring(txt or "") end,
-            })
-        end
+        secCmd:textbox({ name = "target", flag = "cmd_tgt", placeholder = "username", callback = function(txt) cmdTarget = tostring(txt or "") end })
     end)
-    secCmdAK:button({ name = "autokill", callback = function()
-        local x = (rageTarget or ""):match("^%s*(.-)%s*$") or ""
-        if x == "" then x = selectedPlayer end
-        if not x or x == "" or x == "(none)" then warn("[NAMELESS] type username") return end
-        runCmd("autokill " .. x)
-    end})
-    secCmdAK:button({ name = "kill", callback = function()
-        local x = (rageTarget or ""):match("^%s*(.-)%s*$") or ""
-        if x == "" then x = selectedPlayer end
-        if not x or x == "" or x == "(none)" then warn("[NAMELESS] type username") return end
-        runCmd("kill " .. x)
-    end})
-    secCmdAK:button({ name = "stop", callback = function() runCmd("stop") end})
-    secCmdAK:button({ name = "forcehit", callback = function()
-        local x = (rageTarget or ""):match("^%s*(.-)%s*$") or selectedPlayer
-        if x and x ~= "" and x ~= "(none)" then runCmd("forcehit " .. x) end
-    end})
-    secCmdAK:button({ name = "forcehit2", callback = function()
-        local x = (rageTarget or ""):match("^%s*(.-)%s*$") or selectedPlayer
-        if x and x ~= "" and x ~= "(none)" then runCmd("forcehit2 " .. x) end
-    end})
-    secCmdAK:button({ name = "unforcehit", callback = function() runCmd("unforcehit") end})
-
-    local secCmdPl = tabCmd:section({ name = "player select (bots)" })
-    pcall(function()
-        if secCmdPl.textbox then
-            secCmdPl:textbox({
-                name = "type username",
-                flag = "cmd_pl_type",
-                placeholder = "username",
-                callback = function(txt)
-                    selectedPlayer = tostring(txt or "")
-                    rageTarget = selectedPlayer
-                end,
-            })
-        end
-    end)
-    pcall(function()
-        secCmdPl:dropdown({
-            name = "player select",
-            flag = "cmd_rel_plr",
-            items = playerItems,
-            default = playerItems[1] or "(none)",
-            callback = function(v)
-                selectedPlayer = v
-                rageTarget = v
-            end,
-        })
-    end)
-    secCmdPl:button({ name = "refresh player list", callback = function()
-        refreshPlayerNames()
-end})
+    secCmd:button({ name = "autokill", callback = function() if cmdTarget ~= "" then runCmd("autokill " .. cmdTarget) end end })
+    secCmd:button({ name = "kill", callback = function() if cmdTarget ~= "" then runCmd("kill " .. cmdTarget) end end })
+    secCmd:button({ name = "stop", callback = function() runCmd("stop") end })
+    secCmd:button({ name = "forcehit once", callback = function() if cmdTarget ~= "" then runCmd("forcehit " .. cmdTarget) end end })
+    secCmd:button({ name = "forcehit2 loop", callback = function() if cmdTarget ~= "" then runCmd("forcehit2 " .. cmdTarget) end end })
 
     
-    local secCmdWL = tabCmd:section({ name = "whitelist (bots)" })
-    pcall(function()
-        if secCmdWL.textbox then
-            secCmdWL:textbox({
-                name = "username",
-                flag = "cmd_wl_name",
-                placeholder = "username",
-                callback = function(txt) rageTarget = tostring(txt or "") end,
-            })
-        end
-    end)
-    secCmdWL:button({ name = "whitelist", callback = function()
-        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
-        doWhitelist(x)
-    end})
-    secCmdWL:button({ name = "unwhitelist", callback = function()
-        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
-        doUnwhitelist(x)
-    end})
-    secCmdWL:button({ name = "wl (chat)", callback = function()
-        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
-        if x and x ~= "" then runCmd("wl " .. x) end
-    end})
-    secCmdWL:button({ name = "unwl (chat)", callback = function()
-        local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
-        if x and x ~= "" then runCmd("unwl " .. x) end
-    end})
-
-    local secForm = tabCmd:section({ name = "formations" })
-    for _, c in ipairs({
-        "summon", "return", "around", "back", "bline", "pole", "line", "circle",
-        "orbit", "orbit 2", "orbit 3", "rline", "lline", "stackon",
-    }) do
-        secForm:button({ name = c, callback = function() runCmd(c) end})
-    end
-
-    local secCombat = tabCmd:section({ name = "combat" })
-    for _, c in ipairs({
-        "stop", "gun", "knife", "stomp on", "stomp off",
-        "ka", "ka off", "gsk", "ksk", "orbitkill", "tween", "svkill",
-        "rapid on", "rapid off", "ghold", "khold",
-        "forcehit", "unforcehit", "forcehit2",
-        "uzi", "sg", "tacticalsg", "rev", "db", "silencer",
-    }) do
-        secCombat:button({ name = c, callback = function()
-            if c == "forcehit" or c == "forcehit2" then
-                local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
-                if x and x ~= "" and x ~= "(none)" then runCmd(c .. " " .. x)
-                else warn("[NAMELESS] set target username first") end
-            else
-                runCmd(c)
-            end
-        end})
-    end
-
-    local secMisc = tabCmd:section({ name = "misc" })
-    for _, c in ipairs({
-        "opt on", "opt off", "powner", "unpowner", "spinbot", "spinbot off",
-        "blackscreen on", "blackscreen off", "antilag on", "antilag off",
-        "sentry on", "sentry off", "reset", "reclaim", "void", "dance off",
-    }) do
-        secMisc:button({ name = c, callback = function() runCmd(c) end})
-    end
-
-    local secDanceC = tabCmd:section({ name = "dance" })
-    pcall(function()
-        secDanceC:dropdown({
-            name = "dance",
-            flag = "dance_c",
-            items = danceItems,
-            default = "vampire",
-            callback = function(v)
-                if v == "off" then runCmd("dance off") else runCmd("dance " .. v) end
-            end,
-        })
-    end)
-
-    -- Lite commands (right-side stack)
-    local secLite = tabCmd:section({ name = "lite commands" })
-    for _, c in ipairs({
-        "summon", "return", "around", "orbit", "orbit 2", "orbit 3",
-        "stop", "ka", "ka off", "powner", "unpowner",
-        "rapid on", "rapid off", "opt on", "opt off",
-        "ghold", "khold", "uzi", "sg", "tacticalsg", "rev", "db", "silencer",
-        "spinbot", "spinbot off", "blackscreen on", "blackscreen off",
-        "forcehit", "unforcehit", "forcehit2", "reset",
-    }) do
-        secLite:button({ name = "lite: " .. c, callback = function()
-            if c == "forcehit" or c == "forcehit2" then
-                local x = (rageTarget ~= "" and rageTarget) or selectedPlayer
-                if x and x ~= "" and x ~= "(none)" then runCmd(c .. " " .. x)
-                else warn("[NAMELESS] set target first") end
-            else
-                runCmd(c)
-            end
-        end})
-    end
-
-    local secBots = tabCmd:section({ name = "bot list" })
-    local botNames = {}
-    if BotListOrdered then
-        for _, n in ipairs(BotListOrdered) do
-            if type(n) == "string" and n ~= "" then botNames[#botNames + 1] = n end
-        end
-    end
-    if #botNames == 0 then botNames = { "(set bots)" } end
-    for _, n in ipairs(botNames) do
-        local online = Players:FindFirstChild(n) and "ONLINE" or "offline"
-        secBots:button({ name = n .. " [" .. online .. "]", callback = function()
-            selectedPlayer = n
-            rageTarget = n
-        end})
-    end
-
-    -- live refresh on player join/leave
-    Players.PlayerAdded:Connect(function()
-        task.defer(refreshPlayerNames)
-    end)
-    Players.PlayerRemoving:Connect(function()
-        task.defer(refreshPlayerNames)
-    end)
-
-    getgenv().library = library
-return true
-end
-]=]
-    end
+    local secDance = tabCmd:section({ name = "dances", side = "left" })
     do
-        local loadedUI = false
-        local isCtrl = true
-        pcall(function()
-            if F.IsControllerClient then isCtrl = F.IsControllerClient() end
-        end)
-        if isCtrl then
-            local ok, err = pcall(function()
-                local build = loadstring(getgenv()._NAMELESS_GUI_BUILDER)()
-                if build and build(F, {}) then
-                    pcall(function()
-                        if Drawing and Drawing.new and not FOVCircle then
-                            FOVCircle = Drawing.new("Circle")
-                            FOVCircle.Thickness = 1.5
-                            FOVCircle.NumSides = 64
-                            FOVCircle.Color = Color3.fromRGB(255, 128, 0)
-                            FOVCircle.Visible = false
-                        end
-                    end)
-                    loadedUI = true
-end
-            end)
-            if not ok then
-end
+        local danceItems = { "default", "off" }
+        if EmoteOrder then
+            for _, e in ipairs(EmoteOrder) do
+                if e.key then danceItems[#danceItems+1] = e.key end
+            end
         end
-        if loadedUI then
-            return
+        if VAULT_EMOTES then
+            for k, _ in pairs(VAULT_EMOTES) do
+                danceItems[#danceItems+1] = tostring(k)
+            end
+        end
+        pcall(function()
+            secDance:dropdown({
+                name = "dance emote",
+                flag = "dance_dd",
+                items = danceItems,
+                default = "default",
+                callback = function(v)
+                    if v == "off" then
+                        runCmd("dance off")
+                    elseif v == "default" then
+                        if F.StartDefaultEmote then F.StartDefaultEmote() end
+                    else
+                        runCmd("dance " .. tostring(v))
+                    end
+                end,
+            })
+        end)
+        secDance:button({ name = "random dance", callback = function() runCmd("dance") end })
+        secDance:button({ name = "stop dance / default", callback = function() runCmd("dance off") end })
+    end
+
+    local secForm = tabCmd:section({ name = "formations", side = "right" })
+    for _, cname in ipairs({"summon", "return", "around", "back", "bline", "pole", "line", "orbit", "safe", "teleport"}) do
+        secForm:button({ name = cname, callback = function() runCmd(cname) end })
+    end
+
+    
+    local secKMCmd = tabCmd:section({ name = "kill methods (cmd)", side = "right" })
+    secKMCmd:button({ name = "orbit", callback = function() runCmd("orbitkill") end })
+    secKMCmd:button({ name = "tween / knifetween", callback = function() runCmd("knifetween") end })
+    secKMCmd:button({ name = "gun spamvoid", callback = function() runCmd("gsk") end })
+    secKMCmd:button({ name = "knife spamvoid", callback = function() runCmd("ksk") end })
+    secKMCmd:button({ name = "fastkill / tween", callback = function() runCmd("tween") end })
+
+    local secCombat = tabCmd:section({ name = "combat", side = "left" })
+    for _, cname in ipairs({"gun", "knife", "ka", "ka off", "gsk", "ksk", "rapid on", "rapid off", "db", "uzi", "rev"}) do
+        secCombat:button({ name = cname, callback = function() runCmd(cname) end })
+    end
+
+    -- Desync keybinds
+    UIS.InputBegan:Connect(function(input, gp)
+        if gp then return end
+        if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
+        if input.KeyCode == DS.VoidSpamKey then
+            DS.VoidSpam = not DS.VoidSpam
+            if DS.VoidSpam and F.StartVoidSpam then F.StartVoidSpam()
+            elseif F.StopVoidSpam then F.StopVoidSpam() end
+        elseif input.KeyCode == DS.FakePosKey then
+            DS.FakePos = not DS.FakePos
+            if F.SetFakePos then F.SetFakePos(DS.FakePos) end
+        elseif input.KeyCode == DS.NetDesyncKey then
+            DS.NetDesync = not DS.NetDesync
+            if F.SetNetDesync then F.SetNetDesync(DS.NetDesync) end
+        end
+    end)
+
+    
+    -- ========== SETTINGS ==========
+    local tabSet = Window:tab({ name = "Settings" })
+    local secCfg = tabSet:section({ name = "config", side = "left" })
+    MenuKey = MenuKey or Enum.KeyCode.LeftShift
+    local configName = "default"
+    local function cfgPath(name)
+        return "nameless_hvh_" .. tostring(name or "default"):gsub("[^%w_%-]", "_") .. ".json"
+    end
+    local function collectConfig()
+        return {
+            ForceHitFOV = ForceHitFOV,
+            ForceHitFOVEnabled = ForceHitFOVEnabled,
+            ForceHitFireRate = ForceHitFireRate,
+            KillAuraRange = KillAuraRange,
+            KillAuraDelay = KillAuraDelay,
+            AimbotSmooth = AimbotSmooth,
+            OrbitSpeed = OrbitSpeed,
+            OrbitHeight = OrbitHeight,
+            GunOrbitDist = GunOrbitDist,
+            SpinbotSpeed = SpinbotSpeed,
+            RapidFireEnabled = RapidFireEnabled,
+            MenuKey = tostring(MenuKey),
+            SkyboxType = getgenv().NamelessVisual and getgenv().NamelessVisual.SkyboxType,
+            WeatherRate = getgenv().NamelessVisual and getgenv().NamelessVisual.WeatherRate,
+        }
+    end
+    local function applyConfig(data)
+        if type(data) ~= "table" then return end
+        if data.ForceHitFOV then ForceHitFOV = data.ForceHitFOV end
+        if data.ForceHitFireRate then ForceHitFireRate = data.ForceHitFireRate end
+        if data.KillAuraRange then KillAuraRange = data.KillAuraRange end
+        if data.KillAuraDelay then KillAuraDelay = data.KillAuraDelay end
+        if data.AimbotSmooth then AimbotSmooth = data.AimbotSmooth end
+        if data.OrbitSpeed then OrbitSpeed = data.OrbitSpeed end
+        if data.OrbitHeight then OrbitHeight = data.OrbitHeight end
+        if data.GunOrbitDist then GunOrbitDist = data.GunOrbitDist end
+        if data.SpinbotSpeed then SpinbotSpeed = data.SpinbotSpeed end
+        if data.RapidFireEnabled ~= nil then RapidFireEnabled = data.RapidFireEnabled end
+        if data.MenuKey then
+            pcall(function()
+                local parts = string.split(tostring(data.MenuKey), ".")
+                local k = parts[#parts]
+                if k and Enum.KeyCode[k] then MenuKey = Enum.KeyCode[k] end
+            end)
+        end
+        if getgenv().NamelessVisual then
+            if data.SkyboxType then getgenv().NamelessVisual.SkyboxType = data.SkyboxType end
+            if data.WeatherRate then getgenv().NamelessVisual.WeatherRate = data.WeatherRate end
         end
     end
-    -- Fallback: legacy gui if sample UI fails
-    F.DestroyBotGui()
-return
+    pcall(function()
+        secCfg:textbox({ name = "config name", flag = "cfg_name", placeholder = "default", callback = function(txt)
+            configName = tostring(txt or "default")
+            if configName == "" then configName = "default" end
+        end })
+    end)
+    secCfg:button({ name = "save config", callback = function()
+        pcall(function()
+            local Hs = game:GetService("HttpService")
+            local body = Hs:JSONEncode(collectConfig())
+            if writefile then writefile(cfgPath(configName), body) end
+            getgenv().NamelessConfigs = getgenv().NamelessConfigs or {}
+            getgenv().NamelessConfigs[configName] = collectConfig()
+            warn("[NAMELESS] saved config: " .. configName)
+        end)
+    end })
+    secCfg:button({ name = "load config", callback = function()
+        pcall(function()
+            local data = nil
+            if isfile and isfile(cfgPath(configName)) and readfile then
+                local Hs = game:GetService("HttpService")
+                data = Hs:JSONDecode(readfile(cfgPath(configName)))
+            elseif getgenv().NamelessConfigs and getgenv().NamelessConfigs[configName] then
+                data = getgenv().NamelessConfigs[configName]
+            end
+            if data then
+                applyConfig(data)
+                warn("[NAMELESS] loaded config: " .. configName)
+            else
+                warn("[NAMELESS] config not found: " .. configName)
+            end
+        end)
+    end })
+    secCfg:button({ name = "overwrite config", callback = function()
+        pcall(function()
+            local Hs = game:GetService("HttpService")
+            local body = Hs:JSONEncode(collectConfig())
+            if writefile then writefile(cfgPath(configName), body) end
+            getgenv().NamelessConfigs = getgenv().NamelessConfigs or {}
+            getgenv().NamelessConfigs[configName] = collectConfig()
+            warn("[NAMELESS] overwritten: " .. configName)
+        end)
+    end })
+    secCfg:button({ name = "list configs", callback = function()
+        pcall(function()
+            local names = {}
+            if listfiles then
+                for _, f in ipairs(listfiles("")) do
+                    local n = tostring(f)
+                    if n:find("nameless_hvh_") then names[#names+1] = n end
+                end
+            end
+            if getgenv().NamelessConfigs then
+                for k, _ in pairs(getgenv().NamelessConfigs) do names[#names+1] = k end
+            end
+            warn("[NAMELESS] configs: " .. table.concat(names, ", "))
+        end)
+    end })
+
+    local secMenu = tabSet:section({ name = "menu", side = "right" })
+    pcall(function()
+        secMenu:keybind({ name = "menu key", flag = "menu_key", default = MenuKey or Enum.KeyCode.LeftShift, callback = function(k)
+            if typeof(k) == "EnumItem" then
+                MenuKey = k
+            end
+        end })
+    end)
+    secMenu:button({ name = "close menu", callback = function() F.ToggleLoadGui() end })
+
+    pcall(function()
+        if getgenv()._NamelessRSConn then getgenv()._NamelessRSConn:Disconnect() end
+        getgenv()._NamelessRSConn = UserInputService.InputBegan:Connect(function(input, gp)
+            if gp then return end
+            if input.KeyCode == (MenuKey or Enum.KeyCode.LeftShift) then
+                pcall(F.ToggleLoadGui)
+            end
+        end)
+    end)
+    MenuOpen = true
+    BotGui = true -- flag only; library owns ScreenGui
 end
 
 function F.ToggleLoadGui()
-    if BotGui and MenuOpen then
+    if MenuOpen and getgenv().library then
         F.DestroyBotGui()
-    else
-        local ok, err = pcall(F.CreateNamelessGui)
-        if not ok then
-end
+        MenuOpen = false
+        return
+    end
+    local ok, err = pcall(F.CreateNamelessGui)
+    if not ok then
+        warn("[NAMELESS] GUI failed: " .. tostring(err))
+        MenuOpen = false
     end
 end
 
@@ -10686,9 +11141,6 @@ return
         local t = F.FindPlayerAny(args[2])
         local name = t and t.Name or args[2]
         local ok, reason = F.removeWhitelistName(name)
-        if not ok then
-else
-end
         return
     end
     -- Transfer ownership (current owner) / reclaim (original only)
@@ -10890,7 +11342,7 @@ return
         local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if cr and r then
             local slot = MySlot or 1
-            local ang = (slot - 1) * (math.pi * 2 / 10)
+            local ang = (slot - 1) * (math.pi * 2 / math.max(MaxBots or 20, 1))
             local off = Vector3.new(math.cos(ang) * 4, 0, math.sin(ang) * 4)
             pcall(function()
                 if FollowConnection then FollowConnection:Disconnect() FollowConnection = nil end
@@ -10972,7 +11424,7 @@ if cmd == "stop" or cmd == "idle" then
     elseif cmd == "dance" then
         if args[2] == "off" or args[2] == "stop" then
             -- resume default execute emote (do not leave idle)
-            F.StartDefaultEmote()
+            pcall(function() if F.StartDefaultEmote then F.StartDefaultEmote() end end)
         elseif args[2] then
             local key = args[2]
             local found = false
@@ -11044,16 +11496,9 @@ if cmd == "stop" or cmd == "idle" then
             KillPosition = a2:sub(1,1):upper() .. a2:sub(2)
             OrbitEnabled = true
             F.SetKillMethod("orbit")
-else
+        else
             F.StartControllerOrbit(1)
         end
-    elseif cmd == "flymode" or cmd == "fly" then
-        local m = args[2] and args[2]:lower() or ""
-        local map = { hover = "Hover", glide = "Glide", fly = "Fly", heaven = "Heaven", gogo = "gogo" }
-        if map[m] then
-            FlyMode = map[m]
-else
-end
     elseif cmd == "spinbot" or cmd == "spin" then
         local n = tonumber(args[2])
         if args[2] == "off" then
@@ -11061,9 +11506,9 @@ end
         elseif n then
             SpinbotSpeed = math.clamp(n, 1, 200)
             SpinbotEnabled = true
-else
+        else
             SpinbotEnabled = not SpinbotEnabled
-end
+        end
     elseif cmd == "knifetween" or cmd == "kt" then
         if args[2] == "off" then
             KnifeTweenEnabled = false
@@ -11206,18 +11651,6 @@ if not KillAuraEnabled then F.StartKillAura() end
         HoldMode = "both"
     elseif cmd == "unhold" then
         HoldMode = nil
-    elseif cmd == "flyv1" or cmd == "flyV1" then
-        FlyVariant = 1
-        if CurrentAction == "follow" or CurrentAction == "formation" then
-            F.loadFlyAnims()
-            F.updateFlyAnim()
-        end
-    elseif cmd == "flyv2" or cmd == "flyV2" then
-        FlyVariant = 2
-        if CurrentAction == "follow" or CurrentAction == "formation" then
-            F.loadFlyAnims()
-            F.updateFlyAnim()
-        end
     elseif cmd == "norender" then
         if args[2] == "on" then F.SetNoRender(true)
         elseif args[2] == "off" then F.SetNoRender(false)
@@ -11393,9 +11826,6 @@ function F.InitRemoteSystem()
             controller = ControllerName or LocalPlayer.Name,
         }
         local ok = httpPutJson(NPOINT_URL, payload)
-        if ok then
-else
-end
         return ok
     end
 
@@ -11404,7 +11834,7 @@ end
     end
 
     task.spawn(function()
-while true do
+        while true do
             task.wait(RemotePollSeconds)
             local data = parseRemoteJson(httpGet(NPOINT_URL))
             if data then
