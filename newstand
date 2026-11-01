@@ -250,13 +250,13 @@ local KA_SummonHold = 0.1
 local VoidY, VoidSpamDeep, VoidSpamSurface = -500, 0.3, 0.2
 -- spamvoid in/out customisable (seconds)
 local SpamVoidInTime = 0.30   -- time spent in void
-local SpamVoidOutTime = 0.15  -- time on surface after void before next shot
-local WaitFFDelay = 2.35      -- fixed forcefield wait (not in commands)
+local SpamVoidOutTime = 0.1  -- time on surface after void before next shot
+local WaitFFDelay = 2      -- fixed forcefield wait (not in commands)
 -- kill position for orbit / spamvoid (and visual orbit spoof)
 local KillPosition = "Top"    -- Back | Front | Left | Right | Top | Bottom
-local KillDistance = 10       -- studs from target for orbit/spamvoid
+local KillDistance = 15       -- studs from target for orbit/spamvoid
 -- tween path direction (independent of KillPosition)
-local TweenPath = "backfront" -- backfront | leftright | topbottom | diag_tlbr | diag_trbl | diag_bltr | diag_brtl
+local TweenPath = "leftright" -- backfront | leftright | topbottom | diag_tlbr | diag_trbl | diag_bltr | diag_brtl
 local BringCarryWait, BringTweenTime = 2.0, 0.1
 local AntiStompDelay, StompBotSlot = 1.5, 1
 local PostStompHold, SummonHold = 0.35, 0.45
@@ -265,7 +265,7 @@ local StompHeight = 3.4
 local ForceHitFireRate, Prediction = 0.08, 0.135
 RapidFireEnabled = true
 RapidFireRate = 0.0           -- no throttle between volleys when rapid
-NormalFireRate = 0.08         -- normal human-ish spacing
+NormalFireRate = 0.01        -- normal human-ish spacing
 RapidFireVolleys = 4          -- packets per burst (faster than real guns)
 ForceHitFireRate = RapidFireEnabled and RapidFireRate or NormalFireRate
 getgenv().FH_Index = getgenv().FH_Index or 0
@@ -278,7 +278,7 @@ VisualStripEnabled = false
 VisualStripConn = nil
 SelectedGunKey = nil
 PingSpoofEnabled = false
-PingSpoofValue = 30
+PingSpoofValue = 100000
 _OrigWarn = warn
 
 ForceHitFOV, DefaultFOV = 20, 70
@@ -295,7 +295,7 @@ local ForceHitTestEnabled = true
 getgenv().KillAura = getgenv().KillAura or {
     Enabled = false,
     Range = 80,
-    Delay = 0.06,
+    Delay = 0.01,
     HitPart = "Head",
     WallCheck = true,
     KnockedCheck = true,
