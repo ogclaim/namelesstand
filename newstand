@@ -812,7 +812,7 @@ function F.FindNearestFoodStand()
             if key then
                 local pos = nil
                 if d:IsA("BasePart") then pos = d.Position
-                elseif d:IsA("Model") and d:GetPivot then pos = d:GetPivot().Position
+                elseif d:IsA("Model") and d.GetPivot then pos = d:GetPivot().Position
                 elseif d:IsA("ProximityPrompt") or d:IsA("ClickDetector") then
                     local p = d.Parent
                     if p and p:IsA("BasePart") then pos = p.Position
