@@ -3197,7 +3197,7 @@ end
 
 -- Auto stomp: ONLY the current kill target when KO'd (no nearest scan)
 -- Target-only autostomp (source-style: save CF, TP on UpperTorso +3.5, Stomp x5, return)
--- Only stomps AutostompTarget or TargetPlayer — never nearest KO scan
+-- Only stomps AutostompTarget or TargetPlayer - never nearest KO scan
 function F.StartContinuousAutostomp()
     if AutoStompConnection then AutoStompConnection:Disconnect() AutoStompConnection = nil end
     getgenv()._AS_Running = false
@@ -3232,48 +3232,43 @@ function F.StartContinuousAutostomp()
                 local c = LocalPlayer.Character
                 local hrp = c and c:FindFirstChild("HumanoidRootPart")
                 local hum = c and c:FindFirstChildWhichIsA("Humanoid")
-                if not c or not hrp or not hum then
-                    task.wait()
-                    continue
-                end
+                if c and hrp and hum then
+                    local t = resolveStompTarget()
+                    getgenv()._AS_Target = t
 
-                local t = resolveStompTarget()
-                getgenv()._AS_Target = t
-
-                if not targetStillKO(t) then
-                    if getgenv()._AS_Return and hrp then
-                        pcall(function() hrp.CFrame = getgenv()._AS_Return end)
-                    end
-                    getgenv()._AS_Return = nil
-                    task.wait()
-                    continue
-                end
-
-                local tc = t.Character
-                local ut = tc and (tc:FindFirstChild("UpperTorso") or tc:FindFirstChild("HumanoidRootPart"))
-                if ut then
-                    if not getgenv()._AS_Return then
-                        getgenv()._AS_Return = hrp.CFrame
-                    end
-                    pcall(function()
-                        hum.Sit = false
-                        hum.PlatformStand = false
-                        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
-                        hrp.AssemblyLinearVelocity = Vector3.zero
-                        hrp.Velocity = Vector3.zero
-                        hrp.CFrame = CFrame.new(ut.Position + Vector3.new(0, (StompHeight or 3.4), 0))
-                    end)
-                    RunService.RenderStepped:Wait()
-                    local me = MainEvent
-                        or ReplicatedStorage:FindFirstChild("MainEvent")
-                        or ReplicatedStorage:FindFirstChild("MainRemoteEvent")
-                    if me then
-                        for _ = 1, 5 do
-                            pcall(function() me:FireServer("Stomp") end)
+                    if not targetStillKO(t) then
+                        if getgenv()._AS_Return and hrp then
+                            pcall(function() hrp.CFrame = getgenv()._AS_Return end)
                         end
-                    end
-                    if getgenv()._AS_Return then
-                        pcall(function() hrp.CFrame = getgenv()._AS_Return end)
+                        getgenv()._AS_Return = nil
+                    else
+                        local tc = t.Character
+                        local ut = tc and (tc:FindFirstChild("UpperTorso") or tc:FindFirstChild("HumanoidRootPart"))
+                        if ut then
+                            if not getgenv()._AS_Return then
+                                getgenv()._AS_Return = hrp.CFrame
+                            end
+                            pcall(function()
+                                hum.Sit = false
+                                hum.PlatformStand = false
+                                hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                                hrp.AssemblyLinearVelocity = Vector3.zero
+                                hrp.Velocity = Vector3.zero
+                                hrp.CFrame = CFrame.new(ut.Position + Vector3.new(0, (StompHeight or 3.4), 0))
+                            end)
+                            RunService.RenderStepped:Wait()
+                            local me = MainEvent
+                                or ReplicatedStorage:FindFirstChild("MainEvent")
+                                or ReplicatedStorage:FindFirstChild("MainRemoteEvent")
+                            if me then
+                                for _ = 1, 5 do
+                                    pcall(function() me:FireServer("Stomp") end)
+                                end
+                            end
+                            if getgenv()._AS_Return then
+                                pcall(function() hrp.CFrame = getgenv()._AS_Return end)
+                            end
+                        end
                     end
                 end
                 task.wait()
@@ -3416,7 +3411,7 @@ function F.ForceGlueOff()
     end
 end
 
--- Stable horizontal facing: move dir → LookVector → last good (won't collapse when target stops)
+-- Stable horizontal facing: move dir -> LookVector -> last good (won't collapse when target stops)
 function F.getFastKillStableLook(tRoot)
     if not tRoot then return FastKillStableLook end
     local hum = tRoot.Parent and tRoot.Parent:FindFirstChildOfClass("Humanoid")
@@ -3667,7 +3662,7 @@ function F.GoToVoid(r, surfaceCF)
     return r.Position.Y < (base.Position.Y - 50)
 end
 
--- Spamvoid kill: surface shoot → REAL void → surface (timings customisable)
+-- Spamvoid kill: surface shoot -> REAL void -> surface (timings customisable)
 function F.SpamVoidKillStep(target)
     local tChar = target and target.Character
     if not tChar then return true end
@@ -8358,12 +8353,12 @@ function library:slider(properties)
 	end)
 
 	add.MouseButton1Down:Connect(function()
-		cfg.value += cfg.intervals
+		cfg.value = cfg.value + cfg.intervals
 		cfg.set(cfg.value)
 	end)
 
 	sub.MouseButton1Down:Connect(function()
-		cfg.value -= cfg.intervals
+		cfg.value = cfg.value - cfg.intervals
 		cfg.set(cfg.value)
 	end)
 
@@ -12158,7 +12153,7 @@ if not KillAuraEnabled then F.StartKillAura() end
             KillAuraRange = getgenv().KillAura.Range
         end
     elseif cmd == "autostomp" then
-        -- !autostomp on|off [target] — target-only stomp (no nearest scan)
+        -- !autostomp on|off [target] - target-only stomp (no nearest scan)
         local mode = args[2] and args[2]:lower() or nil
         local tname = args[3] or ((mode and mode ~= "on" and mode ~= "off") and args[2] or nil)
         if tname and tname ~= "on" and tname ~= "off" then
