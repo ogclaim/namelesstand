@@ -5,7 +5,7 @@
 local ControllerName = "godlyseananners9"
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
-    "JadeVenture3876",
+    "KINGSnakelady1995",
     "cepit775B9",
     "UHCaltForShewwsh7",
     "", -- 4
@@ -744,106 +744,232 @@ function F.CFrameMoveTo(pos, speed)
     return true
 end
 
-function F.HasBurger()
+function F.FoodNames()
+    return { "pizza", "chicken", "taco", "burger" }
+end
+
+function F.IsFoodToolName(n)
+    n = tostring(n or ""):lower()
+    for _, k in ipairs(F.FoodNames()) do
+        if n:find(k, 1, true) then return k end
+    end
+    return nil
+end
+
+function F.HasFood()
     local char = LocalPlayer.Character
     local bag = LocalPlayer:FindFirstChild("Backpack")
     local function scan(parent)
-        if not parent then return false end
-        for _, t in ipairs(parent:GetChildren()) do
-            if t:IsA("Tool") and t.Name:lower():find("burger") then return true, t end
+        if not parent then return false, nil, nil end
+        for _, tool in ipairs(parent:GetChildren()) do
+            if tool:IsA("Tool") then
+                local k = F.IsFoodToolName(tool.Name)
+                if k then return true, tool, k end
+            end
         end
-        return false
+        return false, nil, nil
     end
-    local ok, tool = scan(char)
-    if ok then return true, tool end
+    local ok, tool, k = scan(char)
+    if ok then return true, tool, k end
     return scan(bag)
 end
 
-function F.ClickScreen()
-    local cam = workspace.CurrentCamera
-    local cx = cam and (cam.ViewportSize.X * 0.5) or 400
-    local cy = cam and (cam.ViewportSize.Y * 0.5) or 300
+-- back-compat
+function F.HasBurger()
+    local ok, tool = F.HasFood()
+    return ok, tool
+end
+
+function F.FindNearestFoodStand()
+    local root = getgenv().get_root_part and getgenv().get_root_part()
+        or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+    if not root then return nil, nil, math.huge end
+    local best, bestPos, bestDist, bestKey = nil, nil, math.huge, nil
+    local keys = F.FoodNames()
+    local function consider(inst, pos, key)
+        if not pos then return end
+        local d = (pos - root.Position).Magnitude
+        if d < bestDist then
+            best, bestPos, bestDist, bestKey = inst, pos, d, key
+        end
+    end
     pcall(function()
-        VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, true, game, 0)
-        task.wait(0.04)
-        VirtualInputManager:SendMouseButtonEvent(cx, cy, 0, false, game, 0)
+        for _, d in ipairs(workspace:GetDescendants()) do
+            local n = d.Name:lower()
+            local key = nil
+            for _, k in ipairs(keys) do
+                if n:find(k, 1, true) then key = k break end
+            end
+            if not key then
+                if d:IsA("ProximityPrompt") then
+                    local at = (d.ActionText or ""):lower()
+                    local ot = (d.ObjectText or ""):lower()
+                    for _, k in ipairs(keys) do
+                        if at:find(k, 1, true) or ot:find(k, 1, true) then key = k break end
+                    end
+                end
+            end
+            if key then
+                local pos = nil
+                if d:IsA("BasePart") then pos = d.Position
+                elseif d:IsA("Model") and d:GetPivot then pos = d:GetPivot().Position
+                elseif d:IsA("ProximityPrompt") or d:IsA("ClickDetector") then
+                    local p = d.Parent
+                    if p and p:IsA("BasePart") then pos = p.Position
+                    elseif p and p:IsA("Model") then
+                        local pp = p.PrimaryPart or p:FindFirstChildWhichIsA("BasePart")
+                        if pp then pos = pp.Position end
+                    end
+                elseif d:IsA("Attachment") then
+                    pos = d.WorldPosition
+                end
+                if pos then consider(d, pos, key) end
+            end
+        end
+    end)
+    -- fallback known shop if nothing found
+    if not bestPos and AutoHealShop then
+        return nil, AutoHealShop, (root.Position - AutoHealShop).Magnitude, "burger"
+    end
+    return best, bestPos, bestDist, bestKey
+end
+
+function F.TryBuyFood(foodKey)
+    foodKey = tostring(foodKey or "burger")
+    local title = foodKey:sub(1,1):upper() .. foodKey:sub(2)
+    pcall(function()
+        if MainEvent then
+            MainEvent:FireServer("Buy" .. title)
+            MainEvent:FireServer("Purchase", title)
+            MainEvent:FireServer("BuyItem", title)
+            MainEvent:FireServer("Purchase", foodKey)
+            MainEvent:FireServer("BuyItem", foodKey)
+            -- common DH variants
+            MainEvent:FireServer("BuyBurger")
+            if foodKey == "pizza" then MainEvent:FireServer("BuyPizza") end
+            if foodKey == "chicken" then MainEvent:FireServer("BuyChicken") end
+            if foodKey == "taco" then MainEvent:FireServer("BuyTaco") end
+        end
+    end)
+    pcall(function()
+        for _, d in ipairs(workspace:GetDescendants()) do
+            if d:IsA("ProximityPrompt") then
+                local at = (d.ActionText or ""):lower()
+                local ot = (d.ObjectText or ""):lower()
+                local pn = (d.Parent and d.Parent.Name or ""):lower()
+                if at:find(foodKey) or ot:find(foodKey) or pn:find(foodKey)
+                    or at:find("buy") or ot:find("buy") then
+                    if fireproximityprompt then pcall(fireproximityprompt, d) end
+                end
+            elseif d:IsA("ClickDetector") then
+                local pn = (d.Parent and d.Parent.Name or ""):lower()
+                if pn:find(foodKey) and fireclickdetector then
+                    pcall(fireclickdetector, d)
+                end
+            end
+        end
     end)
 end
 
 function F.TryBuyBurger()
-    -- Fire common Da Hood shop remotes / click
-    pcall(function()
-        if MainEvent then
-            MainEvent:FireServer("BuyBurger")
-            MainEvent:FireServer("Purchase", "Burger")
-            MainEvent:FireServer("BuyItem", "Burger")
-        end
-    end)
-    -- Also try clicking nearby shop prompts
-    pcall(function()
-        for _, d in ipairs(workspace:GetDescendants()) do
-            if d:IsA("ProximityPrompt") and (d.Parent and d.Parent.Name:lower():find("burger") or d.ActionText:lower():find("buy") or d.ObjectText:lower():find("burger")) then
-                fireproximityprompt(d)
-            end
-        end
-    end)
+    F.TryBuyFood("burger")
 end
 
 function F.RunAutoHealCycle()
     if AutoHealBusy then return end
+    -- only when idle-ish (same idea as antistomp: interrupt to survive)
+    if CurrentAction == "bring" then return end
     AutoHealBusy = true
     local ok, err = pcall(function()
         local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health >= 30 then return end
-        -- Go to shop
-        F.CFrameMoveTo(AutoHealShop, AutoHealTweenSpeed)
+        if not hum then return end
+        local maxH = hum.MaxHealth > 0 and hum.MaxHealth or 100
+        if hum.Health / maxH > (AutoHealTriggerPct or 0.30) then return end
+        if hum.Health <= 0 then return end
+
+        local savedAction = CurrentAction
+        -- pause combat gently
+        if CurrentAction == "kill" or CurrentAction == "autokill" then
+            if F.StopKillAttackLoop then pcall(F.StopKillAttackLoop) end
+        end
+
+        local inst, pos, dist, key = F.FindNearestFoodStand()
+        key = key or "burger"
+        if not pos then return end
+
+        -- TP to nearest food
+        if F.CFrameMoveTo then
+            F.CFrameMoveTo(pos + Vector3.new(0, 3, 0), AutoHealTweenSpeed or 1000)
+        else
+            local r = getgenv().get_root_part and getgenv().get_root_part()
+            if r then r.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0)) end
+        end
         task.wait(0.15)
-        local has = F.HasBurger()
+
+        local has = F.HasFood()
         if not has then
-            F.TryBuyBurger()
-            task.wait(0.3)
-            has = F.HasBurger()
+            F.TryBuyFood(key)
+            task.wait(0.25)
+            -- try all food types near stand
+            for _, k in ipairs(F.FoodNames()) do
+                F.TryBuyFood(k)
+            end
+            task.wait(0.2)
+            has = F.HasFood()
         end
         if not has then
-            -- First person + click until burger
-            pcall(function()
-                local cam = workspace.CurrentCamera
-                if cam then cam.CameraType = Enum.CameraType.Custom end
-                local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                if h then cam.CameraSubject = h end
-            end)
-            local deadline = tick() + 8
-            while tick() < deadline and not F.HasBurger() do
-                F.TryBuyBurger()
-                F.ClickScreen()
+            local deadline = tick() + 6
+            while tick() < deadline and not F.HasFood() do
+                F.TryBuyFood(key)
+                for _, k in ipairs(F.FoodNames()) do F.TryBuyFood(k) end
+                if F.ClickScreen then F.ClickScreen() end
                 task.wait(0.12)
             end
         end
-        has = F.HasBurger()
+        has = F.HasFood()
         if not has then return end
-        -- Eat at waypoints
-        for _, pos in ipairs(AutoHealEat) do
+
+        -- Eat until full health
+        local eatDeadline = tick() + 20
+        while tick() < eatDeadline do
             hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-            if hum and hum.Health > 80 then break end
-            if not F.HasBurger() then break end
-            F.CFrameMoveTo(pos, AutoHealTweenSpeed)
-            local eatUntil = tick() + 6
-            while tick() < eatUntil do
-                hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                if not hum or hum.Health > 80 then break end
-                local okb, tool = F.HasBurger()
-                if not okb then break end
-                pcall(function()
-                    local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                    if h and tool then
-                        h:UnequipTools()
-                        tool.Parent = LocalPlayer.Character
-                        tool:Activate()
-                    end
-                end)
-                F.ClickScreen()
-                task.wait(0.15)
+            if not hum or hum.Health <= 0 then break end
+            maxH = hum.MaxHealth > 0 and hum.MaxHealth or 100
+            if hum.Health >= maxH * 0.98 then break end
+
+            local okf, tool = F.HasFood()
+            if not okf then
+                -- buy again if ran out
+                F.TryBuyFood(key)
+                task.wait(0.2)
+                okf, tool = F.HasFood()
+                if not okf then break end
             end
+            pcall(function()
+                local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                local bag = LocalPlayer:FindFirstChild("Backpack")
+                if tool and tool.Parent == bag and h then
+                    h:EquipTool(tool)
+                    task.wait(0.05)
+                end
+                tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                if tool and F.IsFoodToolName(tool.Name) then
+                    tool:Activate()
+                end
+            end)
+            if F.ClickScreen then F.ClickScreen() end
+            -- stay near food stand
+            local r = getgenv().get_root_part and getgenv().get_root_part()
+            if r and pos and (r.Position - pos).Magnitude > 18 then
+                if F.CFrameMoveTo then F.CFrameMoveTo(pos + Vector3.new(0, 3, 0), AutoHealTweenSpeed or 1000)
+                else r.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0)) end
+            end
+            task.wait(0.12)
+        end
+
+        -- resume follow if was summoned
+        if F.CanSummon and F.CanSummon() and (savedAction == "follow" or savedAction == "idle") then
+            task.defer(function() if F.StartFollow then F.StartFollow() end end)
         end
     end)
     if not ok then warn("[NAMELESS] autoheal: " .. tostring(err)) end
@@ -3070,34 +3196,114 @@ function F.EnsureDancePlaying()
 end
 
 -- Auto stomp: ONLY the current kill target when KO'd (no nearest scan)
+-- Target-only autostomp (source-style: save CF, TP on UpperTorso +3.5, Stomp x5, return)
+-- Only stomps AutostompTarget or TargetPlayer — never nearest KO scan
 function F.StartContinuousAutostomp()
     if AutoStompConnection then AutoStompConnection:Disconnect() AutoStompConnection = nil end
+    getgenv()._AS_Running = false
+    getgenv()._AS_Return = nil
+    getgenv()._AS_Target = nil
+
+    local function resolveStompTarget()
+        local t = getgenv().AutostompTarget or TargetPlayer or ForceHitCmdTarget or ForceHitKeybindTarget
+        if t and t.Parent then return t end
+        return nil
+    end
+
+    local function targetStillKO(t)
+        if not t or not t.Parent then return false end
+        local tc = t.Character
+        if not tc then return false end
+        local be = tc:FindFirstChild("BodyEffects")
+        local ko = be and (be:FindFirstChild("K.O") or be:FindFirstChild("KO"))
+        local dead = be and be:FindFirstChild("Dead")
+        if dead and dead.Value then return false end
+        if ko and ko.Value then return true end
+        if F.isKnocked and F.isKnocked(tc) then return true end
+        local hum = tc:FindFirstChildOfClass("Humanoid")
+        return hum and hum.Health <= 0
+    end
+
+    local function runLoop()
+        if getgenv()._AS_Running then return end
+        getgenv()._AS_Running = true
+        task.spawn(function()
+            while AutoStompEnabled do
+                local c = LocalPlayer.Character
+                local hrp = c and c:FindFirstChild("HumanoidRootPart")
+                local hum = c and c:FindFirstChildWhichIsA("Humanoid")
+                if not c or not hrp or not hum then
+                    task.wait()
+                    continue
+                end
+
+                local t = resolveStompTarget()
+                getgenv()._AS_Target = t
+
+                if not targetStillKO(t) then
+                    if getgenv()._AS_Return and hrp then
+                        pcall(function() hrp.CFrame = getgenv()._AS_Return end)
+                    end
+                    getgenv()._AS_Return = nil
+                    task.wait()
+                    continue
+                end
+
+                local tc = t.Character
+                local ut = tc and (tc:FindFirstChild("UpperTorso") or tc:FindFirstChild("HumanoidRootPart"))
+                if ut then
+                    if not getgenv()._AS_Return then
+                        getgenv()._AS_Return = hrp.CFrame
+                    end
+                    pcall(function()
+                        hum.Sit = false
+                        hum.PlatformStand = false
+                        hum:ChangeState(Enum.HumanoidStateType.GettingUp)
+                        hrp.AssemblyLinearVelocity = Vector3.zero
+                        hrp.Velocity = Vector3.zero
+                        hrp.CFrame = CFrame.new(ut.Position + Vector3.new(0, (StompHeight or 3.4), 0))
+                    end)
+                    RunService.RenderStepped:Wait()
+                    local me = MainEvent
+                        or ReplicatedStorage:FindFirstChild("MainEvent")
+                        or ReplicatedStorage:FindFirstChild("MainRemoteEvent")
+                    if me then
+                        for _ = 1, 5 do
+                            pcall(function() me:FireServer("Stomp") end)
+                        end
+                    end
+                    if getgenv()._AS_Return then
+                        pcall(function() hrp.CFrame = getgenv()._AS_Return end)
+                    end
+                end
+                task.wait()
+            end
+            getgenv()._AS_Target = nil
+            getgenv()._AS_Return = nil
+            getgenv()._AS_Running = false
+        end)
+    end
+
     AutoStompConnection = RunService.Heartbeat:Connect(function()
         if not AutoStompEnabled then return end
-        local selfRoot = getgenv().get_root_part()
-        if not selfRoot then return end
-        local t = TargetPlayer
-        if not t or not t.Character or not F.isKnocked(t.Character) then return end
-        local ut = t.Character:FindFirstChild("UpperTorso")
-            or t.Character:FindFirstChild("HumanoidRootPart")
-        if not ut then return end
-        selfRoot.AssemblyLinearVelocity = Vector3.zero
-        selfRoot.AssemblyAngularVelocity = Vector3.zero
-        selfRoot.CFrame = CFrame.new(ut.Position + Vector3.new(0, StompHeight or 1.2, 0))
-        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum.Sit = false
-            hum.PlatformStand = false
-        end
-        if MainEvent then
-            for _ = 1, 3 do
-                pcall(function() MainEvent:FireServer("Stomp") end)
-            end
+        if not getgenv()._AS_Running then
+            runLoop()
         end
     end)
+    runLoop()
 end
+
 function F.StopContinuousAutostomp()
+    AutoStompEnabled = false
     if AutoStompConnection then AutoStompConnection:Disconnect() AutoStompConnection = nil end
+    getgenv()._AS_Running = false
+    local ret = getgenv()._AS_Return
+    if ret then
+        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if hrp then pcall(function() hrp.CFrame = ret end) end
+    end
+    getgenv()._AS_Return = nil
+    getgenv()._AS_Target = nil
 end
 
 -- Fast kill cycle (pure CFrame - glue fully off):
@@ -3912,58 +4118,69 @@ function F.ControllerKill(name, isAuto)
         warn("[NAMELESS] ControllerKill: target not found: " .. tostring(name))
         return
     end
-    getgenv()._CTRL_KILL_GEN = (getgenv()._CTRL_KILL_GEN or 0) + 1
-    local gen = getgenv()._CTRL_KILL_GEN
+    -- lock forcehit + autostomp onto this target only
     ForceHitCmdTarget = target
     ForceHitKeybindTarget = target
+    getgenv().AutostompTarget = target
     ForceHitFOVEnabled = true
-    CurrentAction = isAuto and "autokill" or "kill"
-    TargetPlayer = target
-    -- equip first tool / gun
-    pcall(function()
-        local char = LocalPlayer.Character
-        local bag = LocalPlayer:FindFirstChild("Backpack")
-        if char and bag then
-            for _, tool in ipairs(bag:GetChildren()) do
-                if tool:IsA("Tool") and tool.Name ~= "[Knife]" and not tool.Name:lower():find("knife") then
-                    hum = char:FindFirstChildOfClass("Humanoid")
-                    if hum then hum:EquipTool(tool) end
-                    break
-                end
-            end
-        end
-    end)
-    task.spawn(function()
-        while getgenv()._CTRL_KILL_GEN == gen do
-            if not target.Parent then break end
-            local alive = true
-            if F.isFullyAlive then
-                alive = F.isFullyAlive(target)
-            else
-                local h = target.Character and target.Character:FindFirstChildOfClass("Humanoid")
-                alive = h and h.Health > 0
-            end
-            if not alive then
-                if not isAuto then break end
-                task.wait(0.15)
-            else
-                -- skip forcefield
-                local ff = target.Character and target.Character:FindFirstChildOfClass("ForceField")
-                if not ff then
-                    if F.FireForceHit then pcall(F.FireForceHit, target) end
-                    if F.forceHitTick then pcall(F.forceHitTick, target) end
+
+    -- use the same kill methods as bots (orbit / tween / spamvoid via StartKillAttackLoop)
+    if F.StartKill then
+        F.StartKill({ target }, isAuto and true or false)
+    else
+        -- fallback
+        getgenv()._CTRL_KILL_GEN = (getgenv()._CTRL_KILL_GEN or 0) + 1
+        local gen = getgenv()._CTRL_KILL_GEN
+        CurrentAction = isAuto and "autokill" or "kill"
+        TargetPlayer = target
+        KillPhase = "attack"
+        if F.StartGlue then F.StartGlue(UseGun and "gun" or "knife", target) end
+        if F.StartCameraLock then F.StartCameraLock(target) end
+        if F.EquipBestWeapon then F.EquipBestWeapon() end
+        if F.StartKillAttackLoop then F.StartKillAttackLoop() end
+        task.spawn(function()
+            while getgenv()._CTRL_KILL_GEN == gen and (CurrentAction == "kill" or CurrentAction == "autokill") do
+                if not target.Parent then break end
+                local tChar = target.Character
+                local ko = tChar and F.isKnocked and F.isKnocked(tChar)
+                local dead = tChar and tChar:FindFirstChildOfClass("Humanoid") and tChar:FindFirstChildOfClass("Humanoid").Health <= 0
+                if ko or dead then
+                    if AutoStompEnabled or true then
+                        -- one stomp cycle on this target only
+                        local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        local ut = tChar and (tChar:FindFirstChild("UpperTorso") or tChar:FindFirstChild("HumanoidRootPart"))
+                        local ret = hrp and hrp.CFrame
+                        if hrp and ut then
+                            pcall(function()
+                                hrp.CFrame = CFrame.new(ut.Position + Vector3.new(0, StompHeight or 3.4, 0))
+                                hrp.AssemblyLinearVelocity = Vector3.zero
+                            end)
+                            RunService.RenderStepped:Wait()
+                            if MainEvent then
+                                for _ = 1, 5 do pcall(function() MainEvent:FireServer("Stomp") end) end
+                            end
+                            if ret then pcall(function() hrp.CFrame = ret end) end
+                        end
+                    end
+                    if not isAuto then break end
+                    -- wait FF then continue
+                    task.wait(0.2)
+                else
+                    local ff = tChar and tChar:FindFirstChildOfClass("ForceField")
+                    if not ff and F.FireForceHit then pcall(F.FireForceHit, target) end
                     if F.TryReload then pcall(F.TryReload) end
                 end
+                RunService.Heartbeat:Wait()
             end
-            RunService.Heartbeat:Wait()
-        end
-        if getgenv()._CTRL_KILL_GEN == gen then
-            ForceHitCmdTarget = nil
-            if CurrentAction == "autokill" or CurrentAction == "kill" then
-                CurrentAction = "idle"
+            if getgenv()._CTRL_KILL_GEN == gen then
+                ForceHitCmdTarget = nil
+                if CurrentAction == "autokill" or CurrentAction == "kill" then
+                    CurrentAction = "idle"
+                end
+                if F.StopKillAttackLoop then pcall(F.StopKillAttackLoop) end
             end
-        end
-    end)
+        end)
+    end
 end
 
 
@@ -10175,6 +10392,62 @@ return library]=]
         end)
     end })
 
+    -- View / Bring / Teleport (bots)
+    local viewTargetPlr = nil
+    secAK:button({ name = "view", callback = function()
+        local x = resolveRageTarget()
+        if not x then warn("[NAMELESS] set a target first") return end
+        local plr = nil
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower() == x:lower() or (p.DisplayName and p.DisplayName:lower() == x:lower()) then
+                plr = p
+                break
+            end
+        end
+        if not plr or not plr.Character then warn("[NAMELESS] target not found") return end
+        viewTargetPlr = plr
+        local hum = plr.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            pcall(function() workspace.CurrentCamera.CameraSubject = hum end)
+        end
+    end })
+    secAK:button({ name = "unview", callback = function()
+        viewTargetPlr = nil
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            pcall(function() workspace.CurrentCamera.CameraSubject = hum end)
+        end
+    end })
+    secAK:button({ name = "bring", callback = function()
+        local x = resolveRageTarget()
+        if not x then warn("[NAMELESS] set a target first") return end
+        runCmd("bring " .. x)
+    end })
+    secAK:button({ name = "teleport", callback = function()
+        local x = resolveRageTarget()
+        if x and x ~= "" then
+            -- teleport bots formation OR local to target
+            runCmd("teleport")
+            local plr = nil
+            for _, p in ipairs(Players:GetPlayers()) do
+                if p.Name:lower() == x:lower() or (p.DisplayName and p.DisplayName:lower() == x:lower()) then
+                    plr = p
+                    break
+                end
+            end
+            if plr and plr.Character and plr.Character:FindFirstChild("HumanoidRootPart") then
+                local root = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                if root then
+                    pcall(function()
+                        root.CFrame = plr.Character.HumanoidRootPart.CFrame * CFrame.new(0, 0, 3)
+                    end)
+                end
+            end
+        else
+            runCmd("teleport")
+        end
+    end })
+
     -- Player relation list (moved from left library panel)
     local secPL = tabRage:section({ name = "player list", side = "right" })
     PlayerRelation = PlayerRelation or {}
@@ -10344,6 +10617,8 @@ return library]=]
     secCmd:button({ name = "stop", callback = function() runCmd("stop") end })
     secCmd:button({ name = "forcehit once", callback = function() if cmdTarget ~= "" then runCmd("forcehit " .. cmdTarget) end end })
     secCmd:button({ name = "forcehit2 loop", callback = function() if cmdTarget ~= "" then runCmd("forcehit2 " .. cmdTarget) end end })
+    secCmd:button({ name = "bring", callback = function() if cmdTarget ~= "" then runCmd("bring " .. cmdTarget) end end })
+    secCmd:button({ name = "teleport", callback = function() runCmd("teleport") end })
 
     
     local secDance = tabCmd:section({ name = "dances", side = "left" })
@@ -11009,119 +11284,293 @@ function F.StartBring(targets)
     if FrozenByPrivilege then return end
     local target = typeof(targets) == "table" and targets[1] or targets
     if not target then return end
-    -- only slot 1 carries (or if no slots)
-    if MySlot and MySlot > 1 and MySlot ~= 1 then
-        -- other bots idle while slot 1 brings
+    -- only slot 1 carries
+    if MySlot and MySlot > 1 then
         CurrentAction = "idle"
         return
     end
     PendingAutokill, SavedKillTargets = nil, nil
     F.StopAll()
-    CurrentAction, TargetPlayer, BringStage, GrabOnceDone = "bring", target, "kill", false
+    CurrentAction, TargetPlayer, BringStage = "bring", target, "kill"
     local bringGen = (getgenv()._BRING_GEN or 0) + 1
     getgenv()._BRING_GEN = bringGen
 
-    task.spawn(function()
-        -- equip DB
-        F.EquipDoubleBarrel()
-        while CurrentAction == "bring" and getgenv()._BRING_GEN == bringGen do
-            if not TargetPlayer or not TargetPlayer.Parent then
-                break
+    local BODY_PARTS = { "HumanoidRootPart", "UpperTorso", "LowerTorso", "Head" }
+    local savedCF = nil
+    local activeGun, activeHeight, activeDist, knifeMode = "uzi", 200, 0.01, false
+    local lastReload, lastTp, lastG = 0, 0, 0
+
+    local function getRoot()
+        local c = LocalPlayer.Character
+        return c and (c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso"))
+    end
+    local function isKnocked(char)
+        if not char then return true end
+        if F.isKnocked and F.isKnocked(char) then return true end
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if hum and hum.Health <= 0 then return true end
+        local be = char:FindFirstChild("BodyEffects")
+        if be then
+            local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
+            if ko and ko.Value then return true end
+        end
+        return false
+    end
+    local function bodyStill(char)
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        if not hrp then return false end
+        local v = hrp.AssemblyLinearVelocity or hrp.Velocity or Vector3.zero
+        return v.Magnitude <= 0.35
+    end
+    local function isGrabbed()
+        local char = LocalPlayer.Character
+        if not char then return false end
+        local be = char:FindFirstChild("BodyEffects")
+        if be then
+            local g = be:FindFirstChild("Grabbed")
+            if g and g.Value and g.Value ~= false and g.Value ~= 0 then return true end
+        end
+        return false
+    end
+    local function setGlue(part)
+        local root = getRoot()
+        if not root or not part then return end
+        if F.SetPhysicsRepRootPart then
+            pcall(F.SetPhysicsRepRootPart, root, part)
+        elseif sethiddenproperty then
+            pcall(function() sethiddenproperty(root, "PhysicsRepRootPart", part) end)
+        end
+        pcall(function()
+            root.CanCollide = false
+            root.AssemblyLinearVelocity = Vector3.zero
+        end)
+    end
+    local function findTool(keys)
+        local char, bag = LocalPlayer.Character, LocalPlayer:FindFirstChild("Backpack")
+        for _, parent in ipairs({ char, bag }) do
+            if parent then
+                for _, tool in ipairs(parent:GetChildren()) do
+                    if tool:IsA("Tool") then
+                        local n = tool.Name:lower()
+                        for _, k in ipairs(keys) do
+                            if n:find(k, 1, true) then return tool end
+                        end
+                    end
+                end
             end
+        end
+        return nil
+    end
+    local function resolveWeapon()
+        knifeMode = false
+        activeDist, activeHeight = 0.01, 200
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        local uzi = findTool({ "uzi", "smg" })
+        if uzi then
+            activeGun = "uzi"
+            if hum and uzi.Parent ~= LocalPlayer.Character then pcall(function() hum:EquipTool(uzi) end) end
+            return uzi
+        end
+        local rev = findTool({ "revolver", "rev" })
+        if rev then
+            activeGun = "rev"
+            if hum and rev.Parent ~= LocalPlayer.Character then pcall(function() hum:EquipTool(rev) end) end
+            return rev
+        end
+        local db = findTool({ "double", "doublebarrel", "db" }) or findTool({ "shotgun" })
+        if db then
+            activeGun = "db"
+            activeHeight = 7
+            if hum and db.Parent ~= LocalPlayer.Character then pcall(function() hum:EquipTool(db) end) end
+            return db
+        end
+        local knife = findTool({ "knife" })
+        if knife then
+            knifeMode = true
+            activeGun = "knife"
+            activeDist = 10
+            activeHeight = -2
+            if hum and knife.Parent ~= LocalPlayer.Character then pcall(function() hum:EquipTool(knife) end) end
+            return knife
+        end
+        return nil
+    end
+    local function tryReload()
+        local now = tick()
+        if now - lastReload < 0.35 then return end
+        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        if not tool or tool.Name:lower():find("knife") then return end
+        local ammo = tool:FindFirstChild("Ammo", true)
+        if ammo and ammo:IsA("ValueBase") and ammo.Value == 0 then
+            lastReload = now
+            pcall(function()
+                game:GetService("VirtualInputManager"):SendKeyEvent(true, Enum.KeyCode.R, false, game)
+                task.wait(0.03)
+                game:GetService("VirtualInputManager"):SendKeyEvent(false, Enum.KeyCode.R, false, game)
+            end)
+            if MainEvent then pcall(function() MainEvent:FireServer("Reload") end) end
+        end
+    end
+    local function pressG()
+        pcall(function()
+            local VIM = game:GetService("VirtualInputManager")
+            VIM:SendKeyEvent(true, Enum.KeyCode.G, false, game)
+            task.wait(0.05)
+            VIM:SendKeyEvent(false, Enum.KeyCode.G, false, game)
+        end)
+        if MainEvent then
+            pcall(function() MainEvent:FireServer("Grabbing", true) end)
+            pcall(function() MainEvent:FireServer("Grabbing", false) end)
+        end
+        if F.PressG then pcall(F.PressG) end
+    end
+    local function pressDrop()
+        if F.PressDrop then pcall(F.PressDrop) return end
+        pcall(function()
+            local VIM = game:GetService("VirtualInputManager")
+            VIM:SendKeyEvent(true, Enum.KeyCode.G, false, game)
+            task.wait(0.05)
+            VIM:SendKeyEvent(false, Enum.KeyCode.G, false, game)
+        end)
+        if MainEvent then pcall(function() MainEvent:FireServer("Grabbing", false) end) end
+    end
+    local function killPos()
+        local root = getRoot()
+        local thrp = TargetPlayer.Character and TargetPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not root or not thrp then return end
+        if knifeMode then
+            pcall(function()
+                root.CFrame = CFrame.new(thrp.Position + Vector3.new(0, -math.abs(activeDist), 0), thrp.Position)
+                root.AssemblyLinearVelocity = Vector3.zero
+            end)
+        else
+            local look = thrp.CFrame.LookVector
+            local flat = Vector3.new(look.X, 0, look.Z)
+            if flat.Magnitude < 0.05 then flat = Vector3.new(0, 0, 1) else flat = flat.Unit end
+            local goal = thrp.Position - flat * activeDist + Vector3.new(0, activeHeight, 0)
+            pcall(function()
+                root.CFrame = CFrame.new(goal, thrp.Position)
+                root.AssemblyLinearVelocity = Vector3.zero
+            end)
+        end
+        setGlue(thrp)
+    end
+    local function tpRandomBody()
+        local tChar = TargetPlayer and TargetPlayer.Character
+        if not tChar then return end
+        local name = BODY_PARTS[math.random(1, #BODY_PARTS)]
+        local part = tChar:FindFirstChild(name) or tChar:FindFirstChild("HumanoidRootPart")
+        local root = getRoot()
+        if not root or not part then return end
+        pcall(function()
+            root.CanCollide = false
+            root.AssemblyLinearVelocity = Vector3.zero
+            root.CFrame = CFrame.new(part.Position + Vector3.new(0, 4, 0))
+        end)
+        setGlue(part)
+    end
+
+    task.spawn(function()
+        local r0 = getRoot()
+        if r0 then savedCF = r0.CFrame end
+        resolveWeapon()
+        while CurrentAction == "bring" and getgenv()._BRING_GEN == bringGen do
+            if not TargetPlayer or not TargetPlayer.Parent then break end
             local tChar = TargetPlayer.Character
-            local myChar = LocalPlayer.Character
-            local root = myChar and myChar:FindFirstChild("HumanoidRootPart")
-            local thrp = tChar and (tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso"))
 
             if BringStage == "kill" then
-                -- KO check
-                local knocked = false
-                if tChar then
-                    if F.isKnocked and F.isKnocked(tChar) then knocked = true end
-                    local hum = tChar:FindFirstChildOfClass("Humanoid")
-                    if hum and hum.Health <= 0 then knocked = true end
-                    local be = tChar:FindFirstChild("BodyEffects")
-                    if be then
-                        local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
-                        if ko and ko.Value then knocked = true end
-                    end
-                end
-                if knocked then
-                    BringStage = "grab"
+                if tChar and isKnocked(tChar) then
+                    BringStage = "waitstill"
+                    pcall(function()
+                        local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                        if h then h:UnequipTools() end
+                    end)
                 else
-                    -- CFrame follow close (behind ~0.1 height, 0.1-7 studs)
-                    if root and thrp then
-                        local look = thrp.CFrame.LookVector
-                        local flat = Vector3.new(look.X, 0, look.Z)
-                        if flat.Magnitude < 0.05 then flat = Vector3.new(0, 0, 1) else flat = flat.Unit end
-                        local goal = thrp.Position - flat * 7 + Vector3.new(0, 0.1, 0)
-                        pcall(function()
-                            root.AssemblyLinearVelocity = Vector3.zero
-                            root.CanCollide = false
-                            root.CFrame = CFrame.new(goal, thrp.Position)
-                        end)
+                    killPos()
+                    if not (LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")) then
+                        resolveWeapon()
                     end
-                    -- equip DB and max-damage forcehit
-                    F.EquipDoubleBarrel()
-                    F.FireDBMaxDamage(TargetPlayer)
+                    if knifeMode then
+                        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+                        if tool then pcall(function() tool:Activate() end) end
+                    else
+                        tryReload()
+                        if F.FireForceHit then
+                            F.FireForceHit(TargetPlayer)
+                        end
+                    end
                 end
 
-            elseif BringStage == "grab" then
-                -- stand on body + grab
-                if tChar and root then
-                    local torso = tChar:FindFirstChild("UpperTorso")
-                        or tChar:FindFirstChild("Torso")
-                        or tChar:FindFirstChild("HumanoidRootPart")
-                    if torso then
-                        pcall(function()
-                            root.AssemblyLinearVelocity = Vector3.zero
-                            root.CFrame = CFrame.new(torso.Position + Vector3.new(0, 3, 0))
-                        end)
+            elseif BringStage == "waitstill" then
+                local stillStart, deadline = nil, tick() + 6
+                while CurrentAction == "bring" and getgenv()._BRING_GEN == bringGen and tick() < deadline do
+                    if tick() - lastTp >= 0.1 then tpRandomBody() lastTp = tick() end
+                    tChar = TargetPlayer and TargetPlayer.Character
+                    if tChar and bodyStill(tChar) then
+                        stillStart = stillStart or tick()
+                        if tick() - stillStart >= 0.35 then break end
+                    else
+                        stillStart = nil
                     end
+                    RunService.Heartbeat:Wait()
                 end
-                -- unequip gun before grab
-                pcall(function()
-                    local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                    if h then h:UnequipTools() end
-                end)
-                F.PressGrab()
-                if F.IsBodyGrabbed() or GrabOnceDone then
-                    GrabOnceDone = true
+                BringStage = "grab"
+
+            elseif BringStage == "grab" then
+                local grabbedSince, deadline = nil, tick() + 8
+                while CurrentAction == "bring" and getgenv()._BRING_GEN == bringGen and tick() < deadline do
+                    if tick() - lastTp >= 0.1 then tpRandomBody() lastTp = tick() end
+                    if tick() - lastG >= 0.75 then pressG() lastG = tick() end
+                    if isGrabbed() then
+                        grabbedSince = grabbedSince or tick()
+                        if tick() - grabbedSince >= 0.6 then break end
+                    else
+                        grabbedSince = nil
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+                if not isGrabbed() then
+                    CurrentAction = "idle"
+                    TargetPlayer = nil
+                    break
+                end
+                BringStage = "carry"
+
+            elseif BringStage == "carry" then
+                local t0 = tick()
+                while CurrentAction == "bring" and getgenv()._BRING_GEN == bringGen and tick() - t0 < 2 do
+                    if tick() - lastTp >= 0.1 then tpRandomBody() lastTp = tick() end
+                    if not isGrabbed() then
+                        BringStage = "grab"
+                        break
+                    end
+                    RunService.Heartbeat:Wait()
+                end
+                if BringStage == "grab" then
+                    -- re-enter grab
+                elseif isGrabbed() then
                     BringStage = "return"
-                    task.wait(0.3)
+                else
+                    CurrentAction = "idle"
+                    TargetPlayer = nil
+                    break
                 end
 
             elseif BringStage == "return" then
-                -- teleport to controller while carrying
-                local ctrl = nil
-                if F.GetController then ctrl = F.GetController() end
-                if not ctrl then
-                    for _, plr in ipairs(Players:GetPlayers()) do
-                        if plr.Name == ControllerName then ctrl = plr break end
-                    end
+                -- hard TP home only after secure carry
+                local root = getRoot()
+                if root and savedCF then
+                    pcall(function()
+                        root.AssemblyLinearVelocity = Vector3.zero
+                        root.CFrame = savedCF
+                    end)
                 end
-                local oRoot = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
-                if oRoot and root then
-                    -- keep grab spam briefly
-                    F.PressGrab()
-                    for _ = 1, 15 do
-                        if CurrentAction ~= "bring" or getgenv()._BRING_GEN ~= bringGen then break end
-                        pcall(function()
-                            root.AssemblyLinearVelocity = Vector3.zero
-                            root.CFrame = CFrame.new(oRoot.Position + Vector3.new(0, 5, 0))
-                        end)
-                        RunService.Heartbeat:Wait()
-                    end
-                    task.wait(0.4)
-                    BringStage = "drop"
-                else
-                    task.wait(0.2)
-                end
-
-            elseif BringStage == "drop" then
-                F.PressDrop()
-                task.wait(0.35)
-                F.PressDrop()
+                task.wait(0.2)
+                pressDrop()
+                task.wait(0.15)
+                pressDrop()
+                root = getRoot()
+                if root and savedCF then pcall(function() root.CFrame = savedCF end) end
                 CurrentAction = "idle"
                 TargetPlayer = nil
                 BringStage = nil
@@ -11709,9 +12158,36 @@ if not KillAuraEnabled then F.StartKillAura() end
             KillAuraRange = getgenv().KillAura.Range
         end
     elseif cmd == "autostomp" then
-        if args[2] == "on" then AutoStompEnabled = true F.StartContinuousAutostomp()
-        elseif args[2] == "off" then AutoStompEnabled = false F.StopContinuousAutostomp()
-        else AutoStompEnabled = not AutoStompEnabled if AutoStompEnabled then F.StartContinuousAutostomp() else F.StopContinuousAutostomp() end end
+        -- !autostomp on|off [target] — target-only stomp (no nearest scan)
+        local mode = args[2] and args[2]:lower() or nil
+        local tname = args[3] or ((mode and mode ~= "on" and mode ~= "off") and args[2] or nil)
+        if tname and tname ~= "on" and tname ~= "off" then
+            local plr = F.FindPlayerAny and F.FindPlayerAny(tname) or nil
+            if not plr then
+                for _, p in ipairs(Players:GetPlayers()) do
+                    if p.Name:lower() == tname:lower() or (p.DisplayName and p.DisplayName:lower() == tname:lower()) then
+                        plr = p
+                        break
+                    end
+                end
+            end
+            if plr then
+                getgenv().AutostompTarget = plr
+                TargetPlayer = TargetPlayer or plr
+            end
+        elseif TargetPlayer then
+            getgenv().AutostompTarget = TargetPlayer
+        end
+        if mode == "on" then
+            AutoStompEnabled = true
+            F.StartContinuousAutostomp()
+        elseif mode == "off" then
+            AutoStompEnabled = false
+            F.StopContinuousAutostomp()
+        else
+            AutoStompEnabled = not AutoStompEnabled
+            if AutoStompEnabled then F.StartContinuousAutostomp() else F.StopContinuousAutostomp() end
+        end
     elseif cmd == "whitelist" and args[2] then
         F.addWhitelistName(args[2])
         local p = F.FindPlayerAny(args[2])
