@@ -1,3 +1,34 @@
+--[[
+    NAMELESS.HVH - Stand Controller
+]]
+------------------------ EDIT THESE ------------------------
+local ControllerName = "godlyseananners9"
+local OriginalControllerName = ControllerName
+local BotListOrdered = {
+    "joker_thekillerguy",
+    "cepit775B9",
+    "UHCaltForShewwsh7",
+    "", -- 4
+    "", -- 5
+    "", -- 6
+    "", -- 7
+    "", -- 8
+    "", -- 9
+    "", -- 10
+    "", -- 11
+    "", -- 12
+    "", -- 13
+    "", -- 14
+    "", -- 15
+    "", -- 16
+    "", -- 17
+    "", -- 18
+    "", -- 19
+    "", -- 20
+}
+local MaxBots = 20
+local PREFIX = "NAMELESS.HVH | !"
+-------------------------------------------------------------
 
 getgenv().NAMELESS_BOOT = true
 MenuKey = MenuKey or Enum.KeyCode.LeftShift
@@ -1380,6 +1411,7 @@ function F.ApplyFullbright()
             -- never remove / replace skybox
             if v:IsA("Sky") or v.ClassName == "Sky" then
                 -- keep
+                ; -- noop
             elseif v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect")
                 or v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") then
                 pcall(function() v:Destroy() end)
@@ -1399,6 +1431,7 @@ function F.MuteSoundsSmart()
                     or n:find("channel") or n:find("vc") or s:GetAttribute("VoiceChat"))
                 if keepVoice then
                     -- leave voicechat
+                ; -- noop
                 else
                     s.Volume = 0
                     pcall(function() s:Stop() end)
@@ -1411,6 +1444,7 @@ function F.MuteSoundsSmart()
                 local n = string.lower(s.Name)
                 if isCtrl and (n:find("voice") or n:find("mic")) then
                     -- keep
+                ; -- noop
                 else
                     s.Volume = 0
                 end
@@ -1453,8 +1487,10 @@ function F.RebuildCullCache()
         for _, child in ipairs(workspace:GetChildren()) do
             if child:IsA("Terrain") or child.Name == "Terrain" or child:IsA("Camera") then
                 -- skip
+                ; -- noop
             elseif charSet[child] then
                 -- skip characters
+                ; -- noop
             else
                 if child:IsA("BasePart") then
                     cache[#cache + 1] = child
@@ -1772,6 +1808,7 @@ function F.ForceLocalVisibility(char)
                 d.LocalTransparencyModifier = 0
                 if d.Name ~= "HumanoidRootPart" and d.Transparency > 0.9 and d.Name ~= "Handle" then
                     -- don't force tool handles
+                ; -- noop
                 end
             end)
         elseif d:IsA("Decal") or d:IsA("Texture") then
@@ -2241,6 +2278,7 @@ function F.loadFlyAnims()
             for _, d in ipairs(animate:GetDescendants()) do
                 if d:IsA("Animation") then
                     -- leave assets; just keep script disabled
+                ; -- noop
                 end
             end
         end)
@@ -4200,6 +4238,7 @@ function F.GetClosestInFOV()
         if plr ~= LocalPlayer and F.isFullyAlive and F.isFullyAlive(plr) then
             if F.isWhitelisted and F.isWhitelisted(plr) then
                 -- skip
+                ; -- noop
             else
                 local head = plr.Character and plr.Character:FindFirstChild("Head")
                 if head then
@@ -4808,6 +4847,7 @@ function F.SetAimbot(on)
         if not AimbotEnabled then return end
         if not UserInputService:IsKeyDown(AimbotKey) and AimbotKey ~= Enum.KeyCode.Unknown then
             -- hold mode when key is not Unknown; if always on key Unknown then always
+                ; -- noop
         end
         local hold = UserInputService:IsKeyDown(AimbotKey)
         if not hold then return end
@@ -5952,6 +5992,7 @@ function F.StartBring(targets)
                 end
                 if BringStage == "grab" then
                     -- re-enter grab
+                ; -- noop
                 elseif isGrabbed() then
                     BringStage = "return"
                 else
@@ -6350,24 +6391,13 @@ if cmd == "stop" or cmd == "idle" then
         SpamVoidWeapon = "knife"
         F.SetKillMethod("spamvoid")
         withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
-    elseif cmd == "agsk_removed" then
-        UseGun = true
-        SpamVoidWeapon = "gun"
-        F.SetKillMethod("spamvoid")
-        withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
     elseif cmd == "ownerpos" or cmd == "powner" or cmd == "protectowner" then
         F.StartProtectOwner()
     elseif cmd == "unownerpos" or cmd == "unpowner" or cmd == "unprotectowner" then
         F.StopProtectOwner()
-    elseif cmd == "bring" or cmd == "get" or cmd == "b" then
-        -- removed
-    elseif cmd == "void" then
-        -- removed
     -- formations (relative to controller unless a player name is given)
     elseif cmd == "back" then F.StartFormation("back", args[2])
     elseif cmd == "bline" then F.StartFormation("bline", args[2])
-    elseif cmd == "pole" or cmd == "stackon" then
-        -- removed
     elseif cmd == "around" then F.StartFormation("around", args[2])
     elseif cmd == "line" then F.StartFormation("line", args[2])
     elseif cmd == "rline" then F.StartFormation("rline", args[2])
@@ -6402,30 +6432,8 @@ if cmd == "stop" or cmd == "idle" then
     elseif cmd == "takel" or cmd == "l" then F.PlayEmote(Emotes["take the L"])
     elseif cmd == "darktriad" or cmd == "dark" then F.PlayEmote(Emotes.darktriad)
     elseif cmd == "vampire" or cmd == "upsidedown" then F.PlayEmote(Emotes.vampire)
-    elseif cmd == "sentry_removed" then
-        if args[2] == "on" or not args[2] then
-            SentryEnabled = true
-            F.StartSentry()
-        elseif args[2] == "off" then
-            SentryEnabled = false
-            F.StopSentry()
         end
-    elseif cmd == "sentry2_removed" then
-        if args[2] == "on" or not args[2] then
-            Sentry2Enabled = true
-            F.StartSentry2()
-        elseif args[2] == "off" then
-            Sentry2Enabled = false
-            F.StopSentry2()
         end
-    elseif cmd == "wallbang_removed" then
-        if args[2] == "off" then WallbangEnabled = false
-        else WallbangEnabled = true end -- force on by default
-    elseif cmd == "magicbullet_removed" then
-        if args[2] == "off" then MagicBulletEnabled = true
-        elseif args[2] == "on" then MagicBulletEnabled = true
-        else MagicBulletEnabled = not MagicBulletEnabled end
-
     elseif cmd == "orbit" then
         local a2 = args[2] and args[2]:lower() or ""
         local n = tonumber(args[2])
@@ -6465,11 +6473,6 @@ if cmd == "stop" or cmd == "idle" then
             FastKillMoveSpeed = BadExecutor and 100 or 1000
             F.SetKillMethod("tween")
         end
-    elseif cmd == "gunspamkill_removed" then
-        if args[2] ~= "off" then
-            UseGun = true
-            SpamVoidWeapon = "gun"
-            F.SetKillMethod("spamvoid")
         end
     elseif cmd == "knifespamkill" or cmd == "ksk" then
         if args[2] ~= "off" then
@@ -6510,10 +6513,6 @@ if cmd == "stop" or cmd == "idle" then
         local n = tonumber(args[2]); if n then SpamVoidInTime = math.clamp(n, 0.05, 5) end
     elseif cmd == "voidout" then
         local n = tonumber(args[2]); if n then SpamVoidOutTime = math.clamp(n, 0.05, 5) end
-    elseif cmd == "antilag_removed" then
-        if args[2] == "off" then F.SetAntiLag(false)
-        elseif args[2] == "on" then F.SetAntiLag(true)
-        else F.SetAntiLag(not AntiLagEnabled) end
     elseif cmd == "botesp" then
         if args[2] == "off" then F.SetBotEsp(false)
         elseif args[2] == "on" then F.SetBotEsp(true)
@@ -6545,10 +6544,6 @@ if not KillAuraEnabled then F.StartKillAura() end
     elseif cmd == "culldist" or cmd == "cull" then
         local n = tonumber(args[2])
         if n then OptCullRange = math.clamp(n, 10, 500) warn("[NAMELESS] cull distance = " .. OptCullRange) end
-    elseif cmd == "opt_removed" then
-        if args[2] == "off" then F.SetOptMode(false)
-        elseif args[2] == "on" then F.SetOptMode(true)
-        else F.SetOptMode(not OptMode) end
     elseif cmd == "uzi" or cmd == "rev" or cmd == "db" or cmd == "sg"
         or cmd == "tsg" or cmd == "tacticalsg" or cmd == "silencer" then
         F.SelectGun(cmd)
@@ -6622,10 +6617,6 @@ if not KillAuraEnabled then F.StartKillAura() end
         if args[2] == "on" then F.SetNoRender(true)
         elseif args[2] == "off" then F.SetNoRender(false)
         else F.SetNoRender(not NoRenderEnabled) end
-    elseif cmd == "autoheal_removed" then
-        if args[2] == "on" then AutoHealEnabled = true
-        elseif args[2] == "off" then AutoHealEnabled = false
-        else AutoHealEnabled = not AutoHealEnabled end
     elseif cmd == "hide" then
         F.StartHide()
     elseif cmd == "unhide" then
