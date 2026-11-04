@@ -1,4 +1,4 @@
---[[
+-[[
     NAMELESS.HVH - Stand Controller
 ]]
 ------------------------ EDIT THESE ------------------------
@@ -226,7 +226,7 @@ local PostStompHold, SummonHold = 0.35, 0.45
 -- Stomp height above body (code only, not in GUI)
 local StompHeight = 3.4
 local ForceHitFireRate, Prediction = 0.08, 0.135
-RapidFireEnabled = false
+RapidFireEnabled = true
 RapidFireRate = 0.0           -- no throttle between volleys when rapid
 NormalFireRate = 0.08         -- normal human-ish spacing
 RapidFireVolleys = 4          -- packets per burst (faster than real guns)
@@ -276,7 +276,6 @@ StompSelectedTarget = false
 ForceHitStompTarget = nil
 PlayerRelation = PlayerRelation or {} -- name.lower -> friendly|neutral|enemy
 CtrlOrbitMode = 1
-Orbit3Combat = false
 CtrlOrbitDist = 10
 CtrlOrbitSpeed = 10
 CtrlOrbitInDist = 5
@@ -290,7 +289,7 @@ FastKillLastTrigger = 0
 
 
 local FastKillBehindDist = 100
-local FastKillHitDist = 9
+local FastKillHitDist = 6
 local FastKillHitHold = 0.05
 local FastKillFrontDist = 100
 local FastKillMoveSpeed = 1000
@@ -2950,9 +2949,9 @@ function F.FireForceHit(target)
     if tool.Name:lower():find("knife") then return false end
     local handlePos = tool.Handle.Position
     local hitPos = hitPart.Position
+    -- Wallbang (default on): origin near target so walls do not block FH packets
     local originPos = handlePos
-    -- wallbang only during orbit 3 combat
-    if Orbit3Combat then
+    if WallbangEnabled ~= false then
         local dir = hitPos - handlePos
         if dir.Magnitude < 0.05 then dir = Vector3.new(0, 0, -1) else dir = dir.Unit end
         originPos = hitPos - dir * 1.5
@@ -2962,12 +2961,12 @@ function F.FireForceHit(target)
     if string.find(name, "shotgun") or string.find(name, "tactical") or string.find(name, "db") or string.find(name, "double") then
         pellets = 5
     end
-    local volleys = (RapidFireEnabled or Orbit3Combat) and (RapidFireVolleys or 4) or 1
+    local volleys = RapidFireEnabled and (RapidFireVolleys or 4) or 1
     for v = 1, volleys do
         local hits = {}
         for i = 1, pellets do
             local pos = hitPos
-            if pellets > 1 or RapidFireEnabled or Orbit3Combat then
+            if pellets > 1 or RapidFireEnabled then
                 pos = hitPos + Vector3.new(
                     math.random(-20, 20) / 100,
                     math.random(-20, 20) / 100,
@@ -2994,8 +2993,7 @@ function F.FireForceHit(target)
         pcall(function() MainEvent:FireServer("Shoot", packet) end)
     end
     -- Magic bullet: packet-only (no tool Activate free-fire)
-    -- magic bullet only during orbit 3 combat (packet only); otherwise also Activate
-    if not Orbit3Combat then
+    if not MagicBulletEnabled then
         pcall(function() tool:Activate() end)
     end
     _lastFHFire = now
@@ -3146,10 +3144,6 @@ function F.StopAll()
     FormationTarget, FormationType = nil, nil
     BringStage, GrabOnceDone = nil, false
     KillPhase, StompDoneForCycle = "attack", false
-    -- end orbit 3 combat suite
-    Orbit3Combat = false
-    RapidFireEnabled = false
-    if F.StopOrbit3CombatLoop then F.StopOrbit3CombatLoop() end
     if F.StopKillAttackLoop then F.StopKillAttackLoop() end
     if F.StopKillVisualSpoof then F.StopKillVisualSpoof() end
     F.StopGlue()
@@ -3687,16 +3681,8 @@ function F.FastKillStep(target)
     local dt = FastKillLastStep > 0 and math.clamp(now - FastKillLastStep, 0, 0.05) or 0.016
     FastKillLastStep = now
 
-    -- tweenkill: 100 stud / 1000 speed; gun fastkill uses injected FastKillMoveSpeed/HitDist
-    local m = F.GetKillMethod and F.GetKillMethod() or "tween"
-    if m == "tween" then
-        FastKillFrontDist = 100
-        FastKillBehindDist = 100
-        FastKillMoveSpeed = 1000
-        FastKillHitDist = 9
-    end
     local startPos, hitPos, endPos = F.getTweenKillPath(tRoot)
-    local speed = math.max(FastKillMoveSpeed or 1000, 200)
+    local speed = math.max(FastKillMoveSpeed or 2500, 200)
 
     -- pure CFrame tween (no PhysicsRep fight during path)
     pcall(function() workspace.FallenPartsDestroyHeight = -50000 end)
@@ -3944,17 +3930,6 @@ function F.UziKillStep(target)
     return false
 end
 
-function F.GetGunHitDistance()
-    local char = LocalPlayer.Character
-    local tool = char and char:FindFirstChildOfClass("Tool")
-    local n = tool and string.lower(tool.Name) or ""
-    if n:find("shotgun") or n:find("tactical") or n:find("db") or n:find("double") or n:find("sg") then
-        return 9
-    end
-    -- rev / silencer / uzi / default
-    return 30
-end
-
 function F.DBFastKillStep(target)
     local tChar = target and target.Character
     if not tChar then return true end
@@ -3966,29 +3941,21 @@ function F.DBFastKillStep(target)
     if not hum or hum.Health <= 0 then return true end
     if tChar:FindFirstChildOfClass("ForceField") then return false end
     UseGun = true
-    -- keep currently equipped gun; only equip if none
-    local char = LocalPlayer.Character
-    local tool = char and char:FindFirstChildOfClass("Tool")
-    if not tool or tool.Name:lower():find("knife") then
-        if F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
-    end
-    local hitDist = F.GetGunHitDistance()
-    local prevHit, prevSpeed = FastKillHitDist, FastKillMoveSpeed
-    FastKillHitDist = hitDist
-    FastKillMoveSpeed = 200
-    local done = false
+    -- equip DB
+    if F.EquipDoubleBarrel then pcall(F.EquipDoubleBarrel)
+    elseif F.SelectGun then pcall(F.SelectGun, "db")
+    elseif F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
+    -- reuse fast kill tween path with gun
     if F.FastKillStep then
-        done = F.FastKillStep(target)
-    else
-        local off = F.GetKillOffset(tRoot, KillPosition, hitDist)
-        pcall(function()
-            r.CFrame = CFrame.lookAt(tRoot.Position + off, tRoot.Position)
-            r.AssemblyLinearVelocity = Vector3.zero
-        end)
-        if F.FireForceHit then pcall(F.FireForceHit, target) end
+        return F.FastKillStep(target)
     end
-    FastKillHitDist, FastKillMoveSpeed = prevHit, prevSpeed
-    return done
+    local off = F.GetKillOffset(tRoot, KillPosition, KillDistance or 8)
+    pcall(function()
+        r.CFrame = CFrame.new(tRoot.Position + off, tRoot.Position)
+        r.AssemblyLinearVelocity = Vector3.zero
+    end)
+    if F.FireForceHit then pcall(F.FireForceHit, target) end
+    return false
 end
 
 function F.StartKillAttackLoop()
@@ -5056,18 +5023,18 @@ function F.CreateNamelessGui()
 
     local frame = Instance.new("Frame")
     frame.Name = "Main"
-    frame.Size = UDim2.new(0, 280, 0, 260)
+    frame.Size = UDim2.new(0, 340, 0, 320)
     frame.Position = UDim2.new(0, 16, 0.3, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
-    frame.BackgroundTransparency = 0.35
+    frame.BackgroundColor3 = Color3.fromRGB(16, 16, 20)
+    frame.BackgroundTransparency = 0.1
     frame.BorderSizePixel = 0
     frame.Active = true
     frame.Parent = gui
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
 
     local minimized = false
-    local fullSize = UDim2.new(0, 280, 0, 260)
-    local miniSize = UDim2.new(0, 150, 0, 32)
+    local fullSize = UDim2.new(0, 340, 0, 320)
+    local miniSize = UDim2.new(0, 180, 0, 36)
 
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, -70, 0, 26)
@@ -5458,75 +5425,6 @@ F.StartFollow = function()
     F.updateFlyAnim()
 end
 
-
-function F.FireAtControllerNoHit(ctrl)
-    -- Shoot controller with wallbang-style origin so the server should not register a real hit
-    if not ctrl or not ctrl.Character then return end
-    if not MainEvent then
-        MainEvent = game:GetService("ReplicatedStorage"):FindFirstChild("MainEvent")
-            or game:GetService("ReplicatedStorage"):FindFirstChild("MainRemoteEvent")
-    end
-    if not MainEvent then return end
-    local tChar = ctrl.Character
-    local hitPart = tChar:FindFirstChild("Head") or tChar:FindFirstChild("UpperTorso") or tChar:FindFirstChild("HumanoidRootPart")
-    if not hitPart then return end
-    local myChar = LocalPlayer.Character
-    if not myChar then return end
-    local tool = myChar:FindFirstChildOfClass("Tool")
-    if not tool or not tool:FindFirstChild("Handle") then
-        if F.SelectGun then pcall(F.SelectGun, "uzi") end
-        if F.EquipBestWeapon then tool = F.EquipBestWeapon() end
-    end
-    if not tool or not tool:FindFirstChild("Handle") then return end
-    local handlePos = tool.Handle.Position
-    local hitPos = hitPart.Position
-    -- wallbang origin at target (should error / not register on controller)
-    local dir = hitPos - handlePos
-    if dir.Magnitude < 0.05 then dir = Vector3.new(0, 0, -1) else dir = dir.Unit end
-    local originPos = hitPos - dir * 1.5
-    local aim = hitPos + dir * 25
-    getgenv().FH_Index = ((getgenv().FH_Index or 0) + 1) % 100
-    local hits = {{
-        PELLET = 1,
-        POSITION = hitPos,
-        MODEL = tChar,
-        PART = hitPart,
-    }}
-    local packet = {
-        INDEX = getgenv().FH_Index,
-        AIM = aim,
-        ORIGIN = originPos,
-        HITS = hits,
-    }
-    pcall(function() MainEvent:FireServer("Shoot", packet) end)
-end
-
-function F.StartOrbit3CombatLoop()
-    if getgenv()._Orbit3Conn then pcall(function() getgenv()._Orbit3Conn:Disconnect() end) end
-    getgenv()._Orbit3Conn = RunService.Heartbeat:Connect(function()
-        if not Orbit3Combat or CurrentAction ~= "formation" or FormationType ~= "corbit" then
-            return
-        end
-        UseGun = true
-        RapidFireEnabled = true
-        if F.SelectGun then pcall(F.SelectGun, "uzi") end
-        local ctrl = F.GetController and F.GetController()
-        if ctrl then
-            pcall(F.FireAtControllerNoHit, ctrl)
-        end
-        if F.TryReload then pcall(F.TryReload) end
-    end)
-end
-
-function F.StopOrbit3CombatLoop()
-    Orbit3Combat = false
-    RapidFireEnabled = false
-    if getgenv()._Orbit3Conn then
-        pcall(function() getgenv()._Orbit3Conn:Disconnect() end)
-        getgenv()._Orbit3Conn = nil
-    end
-end
-
 function F.StartControllerOrbit(mode)
     if FrozenByPrivilege then return end
     if not F.CanSummon() then return end
@@ -5535,19 +5433,6 @@ function F.StartControllerOrbit(mode)
     CurrentAction = "formation"
     FormationType = "corbit"
     FormationTarget = F.GetController()
-    -- orbit 3: normal orbit + uzi + rapid + wallbang + magic bullet
-    if CtrlOrbitMode == 3 then
-        Orbit3Combat = true
-        RapidFireEnabled = true
-        UseGun = true
-        if F.SelectGun then pcall(F.SelectGun, "uzi") end
-        if F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
-        if F.StartOrbit3CombatLoop then F.StartOrbit3CombatLoop() end
-    else
-        Orbit3Combat = false
-        RapidFireEnabled = false
-        F.StopOrbit3CombatLoop()
-    end
     F.StartGlue("formation", FormationTarget)
     F.loadFlyAnims()
 end
