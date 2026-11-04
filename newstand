@@ -2,17 +2,17 @@
     NAMELESS.HVH - Stand Controller
 ]]
 ------------------------ EDIT THESE ------------------------
-local ControllerName = "godlyseananners9"
+local ControllerName = "imitationed"
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
-    "UHCaltForShewwsh7",
-    "HiddenGraves508",
-    "",
-    "", -- 4
-    "", -- 5
-    "", -- 6
-    "", -- 7
-    "", -- 8
+    "Witkni3416",
+    "Frosb4622",
+    "Kiptwist5311",
+    "Skybla1919", -- 4
+    "Boonlo8950", -- 5
+    "godlyseananners9", -- 6
+    "cepit2I167", -- 7
+    "cepit3634b", -- 8
     "", -- 9
     "", -- 10
     "", -- 11
@@ -212,8 +212,8 @@ local KA_OrbitSpeed = 1000
 local KA_SummonHold = 0.1
 local VoidY, VoidSpamDeep, VoidSpamSurface = -500, 0.3, 0.2
 -- spamvoid in/out customisable (seconds)
-local SpamVoidInTime = 0.30   -- time spent in void
-local SpamVoidOutTime = 0.15  -- time on surface after void before next shot
+local SpamVoidInTime = 0.10   -- time spent in void
+local SpamVoidOutTime = 0.10  -- time on surface after void before next shot
 local WaitFFDelay = 2.35      -- fixed forcefield wait (not in commands)
 -- kill position for orbit / spamvoid (and visual orbit spoof)
 local KillPosition = "Top"    -- Back | Front | Left | Right | Top | Bottom
@@ -226,7 +226,7 @@ local PostStompHold, SummonHold = 0.35, 0.45
 -- Stomp height above body (code only, not in GUI)
 local StompHeight = 3.4
 local ForceHitFireRate, Prediction = 0.08, 0.135
-RapidFireEnabled = true
+RapidFireEnabled = false
 RapidFireRate = 0.0           -- no throttle between volleys when rapid
 NormalFireRate = 0.08         -- normal human-ish spacing
 RapidFireVolleys = 4          -- packets per burst (faster than real guns)
@@ -276,6 +276,7 @@ StompSelectedTarget = false
 ForceHitStompTarget = nil
 PlayerRelation = PlayerRelation or {} -- name.lower -> friendly|neutral|enemy
 CtrlOrbitMode = 1
+Orbit3Combat = false
 CtrlOrbitDist = 10
 CtrlOrbitSpeed = 10
 CtrlOrbitInDist = 5
@@ -288,9 +289,8 @@ FastKillLastStep = 0
 FastKillLastTrigger = 0
 
 
--- Fast kill defaults (declared before lite overrides)
 local FastKillBehindDist = 100
-local FastKillHitDist = 6
+local FastKillHitDist = 9
 local FastKillHitHold = 0.05
 local FastKillFrontDist = 100
 local FastKillMoveSpeed = 1000
@@ -481,7 +481,6 @@ local VoidSpamEnabled, UseGun = false, true
 StompOnKill = true
 OrbitEnabled = true
 FastKillEnabled = false -- orbit is default kill method
--- Kill method: "tween" | "orbit" | "spamvoid"
 KillMethod = getgenv().NamelessKillMethod or "orbit"
 getgenv().NamelessKillMethod = KillMethod
 SpamVoidPhase = "surface" -- surface | void
@@ -496,8 +495,8 @@ function F.GetKillMethod()
 end
 
 function F.SetKillMethod(m)
-    if m ~= "tween" and m ~= "orbit" and m ~= "spamvoid" then
-        m = "tween"
+    if m ~= "tween" and m ~= "orbit" and m ~= "spamvoid" and m ~= "uzikill" and m ~= "fastkill" then
+        m = "orbit"
     end
     KillMethod = m
     getgenv().NamelessKillMethod = m
@@ -1413,6 +1412,7 @@ function F.ApplyFullbright()
             -- never remove / replace skybox
             if v:IsA("Sky") or v.ClassName == "Sky" then
                 -- keep
+                ; -- noop
             elseif v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect")
                 or v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") then
                 pcall(function() v:Destroy() end)
@@ -1432,6 +1432,7 @@ function F.MuteSoundsSmart()
                     or n:find("channel") or n:find("vc") or s:GetAttribute("VoiceChat"))
                 if keepVoice then
                     -- leave voicechat
+                ; -- noop
                 else
                     s.Volume = 0
                     pcall(function() s:Stop() end)
@@ -1444,6 +1445,7 @@ function F.MuteSoundsSmart()
                 local n = string.lower(s.Name)
                 if isCtrl and (n:find("voice") or n:find("mic")) then
                     -- keep
+                ; -- noop
                 else
                     s.Volume = 0
                 end
@@ -1486,8 +1488,10 @@ function F.RebuildCullCache()
         for _, child in ipairs(workspace:GetChildren()) do
             if child:IsA("Terrain") or child.Name == "Terrain" or child:IsA("Camera") then
                 -- skip
+                ; -- noop
             elseif charSet[child] then
                 -- skip characters
+                ; -- noop
             else
                 if child:IsA("BasePart") then
                     cache[#cache + 1] = child
@@ -1805,6 +1809,7 @@ function F.ForceLocalVisibility(char)
                 d.LocalTransparencyModifier = 0
                 if d.Name ~= "HumanoidRootPart" and d.Transparency > 0.9 and d.Name ~= "Handle" then
                     -- don't force tool handles
+                ; -- noop
                 end
             end)
         elseif d:IsA("Decal") or d:IsA("Texture") then
@@ -2274,6 +2279,7 @@ function F.loadFlyAnims()
             for _, d in ipairs(animate:GetDescendants()) do
                 if d:IsA("Animation") then
                     -- leave assets; just keep script disabled
+                ; -- noop
                 end
             end
         end)
@@ -2944,9 +2950,9 @@ function F.FireForceHit(target)
     if tool.Name:lower():find("knife") then return false end
     local handlePos = tool.Handle.Position
     local hitPos = hitPart.Position
-    -- Wallbang (default on): origin near target so walls do not block FH packets
     local originPos = handlePos
-    if WallbangEnabled ~= false then
+    -- wallbang only during orbit 3 combat
+    if Orbit3Combat then
         local dir = hitPos - handlePos
         if dir.Magnitude < 0.05 then dir = Vector3.new(0, 0, -1) else dir = dir.Unit end
         originPos = hitPos - dir * 1.5
@@ -2956,12 +2962,12 @@ function F.FireForceHit(target)
     if string.find(name, "shotgun") or string.find(name, "tactical") or string.find(name, "db") or string.find(name, "double") then
         pellets = 5
     end
-    local volleys = RapidFireEnabled and (RapidFireVolleys or 4) or 1
+    local volleys = (RapidFireEnabled or Orbit3Combat) and (RapidFireVolleys or 4) or 1
     for v = 1, volleys do
         local hits = {}
         for i = 1, pellets do
             local pos = hitPos
-            if pellets > 1 or RapidFireEnabled then
+            if pellets > 1 or RapidFireEnabled or Orbit3Combat then
                 pos = hitPos + Vector3.new(
                     math.random(-20, 20) / 100,
                     math.random(-20, 20) / 100,
@@ -2988,7 +2994,8 @@ function F.FireForceHit(target)
         pcall(function() MainEvent:FireServer("Shoot", packet) end)
     end
     -- Magic bullet: packet-only (no tool Activate free-fire)
-    if not MagicBulletEnabled then
+    -- magic bullet only during orbit 3 combat (packet only); otherwise also Activate
+    if not Orbit3Combat then
         pcall(function() tool:Activate() end)
     end
     _lastFHFire = now
@@ -3139,6 +3146,10 @@ function F.StopAll()
     FormationTarget, FormationType = nil, nil
     BringStage, GrabOnceDone = nil, false
     KillPhase, StompDoneForCycle = "attack", false
+    -- end orbit 3 combat suite
+    Orbit3Combat = false
+    RapidFireEnabled = false
+    if F.StopOrbit3CombatLoop then F.StopOrbit3CombatLoop() end
     if F.StopKillAttackLoop then F.StopKillAttackLoop() end
     if F.StopKillVisualSpoof then F.StopKillVisualSpoof() end
     F.StopGlue()
@@ -3456,12 +3467,29 @@ function F.GetKillOffset(tRoot, posName, dist)
     if right.Magnitude < 0.05 then right = Vector3.new(1, 0, 0) else right = right.Unit end
     local d = dist or KillDistance or 8
     local n = (posName or KillPosition or "Back"):lower()
+    -- slot-based spread when knife / multi-bot
+    if n == "slot" or n == "auto" or (not UseGun and MySlot) then
+        local slot = tonumber(MySlot) or 1
+        local positions = {
+            Vector3.new(0, d, 0), -- 1 top
+            Vector3.new(0, -d, 0), -- 2 bottom
+            -look * d, -- 3 back
+            look * d, -- 4 front
+            -right * d, -- 5 left
+            right * d, -- 6 right
+        }
+        if slot <= 6 then
+            return positions[slot]
+        end
+        local ang = ((slot - 7) / math.max(1, (MaxBots or 20) - 6)) * math.pi * 2
+        return Vector3.new(math.cos(ang) * d, (slot % 3) * 1.5, math.sin(ang) * d)
+    end
     if n == "front" then return look * d
     elseif n == "left" then return -right * d
     elseif n == "right" then return right * d
     elseif n == "top" then return Vector3.new(0, d, 0)
     elseif n == "bottom" then return Vector3.new(0, -d, 0)
-    else return -look * d -- Back
+    else return -look * d
     end
 end
 
@@ -3659,8 +3687,16 @@ function F.FastKillStep(target)
     local dt = FastKillLastStep > 0 and math.clamp(now - FastKillLastStep, 0, 0.05) or 0.016
     FastKillLastStep = now
 
+    -- tweenkill: 100 stud / 1000 speed; gun fastkill uses injected FastKillMoveSpeed/HitDist
+    local m = F.GetKillMethod and F.GetKillMethod() or "tween"
+    if m == "tween" then
+        FastKillFrontDist = 100
+        FastKillBehindDist = 100
+        FastKillMoveSpeed = 1000
+        FastKillHitDist = 9
+    end
     local startPos, hitPos, endPos = F.getTweenKillPath(tRoot)
-    local speed = math.max(FastKillMoveSpeed or 2500, 200)
+    local speed = math.max(FastKillMoveSpeed or 1000, 200)
 
     -- pure CFrame tween (no PhysicsRep fight during path)
     pcall(function() workspace.FallenPartsDestroyHeight = -50000 end)
@@ -3742,7 +3778,8 @@ function F.OrbitKillStep(target)
     local hum = tChar:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return true end
     if tChar:FindFirstChildOfClass("ForceField") then return false end
-    local off = F.GetKillOffset(tRoot, KillPosition, KillDistance)
+    local posMode = (not UseGun) and "slot" or KillPosition
+    local off = F.GetKillOffset(tRoot, posMode, KillDistance)
     local dest = CFrame.lookAt(tRoot.Position + off, tRoot.Position)
     F.SetPhysicsRepRootPart(r, tRoot)
     r.CanCollide = false
@@ -3792,6 +3829,7 @@ end
 
 -- Spamvoid kill: surface shoot -> REAL void -> surface (timings customisable)
 function F.SpamVoidKillStep(target)
+    UseGun = false
     local tChar = target and target.Character
     if not tChar then return true end
     local tRoot = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
@@ -3800,35 +3838,46 @@ function F.SpamVoidKillStep(target)
     if F.isKnocked(tChar) then return true end
     local hum = tChar:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return true end
-    -- never shoot while forcefield is up
     if tChar:FindFirstChildOfClass("ForceField") then
         F.GoToVoid(r, SpamVoidSurfaceCF or r.CFrame)
         return false
     end
 
     local now = tick()
-    local off = F.GetKillOffset(tRoot, KillPosition, KillDistance or FastKillHitDist or 6)
+    -- slot-based positions for multi-bot knife spamvoid
+    local off = F.GetKillOffset(tRoot, "slot", KillDistance or FastKillHitDist or 6)
     local surfacePos = tRoot.Position + off + Vector3.new(0, 1.0, 0)
 
     r.CanCollide = false
     r.AssemblyLinearVelocity = Vector3.zero
     r.AssemblyAngularVelocity = Vector3.zero
 
-    local inT, outT
-    if UseGun then
-        inT = GunSpamVoidIn or 4
-        outT = GunSpamVoidOut or 2
-    else
-        inT = KnifeSpamVoidIn or 2
-        outT = KnifeSpamVoidOut or 1
-    end
+    local inT = (SpamVoidInTime or 0.10)
+    local outT = (SpamVoidOutTime or 0.10)
 
     if SpamVoidPhase == "surface" then
         F.SetPhysicsRepRootPart(r, tRoot)
         r.CFrame = CFrame.lookAt(surfacePos, tRoot.Position)
         SpamVoidSurfaceCF = CFrame.new(surfacePos)
-        F.AimMouseAtTarget(target)
-        F.FastKillTriggerBot(target)
+        -- equip knife and autoswing
+        pcall(function()
+            local char = LocalPlayer.Character
+            local hum2 = char and char:FindFirstChildOfClass("Humanoid")
+            local bag = LocalPlayer:FindFirstChild("Backpack")
+            local knife = char and (char:FindFirstChild("[Knife]") or char:FindFirstChild("Knife"))
+            if not knife and bag then
+                for _, tool in ipairs(bag:GetChildren()) do
+                    if tool:IsA("Tool") and tool.Name:lower():find("knife") then knife = tool break end
+                end
+            end
+            if knife and hum2 and knife.Parent ~= char then hum2:EquipTool(knife) end
+            local tool = char and char:FindFirstChildOfClass("Tool")
+            if tool and tool.Name:lower():find("knife") then
+                tool:Activate()
+            end
+        end)
+        if F.AimMouseAtTarget then F.AimMouseAtTarget(target) end
+        if F.FastKillTriggerBot then F.FastKillTriggerBot(target) end
         SpamVoidPhase = "void"
         SpamVoidUntil = now + inT
         SpamVoidHitDone = true
@@ -3862,6 +3911,86 @@ function F.StopKillAttackLoop()
     SpamVoidSurfaceCF = nil
     SpamVoidHitDone = false
 end
+
+function F.UziKillStep(target)
+    local tChar = target and target.Character
+    if not tChar then return true end
+    local tRoot = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
+    local r = getgenv().get_root_part and getgenv().get_root_part() or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+    if not tRoot or not r then return false end
+    if F.isKnocked and F.isKnocked(tChar) then return true end
+    local hum = tChar:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return true end
+    if tChar:FindFirstChildOfClass("ForceField") then return false end
+    UseGun = true
+    -- glue + 200 height / 0.01 dist
+    local look = tRoot.CFrame.LookVector
+    local flat = Vector3.new(look.X, 0, look.Z)
+    if flat.Magnitude < 0.05 then flat = Vector3.new(0, 0, 1) else flat = flat.Unit end
+    local goal = tRoot.Position - flat * 0.01 + Vector3.new(0, 200, 0)
+    pcall(function()
+        r.CanCollide = false
+        r.AssemblyLinearVelocity = Vector3.zero
+        r.CFrame = CFrame.new(goal, tRoot.Position)
+    end)
+    if F.SetPhysicsRepRootPart then
+        pcall(F.SetPhysicsRepRootPart, r, tRoot)
+    elseif sethiddenproperty then
+        pcall(function() sethiddenproperty(r, "PhysicsRepRootPart", tRoot) end)
+    end
+    if F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
+    if F.FireForceHit then pcall(F.FireForceHit, target) end
+    if F.TryReload then pcall(F.TryReload) end
+    return false
+end
+
+function F.GetGunHitDistance()
+    local char = LocalPlayer.Character
+    local tool = char and char:FindFirstChildOfClass("Tool")
+    local n = tool and string.lower(tool.Name) or ""
+    if n:find("shotgun") or n:find("tactical") or n:find("db") or n:find("double") or n:find("sg") then
+        return 9
+    end
+    -- rev / silencer / uzi / default
+    return 30
+end
+
+function F.DBFastKillStep(target)
+    local tChar = target and target.Character
+    if not tChar then return true end
+    local tRoot = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
+    local r = getgenv().get_root_part and getgenv().get_root_part() or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
+    if not tRoot or not r then return false end
+    if F.isKnocked and F.isKnocked(tChar) then return true end
+    local hum = tChar:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return true end
+    if tChar:FindFirstChildOfClass("ForceField") then return false end
+    UseGun = true
+    -- keep currently equipped gun; only equip if none
+    local char = LocalPlayer.Character
+    local tool = char and char:FindFirstChildOfClass("Tool")
+    if not tool or tool.Name:lower():find("knife") then
+        if F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
+    end
+    local hitDist = F.GetGunHitDistance()
+    local prevHit, prevSpeed = FastKillHitDist, FastKillMoveSpeed
+    FastKillHitDist = hitDist
+    FastKillMoveSpeed = 200
+    local done = false
+    if F.FastKillStep then
+        done = F.FastKillStep(target)
+    else
+        local off = F.GetKillOffset(tRoot, KillPosition, hitDist)
+        pcall(function()
+            r.CFrame = CFrame.lookAt(tRoot.Position + off, tRoot.Position)
+            r.AssemblyLinearVelocity = Vector3.zero
+        end)
+        if F.FireForceHit then pcall(F.FireForceHit, target) end
+    end
+    FastKillHitDist, FastKillMoveSpeed = prevHit, prevSpeed
+    return done
+end
+
 function F.StartKillAttackLoop()
     F.StopKillAttackLoop()
     FastKillPhase = "behind"
@@ -3887,9 +4016,14 @@ function F.StartKillAttackLoop()
         F.EquipBestWeapon()
         local m = F.GetKillMethod()
         if m == "spamvoid" then
+            UseGun = false
             F.SpamVoidKillStep(t)
         elseif m == "orbit" then
             F.OrbitKillStep(t)
+        elseif m == "uzikill" then
+            F.UziKillStep(t)
+        elseif m == "fastkill" then
+            F.DBFastKillStep(t)
         else
             F.FastKillStep(t)
         end
@@ -3957,23 +4091,32 @@ function F.CreateBlackScreen()
     f.BorderSizePixel = 0
     f.Parent = g
     local t1 = Instance.new("TextLabel")
-    t1.Size = UDim2.new(1, -40, 0, 40)
-    t1.Position = UDim2.new(0, 20, 0.45, 0)
+    t1.Size = UDim2.new(1, -40, 0, 28)
+    t1.Position = UDim2.new(0, 20, 0.42, 0)
     t1.BackgroundTransparency = 1
     t1.Font = Enum.Font.GothamBold
     t1.TextSize = 18
     t1.TextColor3 = Color3.fromRGB(220, 220, 230)
-    t1.Text = "Stand script enabled - control via chat on main account"
+    t1.Text = "Nameless Stand in Operation"
     t1.Parent = f
     local t2 = Instance.new("TextLabel")
-    t2.Size = UDim2.new(1, -40, 0, 28)
-    t2.Position = UDim2.new(0, 20, 0.45, 36)
+    t2.Size = UDim2.new(1, -40, 0, 22)
+    t2.Position = UDim2.new(0, 20, 0.42, 32)
     t2.BackgroundTransparency = 1
     t2.Font = Enum.Font.Gotham
     t2.TextSize = 14
     t2.TextColor3 = Color3.fromRGB(160, 160, 170)
-    t2.Text = "Made by AI - expect bugs | slot " .. tostring(MySlot)
+    t2.Text = "enjoy maximum ms with no render"
     t2.Parent = f
+    local t3 = Instance.new("TextLabel")
+    t3.Size = UDim2.new(1, -40, 0, 20)
+    t3.Position = UDim2.new(0, 20, 0.42, 56)
+    t3.BackgroundTransparency = 1
+    t3.Font = Enum.Font.Gotham
+    t3.TextSize = 12
+    t3.TextColor3 = Color3.fromRGB(130, 130, 140)
+    t3.Text = "credits to @ogclaimed and @gwf"
+    t3.Parent = f
     BlackScreenGui = g
 end
 function F.DestroyBlackScreen()
@@ -4128,6 +4271,7 @@ function F.GetClosestInFOV()
         if plr ~= LocalPlayer and F.isFullyAlive and F.isFullyAlive(plr) then
             if F.isWhitelisted and F.isWhitelisted(plr) then
                 -- skip
+                ; -- noop
             else
                 local head = plr.Character and plr.Character:FindFirstChild("Head")
                 if head then
@@ -4736,6 +4880,7 @@ function F.SetAimbot(on)
         if not AimbotEnabled then return end
         if not UserInputService:IsKeyDown(AimbotKey) and AimbotKey ~= Enum.KeyCode.Unknown then
             -- hold mode when key is not Unknown; if always on key Unknown then always
+                ; -- noop
         end
         local hold = UserInputService:IsKeyDown(AimbotKey)
         if not hold then return end
@@ -4892,64 +5037,90 @@ end)
 function F.CreateNamelessGui()
     if not (F.IsControllerClient and F.IsControllerClient()) then return end
     F.DestroyBotGui()
-
     local Players = game:GetService("Players")
     local UIS = game:GetService("UserInputService")
     local LocalPlayer = Players.LocalPlayer
     local pg = LocalPlayer:WaitForChild("PlayerGui")
-
     getgenv().NamelessBotEnabled = getgenv().NamelessBotEnabled or {}
     local BotEnabled = getgenv().NamelessBotEnabled
-
-    -- seed bot toggles from BotListOrdered
     for _, name in ipairs(BotListOrdered or {}) do
-        if name and name ~= "" then
-            if BotEnabled[name] == nil then BotEnabled[name] = true end
-        end
+        if name and name ~= "" and BotEnabled[name] == nil then BotEnabled[name] = true end
     end
 
     local gui = Instance.new("ScreenGui")
     gui.Name = "NamelessHVH_Simple"
     gui.ResetOnSpawn = false
-    gui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     gui.Parent = pg
     BotGui = gui
     MenuOpen = true
 
     local frame = Instance.new("Frame")
     frame.Name = "Main"
-    frame.Size = UDim2.new(0, 420, 0, 460)
-    frame.Position = UDim2.new(0, 20, 0.25, 0)
-    frame.BackgroundColor3 = Color3.fromRGB(18, 18, 22)
-    frame.BackgroundTransparency = 0.08
+    frame.Size = UDim2.new(0, 280, 0, 260)
+    frame.Position = UDim2.new(0, 16, 0.3, 0)
+    frame.BackgroundColor3 = Color3.fromRGB(12, 12, 16)
+    frame.BackgroundTransparency = 0.35
     frame.BorderSizePixel = 0
     frame.Active = true
     frame.Parent = gui
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
 
+    local minimized = false
+    local fullSize = UDim2.new(0, 280, 0, 260)
+    local miniSize = UDim2.new(0, 150, 0, 32)
+
     local title = Instance.new("TextLabel")
-    title.Size = UDim2.new(1, -80, 0, 28)
-    title.Position = UDim2.new(0, 10, 0, 6)
+    title.Size = UDim2.new(1, -70, 0, 26)
+    title.Position = UDim2.new(0, 8, 0, 4)
     title.BackgroundTransparency = 1
     title.Text = "NAMELESS.HVH"
     title.TextColor3 = Color3.fromRGB(220, 50, 50)
     title.Font = Enum.Font.GothamBold
-    title.TextSize = 16
+    title.TextSize = 14
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = frame
 
+    local minBtn = Instance.new("TextButton")
+    minBtn.Size = UDim2.new(0, 26, 0, 26)
+    minBtn.Position = UDim2.new(1, -60, 0, 4)
+    minBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+    minBtn.Text = "-"
+    minBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+    minBtn.Font = Enum.Font.GothamBold
+    minBtn.TextSize = 16
+    minBtn.Parent = frame
+    Instance.new("UICorner", minBtn).CornerRadius = UDim.new(0, 4)
+
     local closeBtn = Instance.new("TextButton")
-    closeBtn.Size = UDim2.new(0, 28, 0, 28)
-    closeBtn.Position = UDim2.new(1, -34, 0, 6)
-    closeBtn.BackgroundColor3 = Color3.fromRGB(50, 40, 40)
+    closeBtn.Size = UDim2.new(0, 26, 0, 26)
+    closeBtn.Position = UDim2.new(1, -30, 0, 4)
+    closeBtn.BackgroundColor3 = Color3.fromRGB(55, 40, 40)
     closeBtn.Text = "X"
     closeBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
     closeBtn.Font = Enum.Font.GothamBold
-    closeBtn.TextSize = 14
+    closeBtn.TextSize = 13
     closeBtn.Parent = frame
     Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
-    closeBtn.MouseButton1Click:Connect(function()
-        F.DestroyBotGui()
+    closeBtn.MouseButton1Click:Connect(function() F.DestroyBotGui() end)
+
+    local body = Instance.new("Frame")
+    body.Name = "Body"
+    body.Size = UDim2.new(1, -12, 1, -36)
+    body.Position = UDim2.new(0, 6, 0, 32)
+    body.BackgroundTransparency = 1
+    body.Parent = frame
+
+    minBtn.MouseButton1Click:Connect(function()
+        minimized = not minimized
+        if minimized then
+            body.Visible = false
+            frame.Size = miniSize
+            minBtn.Text = "+"
+        else
+            body.Visible = true
+            frame.Size = fullSize
+            minBtn.Text = "-"
+        end
     end)
 
     -- drag
@@ -4966,316 +5137,159 @@ function F.CreateNamelessGui()
     end)
     UIS.InputChanged:Connect(function(input)
         if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-            local delta = input.Position - dragStart
-            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+            local d = input.Position - dragStart
+            frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
         end
     end)
 
     local targetBox = Instance.new("TextBox")
-    targetBox.Size = UDim2.new(1, -20, 0, 26)
-    targetBox.Position = UDim2.new(0, 10, 0, 38)
-    targetBox.BackgroundColor3 = Color3.fromRGB(30, 30, 36)
+    targetBox.Size = UDim2.new(1, 0, 0, 22)
+    targetBox.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
     targetBox.BorderSizePixel = 0
-    targetBox.PlaceholderText = "target username"
+    targetBox.PlaceholderText = "target"
     targetBox.Text = ""
     targetBox.TextColor3 = Color3.fromRGB(230, 230, 230)
     targetBox.Font = Enum.Font.Code
-    targetBox.TextSize = 13
+    targetBox.TextSize = 12
     targetBox.ClearTextOnFocus = false
-    targetBox.Parent = frame
+    targetBox.Parent = body
     Instance.new("UICorner", targetBox).CornerRadius = UDim.new(0, 4)
 
-    local status = Instance.new("TextLabel")
-    status.Size = UDim2.new(1, -20, 0, 16)
-    status.Position = UDim2.new(0, 10, 0, 66)
-    status.BackgroundTransparency = 1
-    status.Text = "ready"
-    status.TextColor3 = Color3.fromRGB(160, 160, 160)
-    status.Font = Enum.Font.Code
-    status.TextSize = 11
-    status.TextXAlignment = Enum.TextXAlignment.Left
-    status.Parent = frame
-
-    -- left: commands scroll | right: bots
     local cmdScroll = Instance.new("ScrollingFrame")
-    cmdScroll.Size = UDim2.new(0.58, -12, 1, -96)
-    cmdScroll.Position = UDim2.new(0, 10, 0, 86)
-    cmdScroll.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+    cmdScroll.Size = UDim2.new(0.55, -4, 1, -28)
+    cmdScroll.Position = UDim2.new(0, 0, 0, 26)
+    cmdScroll.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
     cmdScroll.BorderSizePixel = 0
-    cmdScroll.ScrollBarThickness = 4
+    cmdScroll.ScrollBarThickness = 3
     cmdScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    cmdScroll.Parent = frame
-    Instance.new("UICorner", cmdScroll).CornerRadius = UDim.new(0, 6)
-
+    cmdScroll.Parent = body
+    Instance.new("UICorner", cmdScroll).CornerRadius = UDim.new(0, 4)
     local cmdList = Instance.new("UIListLayout")
-    cmdList.Padding = UDim.new(0, 4)
-    cmdList.SortOrder = Enum.SortOrder.LayoutOrder
+    cmdList.Padding = UDim.new(0, 3)
     cmdList.Parent = cmdScroll
 
     local botScroll = Instance.new("ScrollingFrame")
-    botScroll.Size = UDim2.new(0.42, -12, 1, -96)
-    botScroll.Position = UDim2.new(0.58, 2, 0, 86)
-    botScroll.BackgroundColor3 = Color3.fromRGB(24, 24, 28)
+    botScroll.Size = UDim2.new(0.45, -4, 1, -28)
+    botScroll.Position = UDim2.new(0.55, 4, 0, 26)
+    botScroll.BackgroundColor3 = Color3.fromRGB(22, 22, 26)
     botScroll.BorderSizePixel = 0
-    botScroll.ScrollBarThickness = 4
-    botScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
-    botScroll.Parent = frame
-    Instance.new("UICorner", botScroll).CornerRadius = UDim.new(0, 6)
+    botScroll.ScrollBarThickness = 3
+    botScroll.Parent = body
+    Instance.new("UICorner", botScroll).CornerRadius = UDim.new(0, 4)
+    local botList = Instance.new("UIListLayout")
+    botList.Padding = UDim.new(0, 3)
+    botList.Parent = botScroll
 
-    local botListLayout = Instance.new("UIListLayout")
-    botListLayout.Padding = UDim.new(0, 4)
-    botListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-    botListLayout.Parent = botScroll
-
-    local botHeader = Instance.new("TextLabel")
-    botHeader.Size = UDim2.new(1, -8, 0, 20)
-    botHeader.BackgroundTransparency = 1
-    botHeader.Text = "BOTS (toggle)"
-    botHeader.TextColor3 = Color3.fromRGB(200, 80, 80)
-    botHeader.Font = Enum.Font.GothamBold
-    botHeader.TextSize = 11
-    botHeader.TextXAlignment = Enum.TextXAlignment.Left
-    botHeader.Parent = botScroll
-
-    local function selectedBotNames()
+    local function selectedBots()
         local names = {}
         for _, name in ipairs(BotListOrdered or {}) do
-            if name and name ~= "" and BotEnabled[name] then
-                names[#names + 1] = name
-            end
-        end
-        -- also any in-game players marked enabled
-        for name, on in pairs(BotEnabled) do
-            if on and name ~= "" then
-                local found = false
-                for _, n in ipairs(names) do if n == name then found = true break end end
-                if not found then names[#names + 1] = name end
-            end
+            if name and name ~= "" and BotEnabled[name] then names[#names+1] = name end
         end
         return names
     end
-
     local function runCmd(line)
-        line = tostring(line or "")
-        local bots = selectedBotNames()
-        -- append enabled bots so only they respond (ParseTargetsAndBots)
-        if #bots > 0 then
-            line = line .. " " .. table.concat(bots, " ")
-        end
-        status.Text = line
-        if F.ChatCommand then
-            F.ChatCommand(line)
-        elseif F.GuiCommand then
-            F.GuiCommand(line)
-        end
-        if SyncBotsEnabled and F.RunSilent then
-            pcall(F.RunSilent, line)
-        end
+        local bots = selectedBots()
+        if #bots > 0 then line = line .. " " .. table.concat(bots, " ") end
+        if F.ChatCommand then F.ChatCommand(line)
+        elseif F.GuiCommand then F.GuiCommand(line) end
+        if SyncBotsEnabled and F.RunSilent then pcall(F.RunSilent, line) end
     end
-
-    local function addSection(name)
+    local function addSec(n)
         local l = Instance.new("TextLabel")
-        l.Size = UDim2.new(1, -8, 0, 18)
+        l.Size = UDim2.new(1, -6, 0, 16)
         l.BackgroundTransparency = 1
-        l.Text = name
-        l.TextColor3 = Color3.fromRGB(200, 80, 80)
+        l.Text = n
+        l.TextColor3 = Color3.fromRGB(200, 70, 70)
         l.Font = Enum.Font.GothamBold
-        l.TextSize = 11
+        l.TextSize = 10
         l.TextXAlignment = Enum.TextXAlignment.Left
         l.Parent = cmdScroll
     end
-
     local function addBtn(text, builder)
         local b = Instance.new("TextButton")
-        b.Size = UDim2.new(1, -8, 0, 24)
-        b.BackgroundColor3 = Color3.fromRGB(40, 40, 48)
+        b.Size = UDim2.new(1, -6, 0, 20)
+        b.BackgroundColor3 = Color3.fromRGB(38, 38, 46)
         b.BorderSizePixel = 0
         b.Text = text
-        b.TextColor3 = Color3.fromRGB(235, 235, 235)
+        b.TextColor3 = Color3.fromRGB(230, 230, 230)
         b.Font = Enum.Font.Gotham
-        b.TextSize = 12
+        b.TextSize = 11
         b.Parent = cmdScroll
-        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 4)
+        Instance.new("UICorner", b).CornerRadius = UDim.new(0, 3)
         b.MouseButton1Click:Connect(function()
-            local tgt = targetBox.Text
-            local line = builder(tgt)
+            local line = builder(targetBox.Text)
             if line then runCmd(line) end
         end)
     end
 
-    -- ===== COMMAND BUTTONS =====
-    addSection("MAIN / KILL")
+    addSec("KILL")
     addBtn("summon", function() return "summon" end)
     addBtn("stop", function() return "stop" end)
     addBtn("return", function() return "return" end)
-    addBtn("kill", function(t) return t ~= "" and ("kill " .. t) or nil end)
-    addBtn("autokill", function(t) return t ~= "" and ("autokill " .. t) or nil end)
-    addBtn("bring", function(t) return t ~= "" and ("bring " .. t) or nil end)
+    addBtn("kill", function(t) return t ~= "" and ("kill "..t) end)
+    addBtn("autokill", function(t) return t ~= "" and ("autokill "..t) end)
+    addBtn("uzikill", function(t) return t ~= "" and ("uzikill "..t) end)
+    addBtn("fastkill", function(t) return t ~= "" and ("fastkill "..t) end)
+    addBtn("orbit", function(t) return t ~= "" and ("aorbit "..t) or "orbitkill" end)
+    addBtn("tween", function(t) return t ~= "" and ("atween "..t) or "tweenkill" end)
+    addBtn("ksk (knife spamvoid)", function(t) return t ~= "" and ("aksk "..t) or "ksk" end)
     addBtn("gun", function() return "gun" end)
     addBtn("knife", function() return "knife" end)
-    addBtn("orbit kill", function(t) return t ~= "" and ("aorbit " .. t) or "orbitkill" end)
-    addBtn("tween kill", function(t) return t ~= "" and ("atween " .. t) or "tweenkill" end)
-    addBtn("spamvoid kill", function(t) return t ~= "" and ("aksk " .. t) or "spamvoidkill" end)
-    addBtn("gun spamkill", function(t) return t ~= "" and ("agsk " .. t) or "gsk" end)
-
-    addSection("FORCEHIT / SENTRY")
-    addBtn("forcehit once", function(t) return t ~= "" and ("forcehit " .. t) or nil end)
-    addBtn("forcehit2 loop", function(t) return t ~= "" and ("forcehit2 " .. t) or nil end)
-    addBtn("unforcehit", function() return "unforcehit" end)
-    addBtn("sentry on", function() return "sentry on" end)
-    addBtn("sentry off", function() return "sentry off" end)
-    addBtn("sentry2 on", function() return "sentry2 on" end)
-    addBtn("sentry2 off", function() return "sentry2 off" end)
+    addBtn("forcehit", function(t) return t ~= "" and ("forcehit "..t) end)
+    addBtn("forcehit2", function(t) return t ~= "" and ("forcehit2 "..t) end)
     addBtn("killaura on", function() return "killaura on" end)
     addBtn("killaura off", function() return "killaura off" end)
-
-    addSection("FORMATIONS")
-    for _, c in ipairs({"around", "back", "bline", "pole", "line", "orbit", "teleport", "safe", "powner", "unpowner"}) do
+    addSec("FORM")
+    for _, c in ipairs({"around","back","bline","line","orbit","s","safe","ownerpos","unownerpos"}) do
         addBtn(c, function() return c end)
     end
-
-    addSection("TOGGLES")
+    addSec("MISC")
+    addBtn("reset", function() return "reset" end)
+    addBtn("dance", function() return "dance" end)
+    addBtn("spinbot", function() return "spinbot" end)
     addBtn("autostomp on", function() return "autostomp on" end)
     addBtn("autostomp off", function() return "autostomp off" end)
-    addBtn("autoheal on", function() return "autoheal on" end)
-    addBtn("autoheal off", function() return "autoheal off" end)
-    addBtn("wallbang on", function() return "wallbang on" end)
-    addBtn("magicbullet on", function() return "magicbullet on" end)
-    addBtn("magicbullet off", function() return "magicbullet off" end)
-    addBtn("rapid on", function() return "rapid on" end)
-    addBtn("rapid off", function() return "rapid off" end)
-    addBtn("stomp on", function() return "stomp on" end)
-    addBtn("stomp off", function() return "stomp off" end)
-    addBtn("opt on", function() return "opt on" end)
-    addBtn("opt off", function() return "opt off" end)
-    addBtn("antilag on", function() return "antilag on" end)
-    addBtn("antilag off", function() return "antilag off" end)
 
-    addSection("MISC")
-    addBtn("reset", function() return "reset" end)
-    addBtn("void", function() return "void" end)
-    addBtn("dance", function() return "dance" end)
-    addBtn("dance off", function() return "dance off" end)
-    addBtn("spinbot", function() return "spinbot" end)
-    addBtn("leave", function() return "leave" end)
-
-    addSection("COMMAND LIST")
-    local cmdInfo = Instance.new("TextLabel")
-    cmdInfo.Size = UDim2.new(1, -8, 0, 320)
-    cmdInfo.BackgroundTransparency = 1
-    cmdInfo.TextXAlignment = Enum.TextXAlignment.Left
-    cmdInfo.TextYAlignment = Enum.TextYAlignment.Top
-    cmdInfo.TextWrapped = true
-    cmdInfo.TextColor3 = Color3.fromRGB(170, 170, 170)
-    cmdInfo.Font = Enum.Font.Code
-    cmdInfo.TextSize = 10
-    cmdInfo.Text = [[Prefix: NAMELESS.HVH | !  or  !
-KILL: kill/k autokill/ak atween aorbit aksk agsk
-  gun knife bring/b stop return summon/follow
-  forcehit/fh forcehit2/fh2 unforcehit
-  orbitkill tweenkill spamvoidkill/svkill gsk/ksk
-SENTRY: sentry on/off  sentry2 on/off
-  killaura/ka on/off  aurarange <n>
-FORM: around back bline pole line orbit
-  teleport safe powner/protectowner unpowner
-TOGGLES: autostomp autoheal wallbang/wb
-  magicbullet/mb rapid stomp opt antilag
-  hold/ghold/khold void voidin voidout
-GUNS: uzi rev db sg tacticalsg silencer
-MISC: reset/r leave dance spinbot slot
-  transfer whitelist/wl unwhitelist
-  bot unbot load (gui)]]
-    cmdInfo.Parent = cmdScroll
-
-    local function refreshCanvas(scroll, layout)
-        task.defer(function()
-            scroll.CanvasSize = UDim2.new(0, 0, 0, layout.AbsoluteContentSize.Y + 12)
-        end)
-    end
     cmdList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        refreshCanvas(cmdScroll, cmdList)
+        cmdScroll.CanvasSize = UDim2.new(0, 0, 0, cmdList.AbsoluteContentSize.Y + 8)
     end)
-    refreshCanvas(cmdScroll, cmdList)
 
-    -- bot toggles
-    local function addBotToggle(name, online)
-        local row = Instance.new("TextButton")
-        row.Size = UDim2.new(1, -8, 0, 24)
-        row.BackgroundColor3 = BotEnabled[name] and Color3.fromRGB(40, 70, 45) or Color3.fromRGB(45, 40, 40)
-        row.BorderSizePixel = 0
-        row.Text = (BotEnabled[name] and "[ON] " or "[OFF] ") .. name .. (online and " *" or "")
-        row.TextColor3 = Color3.fromRGB(230, 230, 230)
-        row.Font = Enum.Font.Code
-        row.TextSize = 11
-        row.TextXAlignment = Enum.TextXAlignment.Left
-        row.Parent = botScroll
-        Instance.new("UICorner", row).CornerRadius = UDim.new(0, 4)
-        row.MouseButton1Click:Connect(function()
-            BotEnabled[name] = not BotEnabled[name]
-            row.BackgroundColor3 = BotEnabled[name] and Color3.fromRGB(40, 70, 45) or Color3.fromRGB(45, 40, 40)
-            row.Text = (BotEnabled[name] and "[ON] " or "[OFF] ") .. name .. (online and " *" or "")
-        end)
-    end
+    local bh = Instance.new("TextLabel")
+    bh.Size = UDim2.new(1, -6, 0, 16)
+    bh.BackgroundTransparency = 1
+    bh.Text = "BOTS"
+    bh.TextColor3 = Color3.fromRGB(200, 70, 70)
+    bh.Font = Enum.Font.GothamBold
+    bh.TextSize = 10
+    bh.TextXAlignment = Enum.TextXAlignment.Left
+    bh.Parent = botScroll
 
     local online = {}
-    for _, plr in ipairs(Players:GetPlayers()) do
-        online[plr.Name] = true
-    end
+    for _, plr in ipairs(Players:GetPlayers()) do online[plr.Name] = true end
     for _, name in ipairs(BotListOrdered or {}) do
         if name and name ~= "" then
-            addBotToggle(name, online[name] == true)
+            local row = Instance.new("TextButton")
+            row.Size = UDim2.new(1, -6, 0, 20)
+            local on = BotEnabled[name]
+            row.BackgroundColor3 = on and Color3.fromRGB(35, 60, 40) or Color3.fromRGB(42, 38, 38)
+            row.Text = (on and "[ON] " or "[OFF] ") .. name
+            row.TextColor3 = Color3.fromRGB(230, 230, 230)
+            row.Font = Enum.Font.Code
+            row.TextSize = 10
+            row.TextXAlignment = Enum.TextXAlignment.Left
+            row.Parent = botScroll
+            Instance.new("UICorner", row).CornerRadius = UDim.new(0, 3)
+            row.MouseButton1Click:Connect(function()
+                BotEnabled[name] = not BotEnabled[name]
+                row.BackgroundColor3 = BotEnabled[name] and Color3.fromRGB(35, 60, 40) or Color3.fromRGB(42, 38, 38)
+                row.Text = (BotEnabled[name] and "[ON] " or "[OFF] ") .. name
+            end)
         end
     end
-    -- extra online bots not in list
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and BotList and BotList[plr.Name:lower()] then
-            local inOrdered = false
-            for _, n in ipairs(BotListOrdered or {}) do
-                if n == plr.Name then inOrdered = true break end
-            end
-            if not inOrdered then
-                if BotEnabled[plr.Name] == nil then BotEnabled[plr.Name] = true end
-                addBotToggle(plr.Name, true)
-            end
-        end
-    end
-
-    local allOn = Instance.new("TextButton")
-    allOn.Size = UDim2.new(1, -8, 0, 22)
-    allOn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-    allOn.Text = "All ON"
-    allOn.TextColor3 = Color3.fromRGB(230, 230, 230)
-    allOn.Font = Enum.Font.Gotham
-    allOn.TextSize = 11
-    allOn.Parent = botScroll
-    Instance.new("UICorner", allOn).CornerRadius = UDim.new(0, 4)
-    allOn.MouseButton1Click:Connect(function()
-        for name, _ in pairs(BotEnabled) do BotEnabled[name] = true end
-        F.DestroyBotGui()
-        F.CreateNamelessGui()
+    botList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+        botScroll.CanvasSize = UDim2.new(0, 0, 0, botList.AbsoluteContentSize.Y + 8)
     end)
 
-    local allOff = Instance.new("TextButton")
-    allOff.Size = UDim2.new(1, -8, 0, 22)
-    allOff.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
-    allOff.Text = "All OFF"
-    allOff.TextColor3 = Color3.fromRGB(230, 230, 230)
-    allOff.Font = Enum.Font.Gotham
-    allOff.TextSize = 11
-    allOff.Parent = botScroll
-    Instance.new("UICorner", allOff).CornerRadius = UDim.new(0, 4)
-    allOff.MouseButton1Click:Connect(function()
-        for name, _ in pairs(BotEnabled) do BotEnabled[name] = false end
-        F.DestroyBotGui()
-        F.CreateNamelessGui()
-    end)
-
-    botListLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
-        refreshCanvas(botScroll, botListLayout)
-    end)
-    refreshCanvas(botScroll, botListLayout)
-
-    -- menu key
     pcall(function()
         if getgenv()._NamelessMenuConn then getgenv()._NamelessMenuConn:Disconnect() end
         getgenv()._NamelessMenuConn = UIS.InputBegan:Connect(function(input, gp)
@@ -5300,7 +5314,6 @@ function F.ToggleLoadGui()
     end
 end
 
--- Client-sided Joao Chiken look (only this client's view)
 function F.ApplyChickenClient(char)
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
@@ -5445,6 +5458,75 @@ F.StartFollow = function()
     F.updateFlyAnim()
 end
 
+
+function F.FireAtControllerNoHit(ctrl)
+    -- Shoot controller with wallbang-style origin so the server should not register a real hit
+    if not ctrl or not ctrl.Character then return end
+    if not MainEvent then
+        MainEvent = game:GetService("ReplicatedStorage"):FindFirstChild("MainEvent")
+            or game:GetService("ReplicatedStorage"):FindFirstChild("MainRemoteEvent")
+    end
+    if not MainEvent then return end
+    local tChar = ctrl.Character
+    local hitPart = tChar:FindFirstChild("Head") or tChar:FindFirstChild("UpperTorso") or tChar:FindFirstChild("HumanoidRootPart")
+    if not hitPart then return end
+    local myChar = LocalPlayer.Character
+    if not myChar then return end
+    local tool = myChar:FindFirstChildOfClass("Tool")
+    if not tool or not tool:FindFirstChild("Handle") then
+        if F.SelectGun then pcall(F.SelectGun, "uzi") end
+        if F.EquipBestWeapon then tool = F.EquipBestWeapon() end
+    end
+    if not tool or not tool:FindFirstChild("Handle") then return end
+    local handlePos = tool.Handle.Position
+    local hitPos = hitPart.Position
+    -- wallbang origin at target (should error / not register on controller)
+    local dir = hitPos - handlePos
+    if dir.Magnitude < 0.05 then dir = Vector3.new(0, 0, -1) else dir = dir.Unit end
+    local originPos = hitPos - dir * 1.5
+    local aim = hitPos + dir * 25
+    getgenv().FH_Index = ((getgenv().FH_Index or 0) + 1) % 100
+    local hits = {{
+        PELLET = 1,
+        POSITION = hitPos,
+        MODEL = tChar,
+        PART = hitPart,
+    }}
+    local packet = {
+        INDEX = getgenv().FH_Index,
+        AIM = aim,
+        ORIGIN = originPos,
+        HITS = hits,
+    }
+    pcall(function() MainEvent:FireServer("Shoot", packet) end)
+end
+
+function F.StartOrbit3CombatLoop()
+    if getgenv()._Orbit3Conn then pcall(function() getgenv()._Orbit3Conn:Disconnect() end) end
+    getgenv()._Orbit3Conn = RunService.Heartbeat:Connect(function()
+        if not Orbit3Combat or CurrentAction ~= "formation" or FormationType ~= "corbit" then
+            return
+        end
+        UseGun = true
+        RapidFireEnabled = true
+        if F.SelectGun then pcall(F.SelectGun, "uzi") end
+        local ctrl = F.GetController and F.GetController()
+        if ctrl then
+            pcall(F.FireAtControllerNoHit, ctrl)
+        end
+        if F.TryReload then pcall(F.TryReload) end
+    end)
+end
+
+function F.StopOrbit3CombatLoop()
+    Orbit3Combat = false
+    RapidFireEnabled = false
+    if getgenv()._Orbit3Conn then
+        pcall(function() getgenv()._Orbit3Conn:Disconnect() end)
+        getgenv()._Orbit3Conn = nil
+    end
+end
+
 function F.StartControllerOrbit(mode)
     if FrozenByPrivilege then return end
     if not F.CanSummon() then return end
@@ -5453,6 +5535,19 @@ function F.StartControllerOrbit(mode)
     CurrentAction = "formation"
     FormationType = "corbit"
     FormationTarget = F.GetController()
+    -- orbit 3: normal orbit + uzi + rapid + wallbang + magic bullet
+    if CtrlOrbitMode == 3 then
+        Orbit3Combat = true
+        RapidFireEnabled = true
+        UseGun = true
+        if F.SelectGun then pcall(F.SelectGun, "uzi") end
+        if F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
+        if F.StartOrbit3CombatLoop then F.StartOrbit3CombatLoop() end
+    else
+        Orbit3Combat = false
+        RapidFireEnabled = false
+        F.StopOrbit3CombatLoop()
+    end
     F.StartGlue("formation", FormationTarget)
     F.loadFlyAnims()
 end
@@ -6012,6 +6107,7 @@ function F.StartBring(targets)
                 end
                 if BringStage == "grab" then
                     -- re-enter grab
+                ; -- noop
                 elseif isGrabbed() then
                     BringStage = "return"
                 else
@@ -6343,7 +6439,7 @@ return
         end
         return
     end
-    if cmd == "teleport" or cmd == "tpbots" then
+    if cmd == "s" or cmd == "teleport" or cmd == "tpbots" then
         -- teleport to controller in spread positions, no follow glue
         local ctrl = F.GetController and F.GetController()
         local cr = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
@@ -6389,6 +6485,14 @@ if cmd == "stop" or cmd == "idle" then
         withBots(2, function(t) if #t > 0 then F.StartKill(t, false) end end)
     elseif cmd == "autokill" or cmd == "ak" or cmd == "a" then
         withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
+    elseif cmd == "uzikill" or cmd == "uk" then
+        UseGun = true
+        F.SetKillMethod("uzikill")
+        withBots(2, function(tg) if #tg > 0 then F.StartKill(tg, true) end end)
+    elseif cmd == "fastkill" or cmd == "fastk" then
+        UseGun = true
+        F.SetKillMethod("fastkill")
+        withBots(2, function(tg) if #tg > 0 then F.StartKill(tg, true) end end)
     elseif cmd == "atween" then
         KnifeTweenEnabled = true
         UseGun = false
@@ -6402,28 +6506,13 @@ if cmd == "stop" or cmd == "idle" then
         SpamVoidWeapon = "knife"
         F.SetKillMethod("spamvoid")
         withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
-    elseif cmd == "agsk" then
-        UseGun = true
-        SpamVoidWeapon = "gun"
-        F.SetKillMethod("spamvoid")
-        withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
-    elseif cmd == "powner" or cmd == "protectowner" then
+    elseif cmd == "ownerpos" or cmd == "powner" or cmd == "protectowner" then
         F.StartProtectOwner()
-    elseif cmd == "unpowner" or cmd == "unprotectowner" then
+    elseif cmd == "unownerpos" or cmd == "unpowner" or cmd == "unprotectowner" then
         F.StopProtectOwner()
-    elseif cmd == "bring" or cmd == "get" or cmd == "b" then
-        withBots(2, function(t) if #t > 0 then F.StartBring(t) end end)
-    elseif cmd == "void" then
-        F.StopAll()
-        CurrentAction = "void"
-        F.StartGlue("custom", nil)
-        task.spawn(function()
-            while CurrentAction == "void" do CustomGlueCF = CFrame.new(0, VoidY, 0) task.wait(0.1) end
-        end)
     -- formations (relative to controller unless a player name is given)
     elseif cmd == "back" then F.StartFormation("back", args[2])
     elseif cmd == "bline" then F.StartFormation("bline", args[2])
-    elseif cmd == "pole" or cmd == "stackon" then F.StartFormation("pole", args[2])
     elseif cmd == "around" then F.StartFormation("around", args[2])
     elseif cmd == "line" then F.StartFormation("line", args[2])
     elseif cmd == "rline" then F.StartFormation("rline", args[2])
@@ -6458,30 +6547,8 @@ if cmd == "stop" or cmd == "idle" then
     elseif cmd == "takel" or cmd == "l" then F.PlayEmote(Emotes["take the L"])
     elseif cmd == "darktriad" or cmd == "dark" then F.PlayEmote(Emotes.darktriad)
     elseif cmd == "vampire" or cmd == "upsidedown" then F.PlayEmote(Emotes.vampire)
-    elseif cmd == "sentry" then
-        if args[2] == "on" or not args[2] then
-            SentryEnabled = true
-            F.StartSentry()
-        elseif args[2] == "off" then
-            SentryEnabled = false
-            F.StopSentry()
         end
-    elseif cmd == "sentry2" then
-        if args[2] == "on" or not args[2] then
-            Sentry2Enabled = true
-            F.StartSentry2()
-        elseif args[2] == "off" then
-            Sentry2Enabled = false
-            F.StopSentry2()
         end
-    elseif cmd == "wallbang" or cmd == "wb" then
-        if args[2] == "off" then WallbangEnabled = false
-        else WallbangEnabled = true end -- force on by default
-    elseif cmd == "magicbullet" or cmd == "mb" then
-        if args[2] == "off" then MagicBulletEnabled = false
-        elseif args[2] == "on" then MagicBulletEnabled = true
-        else MagicBulletEnabled = not MagicBulletEnabled end
-
     elseif cmd == "orbit" then
         local a2 = args[2] and args[2]:lower() or ""
         local n = tonumber(args[2])
@@ -6521,11 +6588,6 @@ if cmd == "stop" or cmd == "idle" then
             FastKillMoveSpeed = BadExecutor and 100 or 1000
             F.SetKillMethod("tween")
         end
-    elseif cmd == "gunspamkill" or cmd == "gsk" then
-        if args[2] ~= "off" then
-            UseGun = true
-            SpamVoidWeapon = "gun"
-            F.SetKillMethod("spamvoid")
         end
     elseif cmd == "knifespamkill" or cmd == "ksk" then
         if args[2] ~= "off" then
@@ -6566,10 +6628,6 @@ if cmd == "stop" or cmd == "idle" then
         local n = tonumber(args[2]); if n then SpamVoidInTime = math.clamp(n, 0.05, 5) end
     elseif cmd == "voidout" then
         local n = tonumber(args[2]); if n then SpamVoidOutTime = math.clamp(n, 0.05, 5) end
-    elseif cmd == "antilag" then
-        if args[2] == "off" then F.SetAntiLag(false)
-        elseif args[2] == "on" then F.SetAntiLag(true)
-        else F.SetAntiLag(not AntiLagEnabled) end
     elseif cmd == "botesp" then
         if args[2] == "off" then F.SetBotEsp(false)
         elseif args[2] == "on" then F.SetBotEsp(true)
@@ -6601,12 +6659,8 @@ if not KillAuraEnabled then F.StartKillAura() end
     elseif cmd == "culldist" or cmd == "cull" then
         local n = tonumber(args[2])
         if n then OptCullRange = math.clamp(n, 10, 500) warn("[NAMELESS] cull distance = " .. OptCullRange) end
-    elseif cmd == "opt" or cmd == "optimize" or cmd == "optimisation" then
-        if args[2] == "off" then F.SetOptMode(false)
-        elseif args[2] == "on" then F.SetOptMode(true)
-        else F.SetOptMode(not OptMode) end
     elseif cmd == "uzi" or cmd == "rev" or cmd == "db" or cmd == "sg"
-        or cmd == "tacticalsg" or cmd == "silencer" then
+        or cmd == "tsg" or cmd == "tacticalsg" or cmd == "silencer" then
         F.SelectGun(cmd)
     elseif cmd == "aurarange" then
         local n = tonumber(args[2])
@@ -6678,10 +6732,6 @@ if not KillAuraEnabled then F.StartKillAura() end
         if args[2] == "on" then F.SetNoRender(true)
         elseif args[2] == "off" then F.SetNoRender(false)
         else F.SetNoRender(not NoRenderEnabled) end
-    elseif cmd == "autoheal" then
-        if args[2] == "on" then AutoHealEnabled = true
-        elseif args[2] == "off" then AutoHealEnabled = false
-        else AutoHealEnabled = not AutoHealEnabled end
     elseif cmd == "hide" then
         F.StartHide()
     elseif cmd == "unhide" then
