@@ -5,17 +5,17 @@
 local ControllerName = "imitationed"
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
-    "Witkni3416",
-    "Frosb4622",
     "Kipsh6295",
-    "Skybla1919", -- 4
-    "Boonlo8950", -- 5
+    "cepit3634b",
+    "cepit2l167",
+    "Kiptwist5311", -- 4
+    "joker_thekillerguy1", -- 5
     "godlyseananners9", -- 6
-    "cepit2l167", -- 7
-    "cepit3634b", -- 8
-    "Kiptwist5311", -- 9
-    "joker_thekillerguy1", -- 10
-    "joker_thekillerguy", -- 11
+    "", -- 7
+    "", -- 8
+    "", -- 9
+    "", -- 10
+    "", -- 11
     "", -- 12
     "", -- 13
     "", -- 14
