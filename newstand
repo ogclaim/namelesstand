@@ -3909,7 +3909,6 @@ function F.UziKillStep(target)
     if not hum or hum.Health <= 0 then return true end
     if tChar:FindFirstChildOfClass("ForceField") then return false end
     UseGun = true
-    -- glue + 200 height / 0.01 dist
     local look = tRoot.CFrame.LookVector
     local flat = Vector3.new(look.X, 0, look.Z)
     if flat.Magnitude < 0.05 then flat = Vector3.new(0, 0, 1) else flat = flat.Unit end
@@ -3917,16 +3916,37 @@ function F.UziKillStep(target)
     pcall(function()
         r.CanCollide = false
         r.AssemblyLinearVelocity = Vector3.zero
-        r.CFrame = CFrame.new(goal, tRoot.Position)
+        r.CFrame = CFrame.lookAt(goal, tRoot.Position)
     end)
     if F.SetPhysicsRepRootPart then
         pcall(F.SetPhysicsRepRootPart, r, tRoot)
     elseif sethiddenproperty then
         pcall(function() sethiddenproperty(r, "PhysicsRepRootPart", tRoot) end)
     end
-    if F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
-    if F.FireForceHit then pcall(F.FireForceHit, target) end
-    if F.TryReload then pcall(F.TryReload) end
+    -- equip uzi specifically, reload before first shot
+    if F.SelectGun then pcall(F.SelectGun, "uzi") end
+    local char = LocalPlayer.Character
+    local tool = char and char:FindFirstChildOfClass("Tool")
+    if not tool or not string.lower(tool.Name):find("uzi") then
+        if F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
+        tool = char and char:FindFirstChildOfClass("Tool")
+    end
+    -- first-mag fix: ensure loaded before shooting
+    getgenv()._UziReadyAt = getgenv()._UziReadyAt or 0
+    if tool then
+        if tick() < (getgenv()._UziReadyAt or 0) then
+            if F.TryReload then pcall(F.TryReload) end
+            return false
+        end
+        if not getgenv()._UziPrimed then
+            getgenv()._UziPrimed = true
+            if F.TryReload then pcall(F.TryReload) end
+            getgenv()._UziReadyAt = tick() + 0.35
+            return false
+        end
+        if F.FireForceHit then pcall(F.FireForceHit, target) end
+        if F.TryReload then pcall(F.TryReload) end
+    end
     return false
 end
 
@@ -3979,6 +3999,8 @@ end
 
 function F.StartKillAttackLoop()
     F.StopKillAttackLoop()
+    getgenv()._UziPrimed = false
+    getgenv()._UziReadyAt = 0
     FastKillPhase = "behind"
     FastKillTweenStart = 0
     FastKillTweenFrom = nil
@@ -5213,6 +5235,7 @@ function F.CreateNamelessGui()
     addBtn("stop", function() return "stop" end)
     addBtn("return", function() return "return" end)
     addBtn("kill", function(t) return t ~= "" and ("kill "..t) end)
+    addBtn("bring", function(t) return t ~= "" and ("bring "..t) end)
     addBtn("autokill", function(t) return t ~= "" and ("autokill "..t) end)
     addBtn("uzikill", function(t) return t ~= "" and ("uzikill "..t) end)
     addBtn("fastkill", function(t) return t ~= "" and ("fastkill "..t) end)
@@ -5487,8 +5510,42 @@ function F.FireAtControllerNoHit(ctrl)
     pcall(function() MainEvent:FireServer("Shoot", packet) end)
 end
 
+function F.FireOrbit3FakeShot(ctrl)
+    -- visual shots at controller; origin at target so server should not register
+    if not ctrl or not ctrl.Character then return end
+    if not MainEvent then
+        MainEvent = game:GetService("ReplicatedStorage"):FindFirstChild("MainEvent")
+            or game:GetService("ReplicatedStorage"):FindFirstChild("MainRemoteEvent")
+    end
+    if not MainEvent then return end
+    local tChar = ctrl.Character
+    local hitPart = tChar:FindFirstChild("Head") or tChar:FindFirstChild("HumanoidRootPart")
+    if not hitPart then return end
+    local myChar = LocalPlayer.Character
+    local tool = myChar and myChar:FindFirstChildOfClass("Tool")
+    if not tool or not tool:FindFirstChild("Handle") then return end
+    local hitPos = hitPart.Position
+    local originPos = hitPos + Vector3.new(0, 0.05, 0) -- invalid / at-target origin
+    getgenv().FH_Index = ((getgenv().FH_Index or 0) + 1) % 100
+    local packet = {
+        INDEX = getgenv().FH_Index,
+        AIM = hitPos + Vector3.new(0, 0, 1),
+        ORIGIN = originPos,
+        HITS = {{
+            PELLET = 1,
+            POSITION = hitPos,
+            MODEL = tChar,
+            PART = hitPart,
+        }},
+    }
+    pcall(function() MainEvent:FireServer("Shoot", packet) end)
+    pcall(function() tool:Activate() end)
+end
+
 function F.StartOrbit3CombatLoop()
     if getgenv()._Orbit3Conn then pcall(function() getgenv()._Orbit3Conn:Disconnect() end) end
+    -- fire-rate -10 => no positive throttle; spam fake shots
+    local fakeRate = -10
     getgenv()._Orbit3Conn = RunService.Heartbeat:Connect(function()
         if not Orbit3Combat or CurrentAction ~= "formation" or FormationType ~= "corbit" then
             return
@@ -5497,6 +5554,14 @@ function F.StartOrbit3CombatLoop()
         RapidFireEnabled = false
         if F.SelectGun then pcall(F.SelectGun, "uzi") end
         if F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
+        local ctrl = F.GetController and F.GetController()
+        if ctrl then
+            -- rate -10: always allow (skip positive rate gate)
+            if fakeRate <= 0 or (tick() - (getgenv()._Orbit3LastShot or 0)) >= fakeRate then
+                getgenv()._Orbit3LastShot = tick()
+                pcall(F.FireOrbit3FakeShot, ctrl)
+            end
+        end
         if F.TryReload then pcall(F.TryReload) end
     end)
 end
@@ -5633,12 +5698,23 @@ F.StartKill = function(targets, isAuto)
                 F.StopKillAttackLoop()
                 F.StopCameraLock()
                 F.StopSlotSpam()
-                F.StartFollow()
+                F.ForceGlueOff()
+                -- teleport to controller (no glue summon)
+                pcall(function()
+                    local ctrl = F.GetController and F.GetController()
+                    local cr = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
+                    local r = getgenv().get_root_part and getgenv().get_root_part()
+                    if cr and r then
+                        r.AssemblyLinearVelocity = Vector3.zero
+                        r.CFrame = cr.CFrame * CFrame.new(0, 0, 4)
+                    end
+                end)
                 CurrentAction = isAuto and "autokill" or "kill"
-                task.wait(SummonHold)
+                task.wait(0.15)
                 if not isAuto then
                     PendingAutokill, SavedKillTargets = nil, nil
-                    CurrentAction = "follow"
+                    CurrentAction = "idle"
+                    F.StopAll()
                     break
                 end
                 KillPhase = "waitff"
@@ -6489,6 +6565,8 @@ if cmd == "stop" or cmd == "idle" then
         SpamVoidWeapon = "knife"
         F.SetKillMethod("spamvoid")
         withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
+    elseif cmd == "bring" or cmd == "b" or cmd == "get" then
+        withBots(2, function(tg) if #tg > 0 then F.StartBring(tg) end end)
     elseif cmd == "ownerpos" or cmd == "powner" or cmd == "protectowner" then
         F.StartProtectOwner()
     elseif cmd == "unownerpos" or cmd == "unpowner" or cmd == "unprotectowner" then
