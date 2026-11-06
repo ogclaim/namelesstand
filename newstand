@@ -2914,14 +2914,13 @@ function F.FireForceHit(target)
             or game:GetService("ReplicatedStorage"):FindFirstChild("MainRemoteEvent")
     end
     if not MainEvent or not target then return false end
-    -- optional lock: only the cmd target
     if ForceHitCmdTarget and ForceHitCmdTarget.Parent then
         if target ~= ForceHitCmdTarget and target.Name ~= ForceHitCmdTarget.Name then
             return false
         end
     end
     local now = tick()
-    local rate = ForceHitFireRate or 0.08
+    local rate = ForceHitFireRate or 0.12
     if rate > 0 and now - (_lastFHFire or 0) < rate then return false end
     local tChar = target.Character
     if not tChar then return false end
@@ -2948,56 +2947,43 @@ function F.FireForceHit(target)
     end
     if not tool or not tool:FindFirstChild("Handle") then return false end
     if tool.Name:lower():find("knife") then return false end
+
     local handlePos = tool.Handle.Position
     local hitPos = hitPart.Position
-    local originPos = handlePos
-    -- wallbang only during orbit 3 combat
-    if Orbit3Combat then
-        local dir = hitPos - handlePos
-        if dir.Magnitude < 0.05 then dir = Vector3.new(0, 0, -1) else dir = dir.Unit end
-        originPos = hitPos - dir * 1.5
-    end
     local name = string.lower(tool.Name)
     local pellets = 1
     if string.find(name, "shotgun") or string.find(name, "tactical") or string.find(name, "db") or string.find(name, "double") then
         pellets = 5
     end
-    local volleys = (RapidFireEnabled or Orbit3Combat) and (RapidFireVolleys or 4) or 1
-    for v = 1, volleys do
-        local hits = {}
-        for i = 1, pellets do
-            local pos = hitPos
-            if pellets > 1 or RapidFireEnabled or Orbit3Combat then
-                pos = hitPos + Vector3.new(
-                    math.random(-20, 20) / 100,
-                    math.random(-20, 20) / 100,
-                    math.random(-20, 20) / 100
-                )
-            end
-            hits[i] = {
-                PELLET = i,
-                POSITION = pos,
-                MODEL = tChar,
-                PART = hitPart,
-            }
+    local hits = {}
+    for i = 1, pellets do
+        local pos = hitPos
+        if pellets > 1 then
+            pos = hitPos + Vector3.new(
+                math.random(-15, 15) / 100,
+                math.random(-15, 15) / 100,
+                math.random(-15, 15) / 100
+            )
         end
-        local aimDir = hitPos - originPos
-        if aimDir.Magnitude < 0.05 then aimDir = Vector3.new(0, 0, -1) else aimDir = aimDir.Unit end
-        local aim = hitPos + aimDir * 25
-        getgenv().FH_Index = ((getgenv().FH_Index or 0) + 1) % 100
-        local packet = {
-            INDEX = getgenv().FH_Index,
-            AIM = aim,
-            ORIGIN = originPos,
-            HITS = hits,
+        hits[i] = {
+            PELLET = i,
+            POSITION = pos,
+            MODEL = tChar,
+            PART = hitPart,
         }
-        pcall(function() MainEvent:FireServer("Shoot", packet) end)
     end
-    -- Magic bullet: packet-only (no tool Activate free-fire)
-    -- magic bullet only during orbit 3 combat (packet only); otherwise also Activate
-    if not Orbit3Combat then
-        pcall(function() tool:Activate() end)
-    end
+    local aimDir = hitPos - handlePos
+    if aimDir.Magnitude < 0.05 then aimDir = Vector3.new(0, 0, -1) else aimDir = aimDir.Unit end
+    local aim = hitPos + aimDir * 25
+    getgenv().FH_Index = ((getgenv().FH_Index or 0) + 1) % 100
+    local packet = {
+        INDEX = getgenv().FH_Index,
+        AIM = aim,
+        ORIGIN = handlePos,
+        HITS = hits,
+    }
+    pcall(function() MainEvent:FireServer("Shoot", packet) end)
+    pcall(function() tool:Activate() end)
     _lastFHFire = now
     _lastFHT = now
     return true
@@ -5508,12 +5494,9 @@ function F.StartOrbit3CombatLoop()
             return
         end
         UseGun = true
-        RapidFireEnabled = true
+        RapidFireEnabled = false
         if F.SelectGun then pcall(F.SelectGun, "uzi") end
-        local ctrl = F.GetController and F.GetController()
-        if ctrl then
-            pcall(F.FireAtControllerNoHit, ctrl)
-        end
+        if F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
         if F.TryReload then pcall(F.TryReload) end
     end)
 end
@@ -5538,7 +5521,7 @@ function F.StartControllerOrbit(mode)
     -- orbit 3: normal orbit + uzi + rapid + wallbang + magic bullet
     if CtrlOrbitMode == 3 then
         Orbit3Combat = true
-        RapidFireEnabled = true
+        RapidFireEnabled = false
         UseGun = true
         if F.SelectGun then pcall(F.SelectGun, "uzi") end
         if F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
