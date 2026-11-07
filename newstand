@@ -2,15 +2,15 @@
     NAMELESS.HVH - Stand Controller
 ]]
 ------------------------ EDIT THESE ------------------------
-local ControllerName = "godlyseananners9"
+local ControllerName = "joker_thekillerguy1"
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
     "cepit1U067",
     "cepit3634b",
     "cepit02U31",
-    "joker_thekillerguy", -- 4
-    "joker_thekillerguy1", -- 5
-    "", -- 6
+    "cepit935u2", -- 4
+    "cepit2L240", -- 5
+    "cepit3W326", -- 6
     "", -- 7
     "", -- 8
     "", -- 9
