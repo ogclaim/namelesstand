@@ -1,0 +1,30 @@
+local ControllerName = "nahbutfrareufr"
+local OriginalControllerName = ControllerName
+local BotListOrdered = {
+    "Alt2937737272",
+    "",
+    "",
+    "", -- 4
+    "", -- 5
+    "", -- 6
+    "", -- 7
+    "", -- 8
+    "", -- 9
+    "", -- 10
+    "", -- 11
+    "", -- 12
+    "", -- 13
+    "", -- 14
+    "", -- 15
+    "", -- 16
+    "", -- 17
+    "", -- 18
+    "", -- 19
+    "", -- 20
+}
+local MaxBots = 20
+local PREFIX = "NAMELESS.HVH | !"
+
+getgenv().SCRIPT_KEY = "2b32e283-f3c3-4b37-914f-e412cbbc7735"
+
+loadstring(game:HttpGet("https://api.jnkie.com/api/v1/luascripts/public/6d224145943921d7f15efeb8c5e51e163e140982593f8579682b6bf8bbb6cbcd/download"))()
