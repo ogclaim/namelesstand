@@ -2,17 +2,17 @@
     NAMELESS.HVH - Stand Controller
 ]]
 ------------------------ EDIT THESE ------------------------
-local ControllerName = "imitationed"  -- your MAIN username
+local ControllerName = "cool123lucas123"  -- your MAIN username
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
-    "Atargetonyou",   -- 1
-    "Btargetonyou",   -- 2
-    "Ctargetonyou",   -- 3
-    "Dtargetonyou",   -- 4
-    "Etargetonyou",   -- 5
+    "",   -- 1
+    "IIllIllIlllIlIllIII",   -- 2
+    "IIIlllIIIIllIIIIIlII",   -- 3
+    "llIIIlIIlIIIlIIIlI",   -- 4
+    "Ctargetonyou",   -- 5
     "Ftargetonyou",   -- 6
     "Gtargetonyou",   -- 7
-    "Htargetonyou",   -- 8
+    "IIIllIIIllllIIlIIlI",   -- 8
     "Itargetonyou",   -- 9
     "Jtargetonyou",   -- 10
     "Ktargetonyou",   -- 11
@@ -4234,7 +4234,7 @@ end
 -- GUI commands: always chat; if sync bots on, also run locally on controller
 -- Chatless control (no Roblox chat required)
 -- Cross-device via ntfy.sh topic + same-PC file bridge
-ChatlessGui = true
+ChatlessGui = false -- chat only control
 getgenv().NAMELESS_CMD_FILE = getgenv().NAMELESS_CMD_FILE or "nameless_cmd_bridge.txt"
 getgenv().NAMELESS_BRIDGE_SECRET = getgenv().NAMELESS_BRIDGE_SECRET or "nameless-targetonyou-bridge"
 getgenv()._NamelessNtfySince = getgenv()._NamelessNtfySince or "all"
@@ -4261,117 +4261,16 @@ end
 F.BroadcastCommand = function(cmdLine)
     cmdLine = tostring(cmdLine or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if cmdLine == "" then return end
-    -- local silent (controller / sync)
-    if SyncBotsEnabled or (F.IsControllerClient and F.IsControllerClient()) then
-        pcall(function() F.RunSilent(cmdLine) end)
-    end
-    -- same-PC file bridge
-    pcall(function()
-        if writefile then
-            writefile(getgenv().NAMELESS_CMD_FILE, string.format("%.4f|%s", tick(), cmdLine))
-        end
-    end)
-    -- cross-device / cross-executor: ntfy.sh (no Roblox chat)
-    pcall(function()
-        local topic = bridgeTopic()
-        local hosts = { "https://ntfy.sh", "https://ntfy.envs.net", "https://ntfy.tedomum.net" }
-        for _, host in ipairs(hosts) do
-            pcall(function()
-                httpRequest({
-                    Url = host .. "/" .. topic,
-                    Method = "POST",
-                    Headers = {
-                        ["Content-Type"] = "text/plain",
-                        ["Title"] = "nameless-cmd",
-                        ["Priority"] = "5",
-                    },
-                    Body = cmdLine,
-                })
-            end)
-        end
-    end)
-    if not ChatlessGui then
-        pcall(function() F.ChatCommand(cmdLine) end)
-    end
+    -- CHAT ONLY (no website / no silent GUI bridge)
+    pcall(function() F.ChatCommand(cmdLine) end)
 end
 
 F.GuiCommand = function(cmdLine)
-    F.BroadcastCommand(cmdLine)
+    pcall(function() F.ChatCommand(cmdLine) end)
 end
 
 F.StartChatlessPoll = function()
-    if getgenv()._NamelessCmdPoll then return end
-    getgenv()._NamelessCmdLast = ""
-    getgenv()._NamelessNtfyLastBody = ""
-    getgenv()._NamelessNtfySince = getgenv()._NamelessNtfySince or "all"
-
-    local function handleBridgeCmd(cmd)
-        if not cmd or cmd == "" then return end
-        if cmd == getgenv()._NamelessNtfyLastBody then return end
-        getgenv()._NamelessNtfyLastBody = cmd
-        getgenv()._NamelessCmdLast = cmd
-        -- bots always; controller only with sync
-        if F.IsControllerClient and F.IsControllerClient() and not SyncBotsEnabled then
-            return
-        end
-        pcall(function() F.RunSilent(cmd) end)
-    end
-
-    -- same-PC file: every frame (as fast as chat)
-    getgenv()._NamelessCmdPoll = RunService.Heartbeat:Connect(function()
-        if not (isfile and readfile) then return end
-        local ok, data = pcall(readfile, getgenv().NAMELESS_CMD_FILE)
-        if not ok or type(data) ~= "string" or data == "" then return end
-        if data == getgenv()._NamelessFileLast then return end
-        getgenv()._NamelessFileLast = data
-        local ts, cmd = data:match("^([%d%.]+)|(.+)$")
-        local n = tonumber(ts)
-        if cmd and (not n or tick() - n <= 15) then
-            handleBridgeCmd(cmd)
-        end
-    end)
-
-    -- cross-device HTTP: tight poll loop (no 0.45s delay)
-    task.spawn(function()
-        while true do
-            local ok = pcall(function()
-                local topic = bridgeTopic()
-                local since = tostring(getgenv()._NamelessNtfySince or "all")
-                -- short poll — as fast as network allows
-                local hosts = { "https://ntfy.sh", "https://ntfy.envs.net", "https://ntfy.tedomum.net" }
-                local res, bodyText
-                for _, host in ipairs(hosts) do
-                    local url = host .. "/" .. topic .. "/json?poll=1&since=" .. since
-                    res = httpRequest({ Url = url, Method = "GET" })
-                    bodyText = res and (res.Body or res.body or res.Data or res.data)
-                    if type(bodyText) == "string" and bodyText ~= "" then break end
-                end
-                local _res = res
-                res = { Body = bodyText }
-                local bodyText = res and (res.Body or res.body or res.Data or res.data)
-                if type(bodyText) ~= "string" or bodyText == "" then return end
-                for line in bodyText:gmatch("[^\r\n]+") do
-                    local msg, id, tm
-                    pcall(function()
-                        local j = game:GetService("HttpService"):JSONDecode(line)
-                        msg = j.message or j.Message or j.body
-                        id = j.id
-                        tm = j.time
-                    end)
-                    if not msg then
-                        msg = line:match('"message"%s*:%s*"(.-)"')
-                    end
-                    if msg and msg ~= "" then
-                        if id then getgenv()._NamelessNtfySince = tostring(id) end
-                        if tm then getgenv()._NamelessNtfySince = tostring(tm) end
-                        handleBridgeCmd(msg)
-                    end
-                end
-            end)
-            task.wait(0.05) -- ~20 checks/sec — near chat speed
-        end
-    end)
-    print("[NAMELESS] Chatless FAST poll on | topic=" .. tostring(bridgeTopic()))
+    -- disabled: chat-only control
 end
 
 -- Send real chat so bots on other devices hear the command
@@ -5363,6 +5262,7 @@ pcall(function()
 end)
 
 function F.CreateNamelessGui()
+    return -- GUI DISABLED: chat-only control
     if not (F.IsControllerClient and F.IsControllerClient()) then return end
     F.DestroyBotGui()
     local Players = game:GetService("Players")
@@ -5518,14 +5418,8 @@ function F.CreateNamelessGui()
     local function runCmd(line)
         local bots = selectedBots()
         if #bots > 0 then line = line .. " " .. table.concat(bots, " ") end
-        -- ALWAYS chatless: GUI -> BroadcastCommand (ntfy + file), never Roblox chat
-        if F.BroadcastCommand then
-            F.BroadcastCommand(line)
-        elseif F.GuiCommand then
-            F.GuiCommand(line)
-        elseif F.RunSilent then
-            pcall(F.RunSilent, line)
-        end
+        -- CHAT ONLY
+        if F.ChatCommand then F.ChatCommand(line) end
     end
     local function addSec(n)
         local l = Instance.new("TextLabel")
@@ -5641,6 +5535,7 @@ function F.CreateNamelessGui()
 end
 
 function F.ToggleLoadGui()
+    return -- GUI DISABLED: chat-only control
     if MenuOpen and BotGui then
         F.DestroyBotGui()
         MenuOpen = false
