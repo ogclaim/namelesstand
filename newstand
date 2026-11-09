@@ -1,50 +1,56 @@
 --[[
     NAMELESS.HVH - Stand Controller
 ]]
+
+-- polyfill getgenv for executors that lack it
+if type(getgenv) ~= "function" then
+    getgenv = function()
+        if type(_G) == "table" then return _G end
+        return {}
+    end
+end
+
 ------------------------ EDIT THESE ------------------------
 local ControllerName = "cool123lucas123"  -- your MAIN username
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
-    "Etargetonyou",   -- 1
-    "IIllIllIlllIlIllIII",   -- 2
+    "Etargetonyou",          -- 1
+    "IIllIllIlllIlIllIII",    -- 2
     "IIIlllIIIIllIIIIIlII",   -- 3
-    "llIIIlIIlIIIlIIIlI",   -- 4
-    "Ctargetonyou",   -- 5
-    "Ftargetonyou",   -- 6
-    "Gtargetonyou",   -- 7
-    "IIIllIIIllllIIlIIlI",   -- 8
-    "Itargetonyou",   -- 9
-    "Jtargetonyou",   -- 10
-    "Ktargetonyou",   -- 11
-    "Ltargetonyou",   -- 12
-    "Mtargetonyou",   -- 13
-    "Ntargetonyou",   -- 14
-    "Otargetonyou",   -- 15
-    "Ptargetonyou",   -- 16
-    "Qtargetonyou",   -- 17
-    "Rtargetonyou",   -- 18
-    "Stargetonyou",   -- 19
-    "Ttargetonyou",   -- 20
-    "Utargetonyou",   -- 21
-    "Vtargetonyou",   -- 22
-    "Wtargetonyou",   -- 23
-    "Xtargetonyou",   -- 24
-    "Ytargetonyou",   -- 25
-    "Ztargetonyou",   -- 26
+    "llIIIlIIlIIIlIIIlI",     -- 4
+    "Ctargetonyou",          -- 5
+    "Ftargetonyou",          -- 6
+    "Gtargetonyou",          -- 7
+    "IIIllIIIllllIIlIIlI",    -- 8
 }
-local MaxBots = 26
+local MaxBots = 8
 local PREFIX = "NAMELESS.HVH | !"
--- Chatless bridge (same on controller + all Delta cloud phones)
--- Change this password if you want; must match on every account
-getgenv().NAMELESS_BRIDGE_SECRET = getgenv().NAMELESS_BRIDGE_SECRET or "nameless-targetonyou-bridge"
 -------------------------------------------------------------
 
-getgenv().NAMELESS_BOOT = true
-MenuKey = MenuKey or Enum.KeyCode.LeftShift
+-- Safe getgenv (fixes "attempt to call a nil value" on some executors)
+local function GENV()
+    local ok, g = pcall(function()
+        if type(getgenv) == "function" then return getgenv() end
+        return nil
+    end)
+    if ok and type(g) == "table" then return g end
+    if type(_G) == "table" then return _G end
+    return {}
+end
+local GEN = GENV()
+GEN.NAMELESS_BOOT = true
+pcall(function()
+    MenuKey = MenuKey or Enum.KeyCode.LeftShift
+end)
+if not MenuKey then MenuKey = nil end
 
 -- Chat tag for Nameless users + local chat spy
-getgenv().NAMELESS_USERS = getgenv().NAMELESS_USERS or {}
-getgenv().NAMELESS_USERS[game:GetService("Players").LocalPlayer.Name] = true
+pcall(function()
+    local g = getgenv()
+    g.NAMELESS_USERS = g.NAMELESS_USERS or {}
+    local lp = game:GetService("Players").LocalPlayer
+    if lp then g.NAMELESS_USERS[lp.Name] = true end
+end)
 -- broadcast presence via attribute on character
 task.spawn(function()
     local lp = game:GetService("Players").LocalPlayer
