@@ -4218,9 +4218,17 @@ end
 
 -- forward funcs on F: F.StartKill, F.StartFollow, F.OnChatted, F.RunSilent
 F.RunSilent = function(cmdLine)
+    cmdLine = tostring(cmdLine or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if cmdLine == "" then return end
     getgenv()._StandGuiSilent = true
-    pcall(function() F.OnChatted(LocalPlayer, PREFIX .. cmdLine) end)
+    getgenv()._NamelessBridgeCmd = true
+    -- Prefix so ParsePrefix accepts it; fromGui/bridge flags skip owner chat checks
+    local msg = tostring(PREFIX or "NAMELESS.HVH | !") .. cmdLine
+    pcall(function()
+        F.OnChatted(LocalPlayer, msg)
+    end)
     getgenv()._StandGuiSilent = false
+    getgenv()._NamelessBridgeCmd = false
 end
 
 -- GUI commands: always chat; if sync bots on, also run locally on controller
@@ -4292,58 +4300,66 @@ F.StartChatlessPoll = function()
     getgenv()._NamelessCmdLast = ""
     getgenv()._NamelessNtfyLastBody = ""
     getgenv()._NamelessNtfySince = getgenv()._NamelessNtfySince or "all"
-    -- file poll (same PC)
+
+    local function handleBridgeCmd(cmd)
+        if not cmd or cmd == "" then return end
+        if cmd == getgenv()._NamelessNtfyLastBody then return end
+        getgenv()._NamelessNtfyLastBody = cmd
+        getgenv()._NamelessCmdLast = cmd
+        -- bots always; controller only with sync
+        if F.IsControllerClient and F.IsControllerClient() and not SyncBotsEnabled then
+            return
+        end
+        pcall(function() F.RunSilent(cmd) end)
+    end
+
+    -- same-PC file: every frame (as fast as chat)
     getgenv()._NamelessCmdPoll = RunService.Heartbeat:Connect(function()
-        if isfile and readfile then
-            local ok, data = pcall(readfile, getgenv().NAMELESS_CMD_FILE)
-            if ok and type(data) == "string" and data ~= "" and data ~= getgenv()._NamelessCmdLast then
-                getgenv()._NamelessCmdLast = data
-                local ts, cmd = data:match("^([%d%.]+)|(.+)$")
-                local n = tonumber(ts)
-                if cmd and (not n or tick() - n <= 12) then
-                    if not (F.IsControllerClient and F.IsControllerClient() and not SyncBotsEnabled) then
-                        pcall(function() F.RunSilent(cmd) end)
-                    end
-                end
-            end
+        if not (isfile and readfile) then return end
+        local ok, data = pcall(readfile, getgenv().NAMELESS_CMD_FILE)
+        if not ok or type(data) ~= "string" or data == "" then return end
+        if data == getgenv()._NamelessFileLast then return end
+        getgenv()._NamelessFileLast = data
+        local ts, cmd = data:match("^([%d%.]+)|(.+)$")
+        local n = tonumber(ts)
+        if cmd and (not n or tick() - n <= 15) then
+            handleBridgeCmd(cmd)
         end
     end)
-    -- HTTP poll for other devices / executors
+
+    -- cross-device HTTP: tight poll loop (no 0.45s delay)
     task.spawn(function()
         while true do
-            task.wait(0.45)
-            local topic = bridgeTopic()
-            local since = tostring(getgenv()._NamelessNtfySince or "all")
-            local url = "https://ntfy.sh/" .. topic .. "/json?poll=1&since=" .. since
-            local res = httpRequest({ Url = url, Method = "GET" })
-            if res and res.Body and res.Body ~= "" then
-                -- one JSON object per line or single object
-                for line in tostring(res.Body):gmatch("[^\r\n]+") do
-                    local body, id
+            local ok = pcall(function()
+                local topic = bridgeTopic()
+                local since = tostring(getgenv()._NamelessNtfySince or "all")
+                -- short poll — as fast as network allows
+                local url = "https://ntfy.sh/" .. topic .. "/json?poll=1&since=" .. since
+                local res = httpRequest({ Url = url, Method = "GET" })
+                local bodyText = res and (res.Body or res.body or res.Data or res.data)
+                if type(bodyText) ~= "string" or bodyText == "" then return end
+                for line in bodyText:gmatch("[^\r\n]+") do
+                    local msg, id, tm
                     pcall(function()
-                        if game and game.HttpService then
-                            local j = game:GetService("HttpService"):JSONDecode(line)
-                            body = j.message or j.Message or j.body
-                            id = j.id or j.event
-                        end
+                        local j = game:GetService("HttpService"):JSONDecode(line)
+                        msg = j.message or j.Message or j.body
+                        id = j.id
+                        tm = j.time
                     end)
-                    if not body then
-                        body = line:match('"message"%s*:%s*"(.-)"') or line
+                    if not msg then
+                        msg = line:match('"message"%s*:%s*"(.-)"')
                     end
-                    if body and body ~= "" and body ~= getgenv()._NamelessNtfyLastBody then
-                        getgenv()._NamelessNtfyLastBody = body
+                    if msg and msg ~= "" then
                         if id then getgenv()._NamelessNtfySince = tostring(id) end
-                        -- skip if this client is pure controller without sync
-                        if F.IsControllerClient and F.IsControllerClient() and not SyncBotsEnabled then
-                            -- controller already ran via Broadcast local silent
-                        else
-                            pcall(function() F.RunSilent(body) end)
-                        end
+                        if tm then getgenv()._NamelessNtfySince = tostring(tm) end
+                        handleBridgeCmd(msg)
                     end
                 end
-            end
+            end)
+            task.wait(0.05) -- ~20 checks/sec — near chat speed
         end
     end)
+    print("[NAMELESS] Chatless FAST poll on | topic=" .. tostring(bridgeTopic()))
 end
 
 -- Send real chat so bots on other devices hear the command
@@ -5490,9 +5506,14 @@ function F.CreateNamelessGui()
     local function runCmd(line)
         local bots = selectedBots()
         if #bots > 0 then line = line .. " " .. table.concat(bots, " ") end
-        if F.ChatCommand then F.ChatCommand(line)
-        elseif F.GuiCommand then F.GuiCommand(line) end
-        if SyncBotsEnabled and F.RunSilent then pcall(F.RunSilent, line) end
+        -- ALWAYS chatless: GUI -> BroadcastCommand (ntfy + file), never Roblox chat
+        if F.BroadcastCommand then
+            F.BroadcastCommand(line)
+        elseif F.GuiCommand then
+            F.GuiCommand(line)
+        elseif F.RunSilent then
+            pcall(F.RunSilent, line)
+        end
     end
     local function addSec(n)
         local l = Instance.new("TextLabel")
@@ -5759,19 +5780,37 @@ F.StartFollow = function()
     F.StopAll()
     PendingAutokill, SavedKillTargets = keepA, keepT
     CurrentAction = "follow"
-    F.StartGlue("follow", ctrl)
-    -- aura dance instead of fly animation
+    -- INSTANT snap behind controller (no wait / tween)
     pcall(function()
-        F.stopFlyAnims()
-        local auraId = (DanceIds and (DanceIds["aura"] or DanceIds["headless_aura"])) or "rbxassetid://98893149829644"
-        if type(auraId) == "string" and not auraId:find("rbxassetid") then
-            auraId = "rbxassetid://" .. auraId
+        local tr = ctrl.Character and (ctrl.Character:FindFirstChild("HumanoidRootPart") or ctrl.Character:FindFirstChild("UpperTorso"))
+        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if tr and r then
+            local slot = tonumber(MySlot) or 1
+            local col = (slot - 1) % 3
+            local row = math.floor((slot - 1) / 3)
+            local x = (col - 1) * (FollowSpacing or 3)
+            local z = (FollowBack or 4) + row * (FollowBack or 4)
+            local y = (HeightPerRow or 3) * row
+            r.CFrame = tr.CFrame * CFrame.new(x, y, z)
+            r.AssemblyLinearVelocity = Vector3.zero
+            r.AssemblyAngularVelocity = Vector3.zero
         end
-        DancePersistent = true
-        LastDanceId = auraId
-        CurrentDance = "aura"
-        if F.StartDance then F.StartDance("aura", auraId) end
-        if F.EnsureDancePlaying then F.EnsureDancePlaying() end
+    end)
+    F.StartGlue("follow", ctrl)
+    -- aura dance (non-blocking)
+    task.defer(function()
+        pcall(function()
+            if F.stopFlyAnims then F.stopFlyAnims() end
+            local auraId = (DanceIds and (DanceIds["aura"] or DanceIds["headless_aura"])) or "rbxassetid://98893149829644"
+            if type(auraId) == "string" and not auraId:find("rbxassetid") then
+                auraId = "rbxassetid://" .. auraId
+            end
+            DancePersistent = true
+            LastDanceId = auraId
+            CurrentDance = "aura"
+            if F.StartDance then F.StartDance("aura", auraId) end
+            if F.EnsureDancePlaying then F.EnsureDancePlaying() end
+        end)
     end)
 end
 
@@ -6555,15 +6594,14 @@ F.OnChatted = function(player, message)
     for w in body:gmatch("%S+") do args[#args+1] = w:lower() end
     local cmd = args[1]
     if not cmd then return end
-    local fromGui = (player == LocalPlayer and getgenv()._StandGuiSilent == true)
-    -- Controller never runs bot actions unless SyncBotsEnabled
+    local fromGui = (getgenv()._StandGuiSilent == true) or (getgenv()._NamelessBridgeCmd == true)
+    -- Controller: do not run bot actions (GUI already broadcast to bots)
     if F.IsControllerClient() then
         if cmd == "load" and player == LocalPlayer then F.ToggleLoadGui() return end
-        if not SyncBotsEnabled and not fromGui then return end
-        if not SyncBotsEnabled and fromGui then return end
-        -- if sync on, fall through and execute like a stand
+        if not SyncBotsEnabled then return end
+        -- sync on: fall through and also execute locally
     end
-    -- Stand clients only obey controller / owners
+    -- Stand/bot: accept bridge/GUI silent commands OR real owner chat
     if F.IsStandClient() and not fromGui and not F.IsOwner(player) and not F.IsPrivileged(player) then
         return
     end
