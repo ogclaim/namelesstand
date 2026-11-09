@@ -1,27 +1,18 @@
 --[[
     NAMELESS.HVH - Stand Controller
 ]]
-
--- polyfill getgenv for executors that lack it
-if type(getgenv) ~= "function" then
-    getgenv = function()
-        if type(_G) == "table" then return _G end
-        return {}
-    end
-end
-
 ------------------------ EDIT THESE ------------------------
 local ControllerName = "cool123lucas123"  -- your MAIN username
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
-    "Etargetonyou",          -- 1
-    "IIllIllIlllIlIllIII",    -- 2
+    "Etargetonyou",   -- 1
+    "IIllIllIlllIlIllIII",   -- 2
     "IIIlllIIIIllIIIIIlII",   -- 3
-    "llIIIlIIlIIIlIIIlI",     -- 4
-    "Ctargetonyou",          -- 5
-    "Ftargetonyou",          -- 6
-    "Gtargetonyou",          -- 7
-    "IIIllIIIllllIIlIIlI",    -- 8
+    "llIIIlIIlIIIlIIIlI",   -- 4
+    "Ctargetonyou",   -- 5
+    "Ftargetonyou",   -- 6
+    "Gtargetonyou",   -- 7
+    "IIIllIIIllllIIlIIlI",   -- 8
 }
 local MaxBots = 8
 local PREFIX = "NAMELESS.HVH | !"
