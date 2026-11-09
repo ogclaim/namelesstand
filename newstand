@@ -5,7 +5,7 @@
 local ControllerName = "cool123lucas123"  -- your MAIN username
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
-    "",   -- 1
+    "Etargetonyou",   -- 1
     "IIllIllIlllIlIllIII",   -- 2
     "IIIlllIIIIllIIIIIlII",   -- 3
     "llIIIlIIlIIIlIIIlI",   -- 4
