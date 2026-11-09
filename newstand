@@ -2388,7 +2388,7 @@ function F.loadFlyAnims()
 end
 
 function F.updateFlyAnim()
-    -- ONLY summon / formation — use aura dance (no fly anim)
+    -- summon / formation: aura dance only (no fly anim)
     if CurrentAction ~= "follow" and CurrentAction ~= "formation" then
         return
     end
@@ -2398,46 +2398,8 @@ function F.updateFlyAnim()
         LastDanceId = auraId
         CurrentDance = "aura"
     end
-    if F.EnsureDancePlaying then F.EnsureDancePlaying() end
-    return
-    -- fly anims disabled
-    if DancePersistent and LastDanceId then
+    if F.EnsureDancePlaying then
         F.EnsureDancePlaying()
-        return
-    end
-    if not LocalPlayer.Character or LocalPlayer.Character ~= FlyAnimChar then
-        F.loadFlyAnims()
-    end
-    if not FlyTrack and not HoverTrack then
-        F.loadFlyAnims()
-    end
-    if not FlyTrack and not HoverTrack then return end
-
-    local ctrl = F.GetController()
-    local moving = false
-    if ctrl and ctrl.Character then
-        local ch = ctrl.Character:FindFirstChildOfClass("Humanoid")
-        if ch and ch.MoveDirection.Magnitude > 0.08 then moving = true end
-        local cr = ctrl.Character:FindFirstChild("HumanoidRootPart")
-        if cr and cr.AssemblyLinearVelocity.Magnitude > 2.5 then moving = true end
-    end
-
-    local fade = ANIM_FADE or 0.2
-    local spd = ANIM_SPEED or 1
-    if moving then
-        if HoverTrack and HoverTrack.IsPlaying then HoverTrack:Stop(fade) end
-        if FlyTrack and not FlyTrack.IsPlaying then
-            pcall(function() FlyTrack:Play(fade, 1, spd) end)
-        elseif not FlyTrack and HoverTrack and not HoverTrack.IsPlaying then
-            pcall(function() HoverTrack:Play(fade, 1, spd) end)
-        end
-    else
-        if FlyTrack and FlyTrack.IsPlaying then FlyTrack:Stop(fade) end
-        if HoverTrack and not HoverTrack.IsPlaying then
-            pcall(function() HoverTrack:Play(fade, 1, spd) end)
-        elseif not HoverTrack and FlyTrack and not FlyTrack.IsPlaying then
-            pcall(function() FlyTrack:Play(fade, 1, spd) end)
-        end
     end
 end
 
@@ -7097,7 +7059,7 @@ if not KillAuraEnabled then F.StartKillAura() end
         end
     elseif cmd == "autostomp" then
         -- always on with kill; no toggle
-        elseif cmd == "whitelist" and args[2] then
+    elseif cmd == "whitelist" and args[2] then
         F.addWhitelistName(args[2])
         local p = F.FindPlayerAny(args[2])
         if p then F.addWhitelistName(p.Name) end
