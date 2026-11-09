@@ -7,7 +7,7 @@ local OriginalControllerName = ControllerName
 local BotListOrdered = {
     "Etargetonyou",   -- 1
     "IIllIllIlllIlIllIII",   -- 2
-    "IIIlllIIIIllIIIIIlII",   -- 3
+    "IIIllIlIllIIlIIlIlI",   -- 3
     "llIIIlIIlIIIlIIIlI",   -- 4
     "Ctargetonyou",   -- 5
     "Ftargetonyou",   -- 6
