@@ -4274,17 +4274,21 @@ F.BroadcastCommand = function(cmdLine)
     -- cross-device / cross-executor: ntfy.sh (no Roblox chat)
     pcall(function()
         local topic = bridgeTopic()
-        httpRequest({
-            Url = "https://ntfy.sh/" .. topic,
-            Method = "POST",
-            Headers = {
-                ["Content-Type"] = "text/plain",
-                ["Title"] = "nameless-cmd",
-                ["Priority"] = "5",
-                ["Tags"] = "robot",
-            },
-            Body = cmdLine,
-        })
+        local hosts = { "https://ntfy.sh", "https://ntfy.envs.net", "https://ntfy.tedomum.net" }
+        for _, host in ipairs(hosts) do
+            pcall(function()
+                httpRequest({
+                    Url = host .. "/" .. topic,
+                    Method = "POST",
+                    Headers = {
+                        ["Content-Type"] = "text/plain",
+                        ["Title"] = "nameless-cmd",
+                        ["Priority"] = "5",
+                    },
+                    Body = cmdLine,
+                })
+            end)
+        end
     end)
     if not ChatlessGui then
         pcall(function() F.ChatCommand(cmdLine) end)
@@ -4334,8 +4338,16 @@ F.StartChatlessPoll = function()
                 local topic = bridgeTopic()
                 local since = tostring(getgenv()._NamelessNtfySince or "all")
                 -- short poll — as fast as network allows
-                local url = "https://ntfy.sh/" .. topic .. "/json?poll=1&since=" .. since
-                local res = httpRequest({ Url = url, Method = "GET" })
+                local hosts = { "https://ntfy.sh", "https://ntfy.envs.net", "https://ntfy.tedomum.net" }
+                local res, bodyText
+                for _, host in ipairs(hosts) do
+                    local url = host .. "/" .. topic .. "/json?poll=1&since=" .. since
+                    res = httpRequest({ Url = url, Method = "GET" })
+                    bodyText = res and (res.Body or res.body or res.Data or res.data)
+                    if type(bodyText) == "string" and bodyText ~= "" then break end
+                end
+                local _res = res
+                res = { Body = bodyText }
                 local bodyText = res and (res.Body or res.body or res.Data or res.data)
                 if type(bodyText) ~= "string" or bodyText == "" then return end
                 for line in bodyText:gmatch("[^\r\n]+") do
@@ -6002,38 +6014,99 @@ F.StartKill = function(targets, isAuto)
     F.StartKillAttackLoop()
     task.spawn(function()
         while CurrentAction == "kill" or CurrentAction == "autokill" do
-            local t = TargetPlayer
-            if not F.inGame(t) then
-                PendingAutokill, SavedKillTargets = nil, nil
-                F.StopKillAttackLoop()
-                if not F.IsSelfControlled() then F.StartFollow() else F.StopAll() end
-                break
+            local function targetDown(plr)
+                if not plr then return true end
+                if not F.inGame(plr) then return true end
+                local c = plr.Character
+                if not c then return true end
+                local h = c:FindFirstChildOfClass("Humanoid")
+                if h and h.Health <= 0 then return true end
+                if F.isKnocked and F.isKnocked(c) then return true end
+                local be = c:FindFirstChild("BodyEffects")
+                local koV = be and (be:FindFirstChild("K.O") or be:FindFirstChild("KO"))
+                if koV and koV.Value then return true end
+                return false
             end
+            local function nextLiveTarget()
+                local list = TargetList or {}
+                for i = 1, #list do
+                    if list[i] and not targetDown(list[i]) then return list[i] end
+                end
+                return nil
+            end
+            local function allTargetsDown()
+                local list = TargetList or { TargetPlayer }
+                if #list == 0 then return true end
+                for i = 1, #list do
+                    if list[i] and not targetDown(list[i]) then return false end
+                end
+                return true
+            end
+            local t = TargetPlayer
+            if (not t or not F.inGame(t)) and not allTargetsDown() then
+                local nxt = nextLiveTarget()
+                if nxt then
+                    TargetPlayer = nxt
+                    t = nxt
+                    KillPhase = "attack"
+                    F.StartGlue(UseGun and "gun" or "knife", t)
+                    F.StartCameraLock(t)
+                    F.StartKillAttackLoop()
+                end
+            elseif allTargetsDown() and KillPhase == "attack" then
+                F.StopKillAttackLoop()
+                F.StopCameraLock()
+                F.ForceGlueOff()
+                KillPhase = "stomp_all"
+                getgenv()._StompAllIndex = 1
+            end
+            t = TargetPlayer
             local myHum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
             if not myHum or myHum.Health <= 0 then
                 F.StopKillAttackLoop()
                 break
             end
             F.EnsureDancePlaying()
-            local tChar = t.Character
+            local tChar = t and t.Character
             local hum = tChar and tChar:FindFirstChildOfClass("Humanoid")
             local ko = tChar and F.isKnocked(tChar)
             local dead = hum and hum.Health <= 0
             if KillPhase == "attack" then
-                -- combat is driven by F.StartKillAttackLoop(Heartbeat)
-                if not tChar or ko or dead then
-                    pcall(function()
-                        local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                        if h then h:UnequipTools() end
-                    end)
-                    F.StopKillAttackLoop()
-                    F.StopCameraLock()
-                    F.StopSlotSpam()
-                    F.ForceGlueOff()
-                    KillPhase = "stomp"
-                    StompDoneForCycle = false
-                    WaitFFUntil = nil
-                    F.SayKillChat()
+                if t and (not tChar or ko or dead or targetDown(t)) then
+                    local nxt = nextLiveTarget()
+                    if nxt then
+                        TargetPlayer = nxt
+                        F.StartGlue(UseGun and "gun" or "knife", nxt)
+                        F.StartCameraLock(nxt)
+                        F.StartKillAttackLoop()
+                    elseif allTargetsDown() then
+                        pcall(function()
+                            local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                            if h then h:UnequipTools() end
+                        end)
+                        F.StopKillAttackLoop()
+                        F.StopCameraLock()
+                        F.StopSlotSpam()
+                        F.ForceGlueOff()
+                        KillPhase = "stomp_all"
+                        getgenv()._StompAllIndex = 1
+                        WaitFFUntil = nil
+                        F.SayKillChat()
+                    end
+                end
+            elseif KillPhase == "stomp_all" then
+                local list = TargetList or { TargetPlayer }
+                local idx = getgenv()._StompAllIndex or 1
+                if idx <= #list then
+                    local tp = list[idx]
+                    if tp then pcall(function() F.DoSingleStomp(tp) end) end
+                    getgenv()._StompAllIndex = idx + 1
+                    task.wait(0.12)
+                else
+                    if F.IsSelfControlled() then
+                        if isAuto then KillPhase = "waitff" getgenv()._StompAllIndex = 1
+                        else PendingAutokill, SavedKillTargets = nil, nil F.StopAll() break end
+                    else KillPhase = "summon" end
                 end
             elseif KillPhase == "stomp" then
                 if not StompDoneForCycle then F.DoSingleStomp(t) StompDoneForCycle = true end
