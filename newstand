@@ -2,17 +2,17 @@
     NAMELESS.HVH - Stand Controller
 ]]
 ------------------------ EDIT THESE ------------------------
-local ControllerName = "cool123lucas123"  -- your MAIN username
+local ControllerName = "imitationed"  -- your MAIN username
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
-    "IIIllIlIllIIlIIlIlI",   -- 1
-    "IIllIllIlllIlIllIII",   -- 2
-    "Etargetonyou",   -- 3
-    "llIIIlIIlIIIlIIIlI",   -- 4
-    "Ctargetonyou",   -- 5
-    "Ftargetonyou",   -- 6
-    "Gtargetonyou",   -- 7
-    "IIIllIIIllllIIlIIlI",   -- 8
+    "Witkni3416",   -- 1
+    "Radianch3292",   -- 2
+    "Frosb4622",   -- 3
+    "Skybla1919",   -- 4
+    "Gracban5470",   -- 5
+    "Zeavi2067",   -- 6
+    "Warneed6752",   -- 7
+    "Drokspan7917",   -- 8
 }
 local MaxBots = 8
 local PREFIX = "NAMELESS.HVH | !"
