@@ -13,6 +13,8 @@ local BotListOrdered = {
     "Zeavi2067",   -- 6
     "Warneed6752",   -- 7
     "Drokspan7917",   -- 8
+    "Kipsh6295",   -- 8
+    "Kiptwist5311",   -- 8
 }
 local MaxBots = 8
 local PREFIX = "NAMELESS.HVH | !"
