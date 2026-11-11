@@ -25,7 +25,7 @@ local BotListOrdered = {
     "Kipsh6295", 
     "Kiptwist5311", 
 }
-local MaxBots = 8
+local MaxBots = 10
 local PREFIX = "NAMELESS.HVH | !"
 local function GENV()
     local ok, g = pcall(function()
