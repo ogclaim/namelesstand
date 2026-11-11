@@ -16,7 +16,7 @@ local BotListOrdered = {
     "Kipsh6295",   -- 8
     "Kiptwist5311",   -- 8
 }
-local MaxBots = 8
+local MaxBots = 10
 local PREFIX = "NAMELESS.HVH | !"
 -------------------------------------------------------------
 
