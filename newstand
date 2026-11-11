@@ -1,32 +1,53 @@
---[[
-    NAMELESS.HVH - Stand Controller
-]]
------------------------- EDIT THESE ------------------------
+-- NAMELESS.HVH Stand
+-- Luarmor / Luraph v15: keep only frequently executed functions outside the VM.
+-- Raw-source no-ops; the protected build recognizes the attributes at compile time.
+if not LPH_OBFUSCATED then
+    function LPH_ATTRIBUTES(...) end
+    function VM(...) end
+end
+if type(getgenv) ~= "function" then
+    getgenv = function()
+        if type(_G) == "table" then return _G end
+        return {}
+    end
+end
 local ControllerName = "imitationed"  -- your MAIN username
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
-    "Witkni3416",   -- 1
-    "Radianch3292",   -- 2
-    "Frosb4622",   -- 3
-    "Skybla1919",   -- 4
-    "Gracban5470",   -- 5
-    "Zeavi2067",   -- 6
-    "Warneed6752",   -- 7
-    "Drokspan7917",   -- 8
-    "Kipsh6295",   -- 8
-    "Kiptwist5311",   -- 8
+    "Witkni3416", 
+    "Radianch3292", 
+    "Frosb4622", 
+    "Skybla1919", 
+    "Gracban5470", 
+    "Zeavi2067", 
+    "Warneed6752", 
+    "Drokspan7917", 
+    "Kipsh6295", 
+    "Kiptwist5311", 
 }
-local MaxBots = 10
+local MaxBots = 8
 local PREFIX = "NAMELESS.HVH | !"
--------------------------------------------------------------
-
-getgenv().NAMELESS_BOOT = true
-MenuKey = MenuKey or Enum.KeyCode.LeftShift
-
--- Chat tag for Nameless users + local chat spy
-getgenv().NAMELESS_USERS = getgenv().NAMELESS_USERS or {}
-getgenv().NAMELESS_USERS[game:GetService("Players").LocalPlayer.Name] = true
--- broadcast presence via attribute on character
+local function GENV()
+    local ok, g = pcall(function()
+        if type(getgenv) == "function" then return getgenv() end
+        return nil
+    end)
+    if ok and type(g) == "table" then return g end
+    if type(_G) == "table" then return _G end
+    return {}
+end
+local GEN = GENV()
+GEN.NAMELESS_BOOT = true
+pcall(function()
+    MenuKey = MenuKey or Enum.KeyCode.LeftShift
+end)
+if not MenuKey then MenuKey = nil end
+pcall(function()
+    local g = getgenv()
+    g.NAMELESS_USERS = g.NAMELESS_USERS or {}
+    local lp = game:GetService("Players").LocalPlayer
+    if lp then g.NAMELESS_USERS[lp.Name] = true end
+end)
 task.spawn(function()
     local lp = game:GetService("Players").LocalPlayer
     local function tagChar(char)
@@ -36,7 +57,6 @@ task.spawn(function()
     if lp.Character then tagChar(lp.Character) end
     lp.CharacterAdded:Connect(tagChar)
 end)
-
 local function isNamelessPlayer(plr)
     if not plr then return false end
     if getgenv().NAMELESS_USERS[plr.Name] then return true end
@@ -44,8 +64,6 @@ local function isNamelessPlayer(plr)
     if c and c:GetAttribute("NamelessUser") then return true end
     return false
 end
-
--- Chat spy: print all chats with [NAMELESS USER] tag when applicable
 pcall(function()
     local Players = game:GetService("Players")
     local function onChatted(plr, msg)
@@ -68,7 +86,6 @@ pcall(function()
         plr.Chatted:Connect(function(msg) onChatted(plr, msg) end)
     end)
 end)
-
 getgenv()._NL = getgenv()._NL or {}
 local NL = getgenv()._NL
 local F = {}
@@ -82,8 +99,6 @@ ForceHit2Active = false
 ForceHit1Active = false
 StompSelectedTarget = false
 ForceHitStompTarget = nil
-
-
 local VAULT_EMOTES = {
     ["tornado"] = "rbxassetid://135373056067761",
     ["skibidi"] = "rbxassetid://127154705636043",
@@ -145,7 +160,6 @@ local VAULT_EMOTES = {
     ["penguini"] = "rbxassetid://86612834365351",
     ["human_tornado"] = "rbxassetid://94566164803307",
 }
-
 getgenv().SIZE_X, getgenv().SIZE_Y, getgenv().SIZE_Z = 50, 50, 50
 getgenv().KnifeHitboxEnabled = true
 getgenv().glue_active = false
@@ -157,14 +171,10 @@ getgenv().target_players = getgenv().target_players or {}
 getgenv()._StandGuiSilent = false
 getgenv().KnifeRage = { Enabled = false, Interval = 0.12, CycleStart = tick() }
 getgenv().FlashbackConfig = { Enabled = true, TriggerHP = 10, SavedCF = nil }
--- Autoheal triggers like antistomp, but heals instead of reset (percent of MaxHealth)
-local AutoHealTriggerPct = 0.30
-
--- Summon/formation fly emotes ONLY (not dance)
--- !flyV1 default: idle Super Hero Aura | move Superman Hero Flying
--- !flyV2: idle Headless King Floating | move Flying Airplane
+local AutoHealTriggerPct = 0
+AutoHealHealthFlat = 45
 local FlyVariant = 1
-FlyMode = "Hover" -- Glide | Fly | Hover | Heaven | gogo (Stando)
+FlyMode = "Hover"
 local FLY_MODE_OFFSET = {
     Hover = { y = 2.5, back = 0, lerp = 0.35 },
     Glide = { y = 4, back = 1, lerp = 0.18 },
@@ -188,50 +198,44 @@ local BringMoveSpeed = 80
 local BringArriveDist = 4
 local NoRenderEnabled = false
 local FollowBack, FollowHeight, FollowSpacing, HeightPerRow = 3, 1.2, 2.5, 1
-local FormationRows = 1       -- 1 = single row; >1 = multi-row
-local FormationPerRow = 50    -- bots per row when multi-row (no hard slot cap)
+local FormationRows = 1
+local FormationPerRow = 50
 local GunOrbitDist, OrbitSpeed, OrbitHeight = 10, 30, 1
 local FormationSpacing, StackHeight = 3.5, 3.2
 local KillAuraRange, KillAuraDelay = 80, 0.06
 local KillAuraRowSpacing = 3.5
--- Knife kill-aura orbit (slot 1 base dist 8, +6 per slot; height -8; speed 1000)
 local KA_OrbitBaseDist = 8
 local KA_OrbitDistStep = 6
 local KA_OrbitHeight = -8
 local KA_OrbitSpeed = 1000
 local KA_SummonHold = 0.1
 local VoidY, VoidSpamDeep, VoidSpamSurface = -500, 0.3, 0.2
--- spamvoid in/out customisable (seconds)
-local SpamVoidInTime = 0.10   -- time spent in void
-local SpamVoidOutTime = 0.10  -- time on surface after void before next shot
-local WaitFFDelay = 2.35      -- fixed forcefield wait (not in commands)
--- kill position for orbit / spamvoid (and visual orbit spoof)
-local KillPosition = "Top"    -- Back | Front | Left | Right | Top | Bottom
-local KillDistance = 10       -- studs from target for orbit/spamvoid
--- tween path direction (independent of KillPosition)
-local TweenPath = "backfront" -- backfront | leftright | topbottom | diag_tlbr | diag_trbl | diag_bltr | diag_brtl
+local SpamVoidInTime = 0.10
+local SpamVoidOutTime = 0.10
+local WaitFFDelay = 2.35
+local KillPosition = "Top"
+local KillDistance = 10
+local TweenPath = "backfront"
 local BringCarryWait, BringTweenTime = 2.0, 0.1
 local AntiStompDelay, StompBotSlot = 1.5, 1
 local PostStompHold, SummonHold = 0.35, 0.45
--- Stomp height above body (code only, not in GUI)
 local StompHeight = 3.4
 local ForceHitFireRate, Prediction = 0.08, 0.135
 RapidFireEnabled = false
-RapidFireRate = 0.0           -- no throttle between volleys when rapid
-NormalFireRate = 0.08         -- normal human-ish spacing
-RapidFireVolleys = 4          -- packets per burst (faster than real guns)
+RapidFireRate = 0.0
+NormalFireRate = 0.08
+RapidFireVolleys = 4
 ForceHitFireRate = RapidFireEnabled and RapidFireRate or NormalFireRate
 getgenv().FH_Index = getgenv().FH_Index or 0
 BotEspEnabled = true
-AntiLagEnabled = true         -- blackscreen + norender on stands
-OptMode = true -- FPS/MS priority for low-end / 4GB virtual phones
+AntiLagEnabled = true
+OptMode = true
 OptCullRange = 50
 OptConn = nil
 VisualStripEnabled = false
 VisualStripConn = nil
 SelectedGunKey = nil
 _OrigWarn = warn
-
 ForceHitFOV, DefaultFOV = 20, 70
 ForceHitFOVEnabled = false
 ForceHitFOVCircleVisible = true
@@ -239,7 +243,6 @@ ForceHitKeybindTarget = nil
 ForceHitTracerEnabled = false
 ForceHitKeyCode = Enum.KeyCode.Q
 ForceHitKeyListening = false
--- NeverLarp forcehit only (no dual modes)
 ForceHitMode = "nl"
 local ForceHitMyEnabled = false
 local ForceHitTestEnabled = true
@@ -257,14 +260,13 @@ getgenv().KillAura = getgenv().KillAura or {
     ApplyForceHitVisuals = false,
 }
 local ShiftSpamInterval = 0.1
--- PREFIX set at top
 SyncBotsEnabled = false
-ForceHitCmdTarget = nil -- set by !forcehit <user>
+ForceHitCmdTarget = nil
 ForceHit2Active = false
 ForceHit1Active = false
 StompSelectedTarget = false
 ForceHitStompTarget = nil
-PlayerRelation = PlayerRelation or {} -- name.lower -> friendly|neutral|enemy
+PlayerRelation = PlayerRelation or {}
 CtrlOrbitMode = 1
 Orbit3Combat = false
 CtrlOrbitDist = 10
@@ -277,8 +279,6 @@ KillVisualSpoof = false
 FastKillPhase = "behind"
 FastKillLastStep = 0
 FastKillLastTrigger = 0
-
-
 local FastKillBehindDist = 100
 local FastKillHitDist = 9
 local FastKillHitHold = 0.05
@@ -291,10 +291,6 @@ local FastKillClearObstacles = true
 local FastKillTriggerRate = 0.04
 local GunSpamVoidIn, GunSpamVoidOut = 4.0, 2.0
 local KnifeSpamVoidIn, KnifeSpamVoidOut = 2.0, 1.0
-
--- ========== LITE / MOBILE MODE ==========
--- Detects mobile / low-end (Delta cloud phones, tablets) and cuts CPU/GPU load.
--- ForceHit + KillAura stay enabled.
 local LiteMode = false
 local detectLiteDevice
 detectLiteDevice = function()
@@ -308,7 +304,6 @@ detectLiteDevice = function()
         local name = (identifyexecutor and identifyexecutor()) or (getexecutorname and getexecutorname()) or ""
         name = tostring(name):lower()
         if name:find("delta") then
-            -- Delta on mobile / cloud often reports touch
             local UIS = game:GetService("UserInputService")
             if UIS.TouchEnabled then lite = true end
         end
@@ -322,20 +317,14 @@ end
 LiteMode = detectLiteDevice()
 getgenv().NamelessLiteMode = LiteMode
 if LiteMode then
-    -- Throttle heavy systems (keep forcehit + killaura)
     FastKillClearObstacles = false
     FastKillTriggerRate = 0.06
     FastKillMoveSpeed = 800
-    -- firerate NOT slowed on lite (rapid fire still works)
-
     OrbitSpeed = math.min(OrbitSpeed or 30, 12)
     ANIM_SPEED = 0.5
     NoRenderEnabled = true
     KillVisualSpoof = false
 end
-
-
--- Executor quality (Hood Customs safer profiles)
 local ExecutorName = ""
 pcall(function()
     ExecutorName = tostring((identifyexecutor and identifyexecutor()) or (getexecutorname and getexecutorname()) or ""):lower()
@@ -351,9 +340,6 @@ pcall(function()
     if getgenv().FORCE_BAD_EXEC == true then BadExecutor = true end
     if getgenv().FORCE_BAD_EXEC == false then BadExecutor = false end
 end)
-
--- Fast kill / knife-tween config (adjust for executor)
--- Good exec: 100 back/front @ 1000 | Bad/mobile: 50/50 @ 100
 FastKillBehindDist = BadExecutor and 50 or 100
 FastKillHitDist = 6
 FastKillHitHold = 0.05
@@ -370,21 +356,16 @@ SpamVoidWeapon = "gun"
 ProtectOwnerEnabled = false
 ProtectOwnerConn = nil
 KnifeTweenEnabled = false
-
--- CFrame mode (pure CFrame, no PhysicsRep glue spoof)
-local CFrameFollowEnabled = false -- follow/summon with pure CFrame
-local CFrameKillEnabled = false   -- kill/autokill with pure CFrame
+local CFrameFollowEnabled = false
+local CFrameKillEnabled = false
 local FastKillStableLook = Vector3.new(0, 0, -1)
-
--- Whitelist / bot list
-local Whitelist = {} -- [name:lower()] = true
-local BotList = {}   -- [name:lower()] = true
+local Whitelist = {}
+local BotList = {}
 for i, name in ipairs(BotListOrdered or {}) do
     if type(name) == "string" and name ~= "" then
         BotList[name:lower()] = true
     end
 end
--- Assign slot from BotListOrdered if this account is listed
 do
     local me = game:GetService("Players").LocalPlayer.Name:lower()
     for i, name in ipairs(BotListOrdered or {}) do
@@ -394,9 +375,9 @@ do
         end
     end
 end
-local HoldMode = nil -- "knife" | "gun" | "both" | nil while summoned
+local HoldMode = nil
 local LastShiftSpam = 0
-local KA_Phase = "orbit" -- orbit | summon
+local KA_Phase = "orbit"
 local KA_OrbitAngle = 0
 local KA_OrbitAccum = 0
 local KA_SummonUntil = 0
@@ -415,18 +396,31 @@ local KillChatPhrases = {
 }
 LastKillChat = 0
 local AutoHealShop = Vector3.new(-390.07, 34.70, -587.01)
+local AutoHealFoodLocations = {
+    Chicken = {
+        Vector3.new(-321.78, 40.83, -288.41),
+        Vector3.new(-228.45, 41.12, -789.01),
+        Vector3.new(11.29, 41.12, -643.78),
+    },
+    Burger = {
+        Vector3.new(163.06, 36.28, -110.77),
+        Vector3.new(-259.34, 38.49, -62.07),
+    },
+    Taco = {
+        Vector3.new(150.36, 36.28, -110.34),
+        Vector3.new(-271.94, 38.49, -62.27),
+    },
+    Pizza = {},
+}
 local AutoHealEat = {
     Vector3.new(-198.28, 71.75, -53.94),
     Vector3.new(163.90, 71.75, 53.94),
-    Vector3.new(-163.20, 71.75, -55.94), -- last coord pushed back by 2
+    Vector3.new(-163.20, 71.75, -55.94),
 }
 local AutoHealTweenSpeed = 1000
 local HideTweenSpeed = 100
 local HideAtShop = false
-
--- Client-side Joao Chiken avatar (only visible on this client)
 local CHICKEN_BUNDLE_ID = 168489901382453
-
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -441,7 +435,6 @@ local Camera = workspace.CurrentCamera
 getgenv().LocalPlayer = LocalPlayer
 getgenv().Players = Players
 getgenv().RunService = RunService
-
 local Character, Humanoid, Root
 function F.refreshChar(char)
     Character = char
@@ -459,33 +452,29 @@ do
     end
     if ch then F.refreshChar(ch) end
 end
-
 MainEvent = ReplicatedStorage:FindFirstChild("MainEvent")
 task.spawn(function()
     if not MainEvent then MainEvent = ReplicatedStorage:WaitForChild("MainEvent", 10) end
 end)
-
 local ExtraOwners = {}
 local SentryEnabled, KillAuraEnabled = false, false
 local VoidSpamEnabled, UseGun = false, true
 StompOnKill = true
 OrbitEnabled = true
-FastKillEnabled = false -- orbit is default kill method
+FastKillEnabled = false
 KillMethod = getgenv().NamelessKillMethod or "orbit"
 getgenv().NamelessKillMethod = KillMethod
-SpamVoidPhase = "surface" -- surface | void
+SpamVoidPhase = "surface"
 SpamVoidUntil = 0
 SpamVoidSurfaceCF = nil
 SpamVoidHitDone = false
-ShowBotsTab = false -- only after !controller
-KillMethodPaint = {} -- GUI radio paint callbacks
-
-function F.GetKillMethod()
+ShowBotsTab = false
+KillMethodPaint = {}
+function F.GetKillMethod() LPH_ATTRIBUTES(VM(NONE));
     return getgenv().NamelessKillMethod or KillMethod or "tween"
 end
-
 function F.SetKillMethod(m)
-    if m ~= "tween" and m ~= "orbit" and m ~= "spamvoid" and m ~= "uzikill" and m ~= "fastkill" then
+    if m ~= "tween" and m ~= "orbit" and m ~= "spamvoid" and m ~= "uzikill" and m ~= "skill" and m ~= "fastkill" then
         m = "orbit"
     end
     KillMethod = m
@@ -506,7 +495,6 @@ function F.SetKillMethod(m)
     for name, paint in pairs(KillMethodPaint) do
         pcall(paint)
     end
-    -- hot-swap if mid-kill
     if (CurrentAction == "kill" or CurrentAction == "autokill") and KillPhase == "attack" then
         pcall(function() F.StartKillAttackLoop() end)
     end
@@ -531,10 +519,10 @@ local GlueTargetPlayer, GlueMode, CustomGlueCF = nil, "follow", nil
 local AntiStompProcessing, koConn = false, nil
 local PendingAutokill, SavedKillTargets = nil, nil
 local KillPhase, StompDoneForCycle = "attack", false
+    StompOnKill = true
 WaitFFUntil = nil
 local BotGui, FOVCircle = nil, nil
 local GuiWindow, MenuOpen = nil, false
-
 GuiState = {
     Aimbot = false, AimbotMode = "Hold", AimbotKey = Enum.KeyCode.E,
     Triggerbot = false,
@@ -544,13 +532,11 @@ GuiState = {
     HitboxSize = 21,
 }
 GuiConns = {}
-
 local Emotes = {
     Floss = "rbxassetid://10714340543",
     ["Yungblud Happier Jump"] = "rbxassetid://15609995579",
     ["take the L"] = "rbxassetid://118343267142519",
     darktriad = "rbxassetid://131564504226925",
-    -- Vampire Upside Down Idle (catalog 70751304705790)
     vampire = "rbxassetid://70751304705790",
 }
 local EmoteOrder = {
@@ -560,7 +546,6 @@ local EmoteOrder = {
     { key = "darktriad", id = Emotes.darktriad },
     { key = "vampire", id = Emotes.vampire },
 }
--- merge VAULT_EMOTES into EmoteOrder (working dance list)
 if VAULT_EMOTES then
     for k, id in pairs(VAULT_EMOTES) do
         local exists = false
@@ -572,22 +557,16 @@ if VAULT_EMOTES then
         end
     end
 end
-
--- Default emote on execute: Vampire Upside Down Idle
 local DefaultEmoteKey = "vampire"
 local DefaultEmoteId = Emotes.vampire
 for _, e in ipairs(EmoteOrder) do
     if e.key == DefaultEmoteKey then DefaultEmoteId = e.id break end
 end
-local ExecuteEmoteForced = true -- always re-apply default when dance is cleared
-
-
-
--- Keep default/execute emote looping (slower on lite)
+local ExecuteEmoteForced = true
 task.spawn(function()
     while task.wait(LiteMode and 2.5 or 0.75) do
         pcall(function()
-            if LiteMode then return end -- skip persistent emote spam on mobile
+            if LiteMode then return end
             if FrozenByPrivilege then return end
             if not LastDanceId then LastDanceId = DefaultEmoteId end
             DancePersistent = true
@@ -595,7 +574,6 @@ task.spawn(function()
         end)
     end
 end)
-
 LocalPlayer.Idled:Connect(function()
     pcall(function() VirtualUser:CaptureController() VirtualUser:ClickButton2(Vector2.zero) end)
 end)
@@ -617,8 +595,7 @@ function F.UpdateFOVCircle(visible)
         FOVCircle.Radius = math.clamp(200 - ForceHitFOV * 4, 40, 160)
     end
 end
-
-function F.listHas(player, list)
+function F.listHas(player, list) LPH_ATTRIBUTES(VM(NONE));
     if not player or not list then return false end
     local n, d = player.Name:lower(), player.DisplayName and player.DisplayName:lower()
     for i = 1, #list do
@@ -628,11 +605,10 @@ function F.listHas(player, list)
     return false
 end
 function F.GetPrivilegeList() return (getgenv().StandAccess and getgenv().StandAccess.PrivilegeList) or {} end
-function F.GetSuperOwners() return (getgenv().StandAccess and getgenv().StandAccess.SuperOwners) or {} end
+function F.GetSuperOwners() LPH_ATTRIBUTES(VM(NONE)); return (getgenv().StandAccess and getgenv().StandAccess.SuperOwners) or {} end
 function F.IsPrivileged(p) return F.listHas(p, F.GetPrivilegeList()) end
-function F.IsSuperOwner(p) return F.listHas(p, F.GetSuperOwners()) end
-
-function F.GetController()
+function F.IsSuperOwner(p) LPH_ATTRIBUTES(VM(NONE)); return F.listHas(p, F.GetSuperOwners()) end
+function F.GetController() LPH_ATTRIBUTES(VM(NONE));
     if not ControllerName then return nil end
     local c = Players:FindFirstChild(ControllerName)
     if c then return c end
@@ -645,7 +621,7 @@ end
 function F.EnsureController(player)
     if not ControllerName and player then ControllerName = player.Name end
 end
-function F.IsOwner(player)
+function F.IsOwner(player) LPH_ATTRIBUTES(VM(NONE));
     if not player then return false end
     if F.IsSuperOwner(player) then return true end
     if not ControllerName then return true end
@@ -658,38 +634,30 @@ function F.IsOwner(player)
     end
     return false
 end
-function F.IsSelfControlled()
+function F.IsSelfControlled() LPH_ATTRIBUTES(VM(NONE));
     if not ControllerName or ControllerName == "" then return false end
     local want = tostring(ControllerName):lower()
     return LocalPlayer.Name:lower() == want or (LocalPlayer.DisplayName and LocalPlayer.DisplayName:lower() == want)
 end
-
--- Controller client = no ControllerName set, OR this account IS the controller
-function F.IsControllerClient()
+function F.IsControllerClient() LPH_ATTRIBUTES(VM(NONE));
     if not ControllerName or ControllerName == "" then return true end
     return F.IsSelfControlled()
 end
-
--- Stand/bot client = controller is set and is someone else
 function F.IsStandClient()
     if not ControllerName or ControllerName == "" then return false end
     if F.IsSelfControlled() then return false end
     return true
 end
-
 function F.IsListedBot(name)
     name = tostring(name or ""):lower()
     return BotList[name] == true
 end
-
--- Summon/formations only when a *different* controller is set
 function F.CanSummon()
     local c = F.GetController()
     if not c then return false end
     if c == LocalPlayer then return false end
     return true
 end
-
 function F.SayKillChat()
     if not AutoChatEnabled then return end
     if tick() - LastKillChat < 1.2 then return end
@@ -711,8 +679,7 @@ function F.SayKillChat()
         end
     end)
 end
-
-function F.CFrameMoveTo(pos, speed)
+function F.CFrameMoveTo(pos, speed) LPH_ATTRIBUTES(VM(NONE));
     local r = getgenv().get_root_part()
     if not r then return false end
     speed = speed or AutoHealTweenSpeed
@@ -732,11 +699,9 @@ function F.CFrameMoveTo(pos, speed)
     if r then r.CFrame = CFrame.new(pos) end
     return true
 end
-
 function F.FoodNames()
     return { "pizza", "chicken", "taco", "burger" }
 end
-
 function F.IsFoodToolName(n)
     n = tostring(n or ""):lower()
     for _, k in ipairs(F.FoodNames()) do
@@ -744,7 +709,6 @@ function F.IsFoodToolName(n)
     end
     return nil
 end
-
 function F.HasFood()
     local char = LocalPlayer.Character
     local bag = LocalPlayer:FindFirstChild("Backpack")
@@ -762,13 +726,10 @@ function F.HasFood()
     if ok then return true, tool, k end
     return scan(bag)
 end
-
--- back-compat
 function F.HasBurger()
     local ok, tool = F.HasFood()
     return ok, tool
 end
-
 function F.FindNearestFoodStand()
     local root = getgenv().get_root_part and getgenv().get_root_part()
         or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
@@ -816,13 +777,18 @@ function F.FindNearestFoodStand()
             end
         end
     end)
-    -- fallback known shop if nothing found
+    if AutoHealFoodLocations then
+        for key, list in pairs(AutoHealFoodLocations) do
+            for _, pos in ipairs(list) do
+                consider(nil, pos, tostring(key):lower())
+            end
+        end
+    end
     if not bestPos and AutoHealShop then
         return nil, AutoHealShop, (root.Position - AutoHealShop).Magnitude, "burger"
     end
     return best, bestPos, bestDist, bestKey
 end
-
 function F.TryBuyFood(foodKey)
     foodKey = tostring(foodKey or "burger")
     local title = foodKey:sub(1,1):upper() .. foodKey:sub(2)
@@ -833,7 +799,6 @@ function F.TryBuyFood(foodKey)
             MainEvent:FireServer("BuyItem", title)
             MainEvent:FireServer("Purchase", foodKey)
             MainEvent:FireServer("BuyItem", foodKey)
-            -- common DH variants
             MainEvent:FireServer("BuyBurger")
             if foodKey == "pizza" then MainEvent:FireServer("BuyPizza") end
             if foodKey == "chicken" then MainEvent:FireServer("BuyChicken") end
@@ -859,34 +824,40 @@ function F.TryBuyFood(foodKey)
         end
     end)
 end
-
 function F.TryBuyBurger()
     F.TryBuyFood("burger")
 end
-
+function F.BindAutoHealHealth(char)
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid") or char:WaitForChild("Humanoid", 5)
+    if not hum then return end
+    if getgenv()._AHHealthConn then pcall(function() getgenv()._AHHealthConn:Disconnect() end) end
+    getgenv()._AHHealthConn = hum.HealthChanged:Connect(function(hp)
+        if not AutoHealEnabled or AutoHealBusy or HideAtShop then return end
+        if hp <= (AutoHealHealthFlat or 45) and hp > 0 then
+            task.spawn(function()
+                pcall(F.RunAutoHealCycle)
+            end)
+        end
+    end)
+end
 function F.RunAutoHealCycle()
     if AutoHealBusy then return end
-    -- only when idle-ish (same idea as antistomp: interrupt to survive)
     if CurrentAction == "bring" then return end
     AutoHealBusy = true
     local ok, err = pcall(function()
         local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if not hum then return end
-        local maxH = hum.MaxHealth > 0 and hum.MaxHealth or 100
-        if hum.Health / maxH > (AutoHealTriggerPct or 0.30) then return end
+        local flat = AutoHealHealthFlat or 45
+        if hum.Health > flat then return end
         if hum.Health <= 0 then return end
-
         local savedAction = CurrentAction
-        -- pause combat gently
         if CurrentAction == "kill" or CurrentAction == "autokill" then
             if F.StopKillAttackLoop then pcall(F.StopKillAttackLoop) end
         end
-
         local inst, pos, dist, key = F.FindNearestFoodStand()
         key = key or "burger"
         if not pos then return end
-
-        -- TP to nearest food
         if F.CFrameMoveTo then
             F.CFrameMoveTo(pos + Vector3.new(0, 3, 0), AutoHealTweenSpeed or 1000)
         else
@@ -894,12 +865,10 @@ function F.RunAutoHealCycle()
             if r then r.CFrame = CFrame.new(pos + Vector3.new(0, 3, 0)) end
         end
         task.wait(0.15)
-
         local has = F.HasFood()
         if not has then
             F.TryBuyFood(key)
             task.wait(0.25)
-            -- try all food types near stand
             for _, k in ipairs(F.FoodNames()) do
                 F.TryBuyFood(k)
             end
@@ -917,18 +886,14 @@ function F.RunAutoHealCycle()
         end
         has = F.HasFood()
         if not has then return end
-
-        -- Eat until full health
         local eatDeadline = tick() + 20
         while tick() < eatDeadline do
             hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
             if not hum or hum.Health <= 0 then break end
             maxH = hum.MaxHealth > 0 and hum.MaxHealth or 100
             if hum.Health >= maxH * 0.98 then break end
-
             local okf, tool = F.HasFood()
             if not okf then
-                -- buy again if ran out
                 F.TryBuyFood(key)
                 task.wait(0.2)
                 okf, tool = F.HasFood()
@@ -947,7 +912,6 @@ function F.RunAutoHealCycle()
                 end
             end)
             if F.ClickScreen then F.ClickScreen() end
-            -- stay near food stand
             local r = getgenv().get_root_part and getgenv().get_root_part()
             if r and pos and (r.Position - pos).Magnitude > 18 then
                 if F.CFrameMoveTo then F.CFrameMoveTo(pos + Vector3.new(0, 3, 0), AutoHealTweenSpeed or 1000)
@@ -955,8 +919,6 @@ function F.RunAutoHealCycle()
             end
             task.wait(0.12)
         end
-
-        -- resume follow if was summoned
         if F.CanSummon and F.CanSummon() and (savedAction == "follow" or savedAction == "idle") then
             task.defer(function() if F.StartFollow then F.StartFollow() end end)
         end
@@ -964,21 +926,18 @@ function F.RunAutoHealCycle()
     if not ok then warn("[NAMELESS] autoheal: " .. tostring(err)) end
     AutoHealBusy = false
 end
-
 function F.StartHide()
     if FrozenByPrivilege then return end
     HideAtShop = true
     F.StopAll()
     CurrentAction = "hide"
-    task.spawn(function()
+    task.spawn(function() LPH_ATTRIBUTES(VM(NONE));
         local spots = AutoHealEat
         local spd = HideTweenSpeed or 100
         while CurrentAction == "hide" and HideAtShop do
             if #spots == 0 then break end
-            -- Random selection between the 3 coordinates
             local pos = spots[math.random(1, #spots)]
             F.CFrameMoveTo(pos, spd)
-            -- Brief hold so it isn't a pure spam blink
             local holdUntil = tick() + 0.15
             while tick() < holdUntil and CurrentAction == "hide" and HideAtShop do
                 local r = getgenv().get_root_part()
@@ -992,7 +951,6 @@ function F.StartHide()
         end
     end)
 end
-
 function F.StartPole(targetName)
     if FrozenByPrivilege then return end
     if not F.CanSummon() and not targetName then return end
@@ -1001,19 +959,17 @@ function F.StartPole(targetName)
     F.StopAll()
     CurrentAction = "pole"
     FormationTarget = t
-    task.spawn(function()
+    task.spawn(function() LPH_ATTRIBUTES(VM(NONE));
         while CurrentAction == "pole" do
             local tChar = FormationTarget and FormationTarget.Character
             local lt = tChar and (tChar:FindFirstChild("LowerTorso") or tChar:FindFirstChild("HumanoidRootPart"))
             local r = getgenv().get_root_part()
             if lt and r then
                 local slot = MySlot or 1
-                -- Stack facing down on lower torso
                 local pos = lt.Position + Vector3.new(0, 0.5 * (slot - 1), 0)
                 r.CanCollide = false
                 r.AssemblyLinearVelocity = Vector3.zero
                 F.SetPhysicsRepRootPart(r, lt)
-                -- Face down
                 r.CFrame = CFrame.new(pos) * CFrame.Angles(math.rad(-90), 0, 0)
                 F.ForceLocalVisibility()
             end
@@ -1021,8 +977,6 @@ function F.StartPole(targetName)
         end
     end)
 end
-
--- Defined AFTER F.IsOwner / F.GetController so nothing is nil
 function F.IsOriginalController(player)
     if not player then return false end
     local orig = tostring(OriginalControllerName or ControllerName or ""):lower()
@@ -1031,8 +985,7 @@ function F.IsOriginalController(player)
     if player.DisplayName and player.DisplayName:lower() == orig then return true end
     return false
 end
-
-function F.isProtectedWhitelistName(name)
+function F.isProtectedWhitelistName(name) LPH_ATTRIBUTES(VM(NONE));
     if not name or name == "" then return false end
     local n = tostring(name):lower()
     if BotList[n] then return true end
@@ -1043,7 +996,6 @@ function F.isProtectedWhitelistName(name)
     if OriginalControllerName and tostring(OriginalControllerName):lower() == n then return true end
     return false
 end
-
 function F.GetRelation(p)
     if not p then return "neutral" end
     local n = p.Name:lower()
@@ -1055,7 +1007,7 @@ function F.SetRelation(p, rel)
     if not p then return end
     PlayerRelation[p.Name:lower()] = rel
 end
-function F.isWhitelisted(p)
+function F.isWhitelisted(p) LPH_ATTRIBUTES(VM(NONE));
     if not p then return false end
     local n = p.Name:lower()
     local d = p.DisplayName and p.DisplayName:lower() or ""
@@ -1077,13 +1029,11 @@ function F.isWhitelisted(p)
     end
     return false
 end
-
 function F.addWhitelistName(name)
     if not name or name == "" then return false end
     Whitelist[tostring(name):lower()] = true
     return true
 end
-
 function F.removeWhitelistName(name)
     if not name or name == "" then return false, "empty"
     end
@@ -1094,7 +1044,6 @@ function F.removeWhitelistName(name)
     Whitelist[n] = nil
     return true
 end
-
 function F.ListWhitelistNames()
     local out = {}
     for k, v in pairs(Whitelist) do
@@ -1103,16 +1052,12 @@ function F.ListWhitelistNames()
     table.sort(out)
     return out
 end
-
--- Auto-whitelist every bot in BotListOrdered + controller (protected)
 function F.SyncBotWhitelist()
-
 function F.SetRapidFire(on)
     RapidFireEnabled = on and true or false
     ForceHitFireRate = RapidFireEnabled and RapidFireRate or NormalFireRate
     FastKillTriggerRate = RapidFireEnabled and 0.0 or 0.05
 end
-
 function F.SetAntiLag(on)
     AntiLagEnabled = on and true or false
     if not F.IsStandClient() then
@@ -1128,8 +1073,6 @@ function F.SetAntiLag(on)
     end
     pcall(_OrigWarn or warn, "[NAMELESS] antilag " .. (AntiLagEnabled and "ON" or "OFF"))
 end
-
--- ========== OPTIMIZATION (FPS/MS priority, no full map wipe) ==========
 function F.BotChat(msg)
     pcall(function()
         local TCS = game:GetService("TextChatService")
@@ -1148,7 +1091,6 @@ function F.BotChat(msg)
         if say then say:FireServer(tostring(msg), "All") end
     end)
 end
-
 local GUN_ALIASES = {
     uzi = {"uzi", "[uzi]", "smg"},
     rev = {"revolver", "[revolver]", "rev"},
@@ -1157,8 +1099,7 @@ local GUN_ALIASES = {
     tacticalsg = {"tacticalshotgun", "tactical shotgun", "[tactical shotgun]", "tacticalsg", "tactical"},
     silencer = {"silencer", "[silencer]", "silencers"},
 }
-
-function F.FindGunByKey(key)
+function F.FindGunByKey(key) LPH_ATTRIBUTES(VM(NONE));
     key = tostring(key or ""):lower()
     local aliases = GUN_ALIASES[key]
     if not aliases then return nil end
@@ -1173,8 +1114,7 @@ function F.FindGunByKey(key)
     end
     return nil
 end
-
-function F.SelectGun(key)
+function F.SelectGun(key) LPH_ATTRIBUTES(VM(NONE));
     key = tostring(key or ""):lower()
     if not GUN_ALIASES[key] then
         F.BotChat("Selected gun = " .. key .. " not found!")
@@ -1192,21 +1132,19 @@ function F.SelectGun(key)
     F.BotChat("Selected gun = " .. key .. " not found!")
     return false
 end
-
-function F.EquipSelectedGun()
+function F.EquipSelectedGun() LPH_ATTRIBUTES(VM(NONE));
     if SelectedGunKey then
         local tool = F.FindGunByKey(SelectedGunKey)
         if tool then
-            pcall(function() tool.Parent = LocalPlayer.Character end)
+            pcall(function() LPH_ATTRIBUTES(VM(NONE)); tool.Parent = LocalPlayer.Character end)
             LockedGunTool = tool
             return tool
         end
     end
     return F.EquipGunBySlot and F.EquipGunBySlot(1) or nil
 end
-
-function F.HasWallBetween(fromPos, toPos)
-    local ok, hit = pcall(function()
+function F.HasWallBetween(fromPos, toPos) LPH_ATTRIBUTES(VM(NONE));
+    local ok, hit = pcall(function() LPH_ATTRIBUTES(VM(NONE));
         local params = RaycastParams.new()
         params.FilterType = Enum.RaycastFilterType.Exclude
         local filter = {}
@@ -1222,9 +1160,7 @@ function F.HasWallBetween(fromPos, toPos)
     if not ok then return false end
     return hit ~= nil
 end
-
 function F.ApplyFFlags()
-    -- Executor FFlags / settings for lower lag (safe pcalls)
     pcall(function()
         if setfpscap then setfpscap(60) end
     end)
@@ -1262,7 +1198,6 @@ function F.ApplyFFlags()
         settings().Rendering.EditQualityLevel = Enum.QualityLevel.Level01
     end)
 end
-
 function F.StripLightingAndEffects()
     pcall(function()
         local Lighting = game:GetService("Lighting")
@@ -1277,7 +1212,6 @@ function F.StripLightingAndEffects()
         Lighting.OutdoorAmbient = Color3.fromRGB(140, 140, 140)
         Lighting.Ambient = Color3.fromRGB(140, 140, 140)
         for _, v in ipairs(Lighting:GetDescendants()) do
-            -- keep Sky (skybox) unchanged
             if v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("SunRaysEffect")
                 or v:IsA("DepthOfFieldEffect") or v:IsA("Atmosphere") or v:IsA("ColorCorrectionEffect") then
                 pcall(function() v:Destroy() end)
@@ -1294,9 +1228,7 @@ function F.StripLightingAndEffects()
         end
     end)
 end
-
 function F.StripWorldEffects(root)
-    -- Remove particles/beams/trails/sounds near play (stomp blood, gun FX, etc.)
     pcall(function()
         for _, d in ipairs(workspace:GetDescendants()) do
             if d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam")
@@ -1311,7 +1243,6 @@ function F.StripWorldEffects(root)
         end
     end)
 end
-
 local GREY = Color3.fromRGB(128, 128, 128)
 function F.StripCharacterVisual(char)
     if not char then return end
@@ -1327,7 +1258,6 @@ function F.StripCharacterVisual(char)
             if d:IsA("Accessory") or d:IsA("Hat") then
                 pcall(function() d:Destroy() end)
             elseif d:IsA("Decal") or d:IsA("Texture") then
-                -- keep face optional: grey/remove
                 pcall(function() d.Transparency = 1 end)
             elseif d:IsA("ParticleEmitter") or d:IsA("Trail") or d:IsA("Beam")
                 or d:IsA("Fire") or d:IsA("Smoke") then
@@ -1348,7 +1278,6 @@ function F.StripCharacterVisual(char)
                     d.CastShadow = false
                 end)
             elseif d:IsA("Tool") then
-                -- strip gun skins / meshes under tools
                 for _, td in ipairs(d:GetDescendants()) do
                     if td:IsA("ParticleEmitter") or td:IsA("Trail") or td:IsA("Beam") then
                         pcall(function() td:Destroy() end)
@@ -1370,7 +1299,6 @@ function F.StripCharacterVisual(char)
         end
     end)
 end
-
 function F.StripAllCharacters()
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr.Character then
@@ -1378,17 +1306,13 @@ function F.StripAllCharacters()
         end
     end
 end
-
--- Optimization state (batched - no full workspace scan per tick)
 OptBuildingGreyDone = false
 OptSoundHooked = false
 OptCullIndex = 1
 OptCullCache = {}
 OptCullCacheTime = 0
 GREY_BUILD = Color3.fromRGB(140, 140, 140)
-
 function F.ApplyFullbright()
-    -- InfYield-style fullbright (controller comfort)
     pcall(function()
         local Lighting = game:GetService("Lighting")
         Lighting.Brightness = 2
@@ -1399,10 +1323,8 @@ function F.ApplyFullbright()
         Lighting.OutdoorAmbient = Color3.fromRGB(128, 128, 128)
         Lighting.Ambient = Color3.fromRGB(128, 128, 128)
         for _, v in ipairs(Lighting:GetChildren()) do
-            -- never remove / replace skybox
             if v:IsA("Sky") or v.ClassName == "Sky" then
-                -- keep
-                do end -- skip
+                do end
             elseif v:IsA("BloomEffect") or v:IsA("BlurEffect") or v:IsA("ColorCorrectionEffect")
                 or v:IsA("SunRaysEffect") or v:IsA("DepthOfFieldEffect") then
                 pcall(function() v:Destroy() end)
@@ -1410,9 +1332,7 @@ function F.ApplyFullbright()
 end
     end)
 end
-
 function F.MuteSoundsSmart()
-    -- Controller: mute all except voice-related. Bots: mute everything.
     local isCtrl = F.IsControllerClient and F.IsControllerClient()
     pcall(function()
         for _, s in ipairs(workspace:GetDescendants()) do
@@ -1421,8 +1341,7 @@ function F.MuteSoundsSmart()
                 local keepVoice = isCtrl and (n:find("voice") or n:find("mic") or n:find("audio")
                     or n:find("channel") or n:find("vc") or s:GetAttribute("VoiceChat"))
                 if keepVoice then
-                    -- leave voicechat
-                do end -- skip
+                do end
                 else
                     s.Volume = 0
                     pcall(function() s:Stop() end)
@@ -1434,8 +1353,7 @@ function F.MuteSoundsSmart()
             if s:IsA("Sound") then
                 local n = string.lower(s.Name)
                 if isCtrl and (n:find("voice") or n:find("mic")) then
-                    -- keep
-                do end -- skip
+                do end
                 else
                     s.Volume = 0
                 end
@@ -1443,9 +1361,7 @@ function F.MuteSoundsSmart()
         end
     end)
 end
-
 function F.GreyBuildingsBatch(budget)
-    -- Paint world parts grey SmoothPlastic a few per frame (no freeze)
     budget = budget or 40
     if not OptCullCache or #OptCullCache == 0 then return end
     local n = 0
@@ -1466,9 +1382,7 @@ function F.GreyBuildingsBatch(budget)
         OptBuildingGreyDone = true
     end
 end
-
 function F.RebuildCullCache()
-    -- Build list of world BaseParts once (or rarely) - not every tick
     local cache = {}
     local charSet = {}
     for _, plr in ipairs(Players:GetPlayers()) do
@@ -1477,11 +1391,9 @@ function F.RebuildCullCache()
     pcall(function()
         for _, child in ipairs(workspace:GetChildren()) do
             if child:IsA("Terrain") or child.Name == "Terrain" or child:IsA("Camera") then
-                -- skip
-                do end -- skip
+                do end
             elseif charSet[child] then
-                -- skip characters
-                do end -- skip
+                do end
             else
                 if child:IsA("BasePart") then
                     cache[#cache + 1] = child
@@ -1491,21 +1403,19 @@ function F.RebuildCullCache()
                         if d:IsA("BasePart") then
                             cache[#cache + 1] = d
                             count = count + 1
-                            if count > 400 then break end -- cap per model
+                            if count > 400 then break end
                         end
                     end
                 end
             end
-            if #cache > 8000 then break end -- hard cap
+            if #cache > 8000 then break end
         end
     end)
     OptCullCache = cache
     OptCullIndex = 1
     OptCullCacheTime = tick()
 end
-
 function F.CullNearbyObjectsBatched()
-    -- Process limited parts per call using cache; yield-friendly
     local root = (getgenv().get_root_part and getgenv().get_root_part())
         or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
     if not root then return end
@@ -1516,7 +1426,7 @@ function F.CullNearbyObjectsBatched()
     local range = OptCullRange or 50
     local range2 = range * range
     local start = OptCullIndex
-    local budget = 60 -- parts per pulse (prevents hitch)
+    local budget = 60
     local i = start
     local n = 0
     while n < budget and #OptCullCache > 0 do
@@ -1537,7 +1447,6 @@ function F.CullNearbyObjectsBatched()
     end
     OptCullIndex = i
 end
-
 function F.ApplyOptSettings()
     F.ApplyFFlags()
     if F.IsControllerClient and F.IsControllerClient() then
@@ -1570,7 +1479,6 @@ function F.ApplyOptSettings()
     OptBuildingGreyDone = false
     F.RebuildCullCache()
 end
-
 function F.SetVisualStrip(on)
     VisualStripEnabled = on and true or false
     if VisualStripConn then
@@ -1597,7 +1505,6 @@ VisualStripConn = Players.PlayerAdded:Connect(function(plr)
             end
         end)
     end
-    -- slow refresh only (was 1.25s full strip = hitch)
     task.spawn(function()
         while VisualStripEnabled do
             task.wait(4)
@@ -1611,11 +1518,8 @@ VisualStripConn = Players.PlayerAdded:Connect(function(plr)
         end
     end)
 end
-
 function F.SetOptMode(on)
-    -- opt mode is bots-only; controller ignores
     if F.IsControllerClient and F.IsControllerClient() then return end
-
     OptMode = on and true or false
     if OptConn then
         pcall(function() OptConn:Disconnect() end)
@@ -1625,7 +1529,6 @@ function F.SetOptMode(on)
 return
     end
     F.ApplyOptSettings()
--- single slow loop: cull batch + grey batch + occasional mute
     task.spawn(function()
         local tickN = 0
         while OptMode do
@@ -1640,15 +1543,14 @@ return
             if F.IsControllerClient and F.IsControllerClient() and tickN % 20 == 0 then
                 F.ApplyFullbright()
             end
-            task.wait(0.2) -- 5 Hz pulse, never whole-workspace per frame
+            task.wait(0.2)
         end
     end)
 end
-
 function F.StartProtectOwner()
     ProtectOwnerEnabled = true
     if ProtectOwnerConn then pcall(function() ProtectOwnerConn:Disconnect() end) ProtectOwnerConn = nil end
-    ProtectOwnerConn = RunService.Heartbeat:Connect(function()
+    ProtectOwnerConn = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         if not ProtectOwnerEnabled then return end
         if F.IsControllerClient() then return end
         local c = F.GetController()
@@ -1657,16 +1559,14 @@ function F.StartProtectOwner()
         local r = getgenv().get_root_part and getgenv().get_root_part()
         if cr and r then
             r.CFrame = cr.CFrame
-            pcall(function() r.AssemblyLinearVelocity = Vector3.zero end)
+            pcall(function() LPH_ATTRIBUTES(VM(NONE)); r.AssemblyLinearVelocity = Vector3.zero end)
         end
     end)
 end
-
 function F.StopProtectOwner()
     ProtectOwnerEnabled = false
     if ProtectOwnerConn then pcall(function() ProtectOwnerConn:Disconnect() end) ProtectOwnerConn = nil end
 end
-
     for _, name in ipairs(BotListOrdered or {}) do
         if type(name) == "string" and name ~= "" then
             Whitelist[name:lower()] = true
@@ -1725,7 +1625,6 @@ end
 function F.ParseTargetsAndBots(args, startIndex)
     startIndex = startIndex or 2
     if not args[startIndex] then return {}, true end
-    -- expand comma-separated tokens: "u1,u2" -> u1 u2
     local flat = {}
     for i = startIndex, #args do
         local token = tostring(args[i] or "")
@@ -1753,61 +1652,56 @@ function F.ParseTargetsAndBots(args, startIndex)
     end
     return targets, should
 end
-
-getgenv().get_root_part = function()
+getgenv().get_root_part = function() LPH_ATTRIBUTES(VM(NONE));
     local char = LocalPlayer.Character
     if not char then return nil end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return nil end
     return hum.RootPart or char:FindFirstChild("HumanoidRootPart")
 end
-getgenv().reset_velocity = function()
+getgenv().reset_velocity = function() LPH_ATTRIBUTES(VM(NONE));
     local r = getgenv().get_root_part()
     if r then r.AssemblyLinearVelocity = Vector3.zero r.AssemblyAngularVelocity = Vector3.zero end
 end
-getgenv().get_position_offset = function()
+getgenv().get_position_offset = function() LPH_ATTRIBUTES(VM(NONE));
     local d, p = getgenv().glue_offset_z or 3, getgenv().glue_position or "Back"
     if p == "Front" then return CFrame.new(0, 0, -d) end
     if p == "Left Side" then return CFrame.new(-d, 0, 0) end
     return CFrame.new(0, 0, d)
 end
-function F.SetPhysicsRepRootPart(selfRoot, targetPart)
+function F.SetPhysicsRepRootPart(selfRoot, targetPart) LPH_ATTRIBUTES(VM(NONE));
     if not selfRoot or not targetPart then return end
     if sethiddenproperty then
-        pcall(function()
+        pcall(function() LPH_ATTRIBUTES(VM(NONE));
             sethiddenproperty(selfRoot, "PhysicsRepRootPart", targetPart)
         end)
-        pcall(function()
+        pcall(function() LPH_ATTRIBUTES(VM(NONE));
             if InstanceHandle then
                 sethiddenproperty(selfRoot, "PhysicsRepRootRef", InstanceHandle.new(targetPart))
             end
         end)
     end
-    -- Also try network ownership helpers some executors expose
-    pcall(function()
+    pcall(function() LPH_ATTRIBUTES(VM(NONE));
         if setsimulationradius then setsimulationradius(math.huge, math.huge) end
     end)
 end
-
--- Keep local character fully visible (fixes "bot disappears" after CanCollide/PhysicsRep)
-function F.ForceLocalVisibility(char)
+function F.ForceLocalVisibility(char) LPH_ATTRIBUTES(VM(NONE));
     char = char or LocalPlayer.Character
     if not char then return end
     for _, d in ipairs(char:GetDescendants()) do
         if d:IsA("BasePart") then
-            pcall(function()
+            pcall(function() LPH_ATTRIBUTES(VM(NONE));
                 d.LocalTransparencyModifier = 0
                 if d.Name ~= "HumanoidRootPart" and d.Transparency > 0.9 and d.Name ~= "Handle" then
-                    -- don't force tool handles
-                do end -- skip
+                do end
                 end
             end)
         elseif d:IsA("Decal") or d:IsA("Texture") then
-            pcall(function() d.LocalTransparencyModifier = 0 end)
+            pcall(function() LPH_ATTRIBUTES(VM(NONE)); d.LocalTransparencyModifier = 0 end)
         end
     end
 end
-function F.resolveTargetRoot()
+function F.resolveTargetRoot() LPH_ATTRIBUTES(VM(NONE));
     if GlueMode == "follow" then
         local c = F.GetController()
         return c and c.Character and c.Character:FindFirstChild("HumanoidRootPart")
@@ -1822,7 +1716,7 @@ function F.resolveTargetRoot()
         return t and t.Character and t.Character:FindFirstChild("HumanoidRootPart")
     end
 end
-function F.GetSummonWorldCF()
+function F.GetSummonWorldCF() LPH_ATTRIBUTES(VM(NONE));
     local owner = F.GetController()
     if not owner or not owner.Character then return end
     local oRoot = owner.Character:FindFirstChild("HumanoidRootPart")
@@ -1832,16 +1726,13 @@ function F.GetSummonWorldCF()
     local perRow = math.max(1, math.floor(FormationPerRow or 50))
     local col, row
     if rows <= 1 then
-        -- One single row - unlimited slots across
         col = slot - 1
         row = 0
     else
         col = (slot - 1) % perRow
         row = math.floor((slot - 1) / perRow)
     end
-    -- Center the row around controller
     local center = (rows <= 1) and ((slot - 1) * 0.5) or ((perRow - 1) * 0.5)
-    -- Use slot index as offset from 0 so unlimited slots stay spaced
     local x = (col - (rows <= 1 and 0 or center)) * FollowSpacing
     if rows <= 1 then
         x = (slot - 1) * FollowSpacing
@@ -1854,13 +1745,13 @@ function F.GetSummonWorldCF()
         + Vector3.new(0, FollowHeight + row * HeightPerRow + (fm.y or 0), 0)
     return CFrame.new(pos, pos + cf.LookVector)
 end
-function F.GetControllerOrbitCF()
+function F.GetControllerOrbitCF() LPH_ATTRIBUTES(VM(NONE));
     local c = F.GetController()
     local cr = c and c.Character and c.Character:FindFirstChild("HumanoidRootPart")
     if not cr then return nil end
     local slot = math.max(1, math.floor(MySlot or 1))
     local n = 10
-    pcall(function()
+    pcall(function() LPH_ATTRIBUTES(VM(NONE));
         local count = 0
         for _ in pairs(BotList or {}) do count = count + 1 end
         if count > 0 then n = math.max(count, 10) end
@@ -1888,8 +1779,7 @@ function F.GetControllerOrbitCF()
     end
     return CFrame.new(pos, origin)
 end
-
-function F.GetFormationCF()
+function F.GetFormationCF() LPH_ATTRIBUTES(VM(NONE));
     if FormationType == "corbit" then
         return F.GetControllerOrbitCF()
     end
@@ -1905,14 +1795,10 @@ function F.GetFormationCF()
     local origin = base.Position
     local ft = FormationType or "bline"
     local space = FormationSpacing or 3.5
-
-    -- !bline - single line behind controller
     if ft == "bline" then
         local pos = origin - look * (FollowBack + space * (i + 1)) + Vector3.new(0, FollowHeight, 0)
         return CFrame.new(pos, pos + look)
     end
-
-    -- !back - square grid behind controller
     if ft == "back" then
         local side = math.max(2, math.ceil(math.sqrt(math.max(slot, 4))))
         local col = i % side
@@ -1923,15 +1809,11 @@ function F.GetFormationCF()
         local pos = origin - look * z + right * x + Vector3.new(0, FollowHeight, 0)
         return CFrame.new(pos, pos + look)
     end
-
-    -- !pole - stack on heads (on top of each other)
     if ft == "pole" or ft == "stackon" then
         local h = (StackHeight or 3.2) * slot
         local pos = origin + Vector3.new(0, h, 0)
         return CFrame.new(pos, pos + look)
     end
-
-    -- !around - 4 cardinals then stack upward on those pillars
     if ft == "around" then
         local dist, baseH = 5, 5
         local dirs = {
@@ -1946,8 +1828,6 @@ function F.GetFormationCF()
         local pos = origin + d * dist + Vector3.new(0, baseH + stack * (StackHeight or 3.2), 0)
         return CFrame.new(pos, pos + look)
     end
-
-    -- !line - left/right wings, extras stack up
     if ft == "line" then
         local wing = ((slot - 1) % 2) + 1
         local stack = math.floor((slot - 1) / 2)
@@ -1957,8 +1837,6 @@ function F.GetFormationCF()
         local pos = origin + right * (side * space * along) + Vector3.new(0, FollowHeight + layer * (StackHeight or 3.2), 0)
         return CFrame.new(pos, pos + look)
     end
-
-    -- legacy
     if ft == "rline" then
         local pos = origin + right * (space * (i + 1)) + Vector3.new(0, FollowHeight, 0)
         return CFrame.new(pos, pos + look)
@@ -1972,7 +1850,7 @@ function F.GetFormationCF()
     end
     return CFrame.new(origin, origin + look)
 end
-function F.GetGunOrbitCF(tRoot)
+function F.GetGunOrbitCF(tRoot) LPH_ATTRIBUTES(VM(NONE));
     if not OrbitEnabled then
         local look = tRoot.CFrame.LookVector
         local pos = tRoot.Position - look * GunOrbitDist + Vector3.new(0, OrbitHeight, 0)
@@ -1981,7 +1859,7 @@ function F.GetGunOrbitCF(tRoot)
     local a = tick() * OrbitSpeed + (MySlot or 1) * (math.pi * 2 / 20)
     return CFrame.lookAt(tRoot.Position + Vector3.new(math.cos(a)*GunOrbitDist, OrbitHeight, math.sin(a)*GunOrbitDist), tRoot.Position)
 end
-function F.GetKnifeSurfaceCF(tRoot)
+function F.GetKnifeSurfaceCF(tRoot) LPH_ATTRIBUTES(VM(NONE));
     local dist, s = getgenv().glue_offset_z or 3, MySlot or 1
     local off
     if s == 1 then off = Vector3.new(0, dist, 0)
@@ -1993,12 +1871,11 @@ function F.GetKnifeSurfaceCF(tRoot)
     else local ang = ((s-7)/14)*math.pi*2 off = Vector3.new(math.cos(ang)*dist, 1, math.sin(ang)*dist) end
     return tRoot.CFrame * CFrame.new(off)
 end
-
 getgenv().unc_connection = function()
     if getgenv().connection_loop then getgenv().connection_loop:Disconnect() getgenv().connection_loop = nil end
     local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if hrp then hrp.CanCollide = false end
-    getgenv().connection_loop = RunService.Heartbeat:Connect(function()
+    getgenv().connection_loop = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         if not getgenv().glue_active then
             if getgenv().connection_loop then getgenv().connection_loop:Disconnect() getgenv().connection_loop = nil end
             getgenv().reset_velocity()
@@ -2009,8 +1886,6 @@ getgenv().unc_connection = function()
         local selfRoot = getgenv().get_root_part()
         local targetRoot = F.resolveTargetRoot()
         if not selfRoot then return end
-        -- Fast kill drives CFrame itself - still keep PhysicsRep on target for replication
-        -- Kill / autokill always driven by FastKillStep - do not glue-orbit
         if CurrentAction == "kill" or CurrentAction == "autokill" then
             if targetRoot then
                 F.SetPhysicsRepRootPart(selfRoot, targetRoot)
@@ -2037,8 +1912,6 @@ getgenv().unc_connection = function()
         elseif GlueMode == "custom" then dest = CustomGlueCF
         elseif targetRoot then dest = targetRoot.CFrame * getgenv().get_position_offset()
         end
-        -- ALWAYS PhysicsRep to target when available so controller/others see the bot
-        -- Only skip when pure CFrame toggles are explicitly on
         local isKill = (CurrentAction == "kill" or CurrentAction == "autokill")
         local isFollow = (CurrentAction == "follow" or CurrentAction == "formation" or GlueMode == "follow")
         local useCFrameOnly = (isKill and CFrameKillEnabled) or (isFollow and CFrameFollowEnabled)
@@ -2046,11 +1919,9 @@ getgenv().unc_connection = function()
             F.SetPhysicsRepRootPart(selfRoot, targetRoot)
             selfRoot.CanCollide = false
         elseif targetRoot and useCFrameOnly then
-            -- Still spoof for replication - pure CFrame alone is invisible to others
             F.SetPhysicsRepRootPart(selfRoot, targetRoot)
             selfRoot.CanCollide = false
         else
-            -- Follow with no target root yet: spoof to self to avoid nil
             F.SetPhysicsRepRootPart(selfRoot, selfRoot)
         end
         if dest then
@@ -2061,7 +1932,6 @@ getgenv().unc_connection = function()
         F.ForceLocalVisibility()
     end)
 end
-
 function F.StartGlue(mode, targetPlayer)
     GlueMode = mode or "follow"
     GlueTargetPlayer = targetPlayer
@@ -2082,9 +1952,7 @@ function F.StopGlue()
     GlueTargetPlayer = nil
     CustomGlueCF = nil
 end
-
--- 3rd-person mouse aim: move cursor toward target on screen (mousemoverel)
-function F.AimMouseAtTarget(target)
+function F.AimMouseAtTarget(target) LPH_ATTRIBUTES(VM(NONE));
     local cam = workspace.CurrentCamera
     if not cam or not target or not target.Character then return end
     local part = target.Character:FindFirstChild("Head")
@@ -2097,14 +1965,12 @@ function F.AimMouseAtTarget(target)
     local dx = screenPos.X - (vp.X * 0.5)
     local dy = screenPos.Y - (vp.Y * 0.5)
     if math.abs(dx) < 1 and math.abs(dy) < 1 then return end
-    -- clamp so one frame doesn't whip the camera too hard
     dx = math.clamp(dx, -120, 120)
     dy = math.clamp(dy, -120, 120)
-    pcall(function()
+    pcall(function() LPH_ATTRIBUTES(VM(NONE));
         if mousemoverel then
             mousemoverel(dx, dy)
         elseif VirtualInputManager then
-            -- fallback: relative move via VIM is not ideal; still try center click aim via camera nudge
             local look = (part.Position - cam.CFrame.Position)
             if look.Magnitude > 0.1 then
                 cam.CFrame = CFrame.lookAt(cam.CFrame.Position, part.Position)
@@ -2112,17 +1978,13 @@ function F.AimMouseAtTarget(target)
         end
     end)
 end
-
--- Camera lock: sticky on TargetPlayer only - no switching; unlock immediately on death/KO
 function F.StartCameraLock(target)
     if LiteMode then return end
     if CameraConnection then CameraConnection:Disconnect() CameraConnection = nil end
-    -- freeze sticky target at start (do not re-pick while locking)
     local lockedTarget = target or TargetPlayer
-    CameraConnection = RunService.RenderStepped:Connect(function()
+    CameraConnection = RunService.RenderStepped:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         if CurrentAction ~= "kill" and CurrentAction ~= "autokill" and CurrentAction ~= "bring" then return end
         local t = lockedTarget or TargetPlayer
-        -- unlock immediately if dead / KO / left
         if not t or not F.inGame(t) or not t.Character or F.isKnocked(t.Character) then
             return
         end
@@ -2140,7 +2002,6 @@ function F.StartCameraLock(target)
         local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
         if h then cam.CameraSubject = h end
         cam.FieldOfView = 70
-        -- hard lock look at target head (sticky)
         local from = cam.CFrame.Position
         cam.CFrame = CFrame.lookAt(from, tPart.Position)
         F.AimMouseAtTarget(t)
@@ -2154,8 +2015,6 @@ function F.StopCameraLock()
     local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
     if h and cam then cam.CameraSubject = h end
 end
-
--- Obstacle clear: walls/trees/fences invisible + non-collide; keep floors & roads
 local _fkObstacleCleared = {}
 local _fkObstacleHooked = false
 function F.FastKillClearWorldObstacles()
@@ -2224,63 +2083,49 @@ function F.FastKillClearWorldObstacles()
         end)
     end
 end
-
 function F.EquipSlotNumber(n)
-    -- disabled: never switch guns (anti-kick)
 end
 function F.StopSlotSpam() SlotSpamRunning = false end
 function F.StartSlotSpam()
-    -- fully disabled - switching guns kicks
     SlotSpamRunning = false
 end
-
--- Summon/formation fly emotes only (never used as dance)
 local FlyAnimChar = nil
 local FlyAnimLastLoad = 0
-
-function F.stopFlyAnims()
-    if FlyTrack then pcall(function() FlyTrack:Stop(0.05) end) FlyTrack = nil end
-    if HoverTrack then pcall(function() HoverTrack:Stop(0.05) end) HoverTrack = nil end
+function F.stopFlyAnims() LPH_ATTRIBUTES(VM(NONE));
+    if FlyTrack then pcall(function() LPH_ATTRIBUTES(VM(NONE)); FlyTrack:Stop(0.05) end) FlyTrack = nil end
+    if HoverTrack then pcall(function() LPH_ATTRIBUTES(VM(NONE)); HoverTrack:Stop(0.05) end) HoverTrack = nil end
     FlyAnimChar = nil
 end
-
 function F.getFlyEmoteIds()
     local pack = FLY_EMOTES[FlyVariant] or FLY_EMOTES[1]
     return pack.idle, pack.move
 end
-
 function F.loadFlyAnims()
     local char = LocalPlayer.Character
     local hum = char and char:FindFirstChildOfClass("Humanoid")
     if not hum then return end
-    -- Reload if character changed
     if FlyAnimChar == char and (FlyTrack or HoverTrack) and (tick() - FlyAnimLastLoad) < 2 then
         return
     end
     F.stopFlyAnims()
     FlyAnimChar = char
     FlyAnimLastLoad = tick()
-
-    -- Disable default Animate so it cannot override summon fly
     local animate = char:FindFirstChild("Animate")
     if animate then
         pcall(function()
             animate.Disabled = true
             for _, d in ipairs(animate:GetDescendants()) do
                 if d:IsA("Animation") then
-                    -- leave assets; just keep script disabled
-                do end -- skip
+                do end
                 end
             end
         end)
     end
-
     local animator = hum:FindFirstChildOfClass("Animator")
     if not animator then
         animator = Instance.new("Animator")
         animator.Parent = hum
     end
-    -- Never stop the persistent execute/dance emote
     pcall(function()
         for _, tr in ipairs(animator:GetPlayingAnimationTracks()) do
             if tr ~= CurrentDance then
@@ -2288,16 +2133,12 @@ function F.loadFlyAnims()
             end
         end
     end)
-    -- re-assert dance after clearing other tracks
     if DancePersistent and LastDanceId then
         task.defer(function() F.EnsureDancePlaying() end)
     end
-
     local idleId, moveId = F.getFlyEmoteIds()
-    -- Public fallbacks if catalog emote IDs fail to load in-game
     local FALLBACK_IDLE = "rbxassetid://616006778"
     local FALLBACK_MOVE = "rbxassetid://3541044388"
-
     local function tryLoad(id)
         local ok, track = pcall(function()
             local a = Instance.new("Animation")
@@ -2308,7 +2149,6 @@ function F.loadFlyAnims()
             return t
         end)
         if ok and track then
-            -- validate length (0 often means failed asset)
             local lenOk = true
             pcall(function()
                 if track.Length and track.Length == 0 then lenOk = false end
@@ -2317,64 +2157,28 @@ function F.loadFlyAnims()
         end
         return nil
     end
-
     HoverTrack = tryLoad(idleId) or tryLoad(FALLBACK_IDLE)
     FlyTrack = tryLoad(moveId) or tryLoad(FALLBACK_MOVE)
-
-    -- Kick idle immediately so user sees something on summon
     if HoverTrack then
         pcall(function() HoverTrack:Play(0.15, 1, ANIM_SPEED or 1) end)
     elseif FlyTrack then
         pcall(function() FlyTrack:Play(0.15, 1, ANIM_SPEED or 1) end)
     end
 end
-
-function F.updateFlyAnim()
-    -- ONLY summon / formation
+function F.updateFlyAnim() LPH_ATTRIBUTES(VM(NONE));
     if CurrentAction ~= "follow" and CurrentAction ~= "formation" then
         return
     end
-    -- Persistent execute emote always wins over fly anims
-    if DancePersistent and LastDanceId then
+    if not DancePersistent or not LastDanceId then
+        local auraId = (DanceIds and (DanceIds["aura"] or DanceIds["headless_aura"])) or "rbxassetid://98893149829644"
+        DancePersistent = true
+        LastDanceId = auraId
+        CurrentDance = "aura"
+    end
+    if F.EnsureDancePlaying then
         F.EnsureDancePlaying()
-        return
-    end
-    if not LocalPlayer.Character or LocalPlayer.Character ~= FlyAnimChar then
-        F.loadFlyAnims()
-    end
-    if not FlyTrack and not HoverTrack then
-        F.loadFlyAnims()
-    end
-    if not FlyTrack and not HoverTrack then return end
-
-    local ctrl = F.GetController()
-    local moving = false
-    if ctrl and ctrl.Character then
-        local ch = ctrl.Character:FindFirstChildOfClass("Humanoid")
-        if ch and ch.MoveDirection.Magnitude > 0.08 then moving = true end
-        local cr = ctrl.Character:FindFirstChild("HumanoidRootPart")
-        if cr and cr.AssemblyLinearVelocity.Magnitude > 2.5 then moving = true end
-    end
-
-    local fade = ANIM_FADE or 0.2
-    local spd = ANIM_SPEED or 1
-    if moving then
-        if HoverTrack and HoverTrack.IsPlaying then HoverTrack:Stop(fade) end
-        if FlyTrack and not FlyTrack.IsPlaying then
-            pcall(function() FlyTrack:Play(fade, 1, spd) end)
-        elseif not FlyTrack and HoverTrack and not HoverTrack.IsPlaying then
-            pcall(function() HoverTrack:Play(fade, 1, spd) end)
-        end
-    else
-        if FlyTrack and FlyTrack.IsPlaying then FlyTrack:Stop(fade) end
-        if HoverTrack and not HoverTrack.IsPlaying then
-            pcall(function() HoverTrack:Play(fade, 1, spd) end)
-        elseif not HoverTrack and FlyTrack and not FlyTrack.IsPlaying then
-            pcall(function() FlyTrack:Play(fade, 1, spd) end)
-        end
     end
 end
-
 function F.SetNoRender(on)
     NoRenderEnabled = on and true or false
     pcall(function()
@@ -2388,10 +2192,8 @@ function F.SetNoRender(on)
         end
     end)
 end
-
--- Always-on noclip for this bot character
 local NoclipEnabled = true
-function F.ApplyNoclip(char)
+function F.ApplyNoclip(char) LPH_ATTRIBUTES(VM(NONE));
     char = char or LocalPlayer.Character
     if not char or not NoclipEnabled then return end
     for _, part in ipairs(char:GetDescendants()) do
@@ -2401,26 +2203,26 @@ function F.ApplyNoclip(char)
     end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if hum then
-        pcall(function()
+        pcall(function() LPH_ATTRIBUTES(VM(NONE));
             hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
             hum:SetStateEnabled(Enum.HumanoidStateType.Ragdoll, false)
         end)
     end
 end
-RunService.Stepped:Connect(function()
+RunService.Stepped:Connect(function() LPH_ATTRIBUTES(VM(NONE));
     if NoclipEnabled then
         F.ApplyNoclip(LocalPlayer.Character)
     end
 end)
 LocalPlayer.CharacterAdded:Connect(function(char)
+    pcall(function() F.BindAutoHealHealth(char) end)
     LockedGunTool = nil
     task.defer(function() F.ApplyNoclip(char) end)
 end)
 if LocalPlayer.Character then
     task.defer(function() F.ApplyNoclip(LocalPlayer.Character) end)
 end
-
-RunService.Heartbeat:Connect(function()
+RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
     if SpinbotEnabled then
         local r = getgenv().get_root_part and getgenv().get_root_part()
         if r then
@@ -2428,16 +2230,14 @@ RunService.Heartbeat:Connect(function()
         end
     end
 end)
-RunService.Heartbeat:Connect(function()
+RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
     if CurrentAction == "follow" or CurrentAction == "formation" then
         F.updateFlyAnim()
     else
-        -- stop summon fly emotes when not summoned/formation
         if FlyTrack or HoverTrack then
             F.stopFlyAnims()
         end
     end
-    -- Weapon hold works even when not summoned
     if HoldMode then
         local char = LocalPlayer.Character
         local hum = char and char:FindFirstChildOfClass("Humanoid")
@@ -2445,7 +2245,7 @@ RunService.Heartbeat:Connect(function()
         if hum and char then
             local equipped = char:FindFirstChildOfClass("Tool")
             local gun, knife = nil, nil
-            local function scan(parent)
+            local function scan(parent) LPH_ATTRIBUTES(VM(NONE));
                 if not parent then return end
                 for _, t in ipairs(parent:GetChildren()) do
                     if t:IsA("Tool") then
@@ -2464,17 +2264,13 @@ RunService.Heartbeat:Connect(function()
                 pick = gun or knife
             end
             if pick and equipped ~= pick then
-                pcall(function() hum:UnequipTools() pick.Parent = char end)
+                pcall(function() LPH_ATTRIBUTES(VM(NONE)); hum:UnequipTools() pick.Parent = char end)
             end
         end
     end
 end)
-
 function F.SpamShiftIfGun()
-    -- disabled (rapid input / kick risk)
 end
-
--- Pick a unique aura target per bot slot (separate targets)
 function F.GetKillAuraTargetForSlot(centerPos)
     local list = {}
     for _, p in ipairs(Players:GetPlayers()) do
@@ -2487,21 +2283,18 @@ function F.GetKillAuraTargetForSlot(centerPos)
     end
     if #list == 0 then return nil end
     table.sort(list, function(a, b) return a.d < b.d end)
-    -- Filter to range, then assign by slot
     local inRange = {}
     for i = 1, #list do
         if list[i].d <= KillAuraRange then inRange[#inRange + 1] = list[i].p end
     end
-    if #inRange == 0 then return list[1].p end -- nearest even if outside soft range
+    if #inRange == 0 then return list[1].p end
     local idx = ((MySlot or 1) - 1) % #inRange + 1
     return inRange[idx]
 end
-
 function F.GetKnifeOrbitDist()
     local slot = math.clamp(MySlot or 1, 1, 20)
     return KA_OrbitBaseDist + (slot - 1) * KA_OrbitDistStep
 end
-
 function F.GetSummonCFQuick()
     local cf = F.GetSummonWorldCF()
     if cf then return cf end
@@ -2510,9 +2303,7 @@ function F.GetSummonCFQuick()
     if cr then return cr.CFrame * CFrame.new(0, 0, FollowBack) end
     return nil
 end
-
 function F.NL_ForceKill(char)
-    -- Antistomp force-kill (stands + controller). KO only - normal Reset still works when not KO.
     if not char then return end
     if replicatesignal then pcall(replicatesignal, LocalPlayer.Kill) return end
     local h = char:FindFirstChildOfClass("Humanoid")
@@ -2549,7 +2340,7 @@ task.spawn(function()
             end
             if AutoHealEnabled and not AutoHealBusy and not HideAtShop and hum and hum.Health > 0 then
                 local maxH = hum.MaxHealth > 0 and hum.MaxHealth or 100
-                if hum.Health / maxH <= (AutoHealTriggerPct or 0.30) then
+                if hum.Health <= (AutoHealHealthFlat or 45) and hum.Health > 0 then
                     task.spawn(function()
                         F.RunAutoHealCycle()
                         if F.CanSummon() then
@@ -2577,15 +2368,14 @@ task.spawn(function()
         end
     end
 end)
-
-function F.isKnocked(char)
+function F.isKnocked(char) LPH_ATTRIBUTES(VM(NONE));
     local be = char and char:FindFirstChild("BodyEffects")
     if not be then return false end
     local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
     local dead = be:FindFirstChild("Dead") or be:FindFirstChild("SDeath")
     return ko and ko.Value and not (dead and dead.Value)
 end
-function F.isFullyAlive(p)
+function F.isFullyAlive(p) LPH_ATTRIBUTES(VM(NONE));
     local char = p and p.Character
     if not char then return false end
     local hum = char:FindFirstChildOfClass("Humanoid")
@@ -2593,9 +2383,8 @@ function F.isFullyAlive(p)
     if char:FindFirstChildOfClass("ForceField") then return false end
     return char:FindFirstChild("HumanoidRootPart") ~= nil
 end
-function F.inGame(p) return p and p.Parent == Players end
-
-function F.applyKnifeHitbox()
+function F.inGame(p) LPH_ATTRIBUTES(VM(NONE)); return p and p.Parent == Players end
+function F.applyKnifeHitbox() LPH_ATTRIBUTES(VM(NONE));
     if not getgenv().KnifeHitboxEnabled then return end
     local char = LocalPlayer.Character
     if not char then return end
@@ -2610,11 +2399,9 @@ function F.applyKnifeHitbox()
         hb.CanCollide = false
     end
 end
-
 LockedGunTool = nil
 LockedGunSlot = 1
-
-function F.CollectGuns()
+function F.CollectGuns() LPH_ATTRIBUTES(VM(NONE));
     local guns = {}
     local char = LocalPlayer.Character
     local bag = LocalPlayer:FindFirstChild("Backpack")
@@ -2631,29 +2418,25 @@ function F.CollectGuns()
     end
     return guns
 end
-
-
-function F.UnequipAllTools()
+function F.UnequipAllTools() LPH_ATTRIBUTES(VM(NONE));
     local char = LocalPlayer.Character
     local bag = LocalPlayer:FindFirstChild("Backpack")
     if not char then return end
     for _, t in ipairs(char:GetChildren()) do
         if t:IsA("Tool") and bag then
-            pcall(function() t.Parent = bag end)
+            pcall(function() LPH_ATTRIBUTES(VM(NONE)); t.Parent = bag end)
         end
     end
 end
-
-function F.EquipOnlyTool(tool)
+function F.EquipOnlyTool(tool) LPH_ATTRIBUTES(VM(NONE));
     if not tool then return nil end
     F.UnequipAllTools()
     local char = LocalPlayer.Character
     if not char then return nil end
-    pcall(function() tool.Parent = char end)
+    pcall(function() LPH_ATTRIBUTES(VM(NONE)); tool.Parent = char end)
     return tool
 end
-
-function F.EquipGunBySlot(slot)
+function F.EquipGunBySlot(slot) LPH_ATTRIBUTES(VM(NONE));
     slot = math.max(1, math.floor(tonumber(slot) or 1))
     local guns = F.CollectGuns()
     if #guns == 0 then return nil end
@@ -2665,18 +2448,29 @@ function F.EquipGunBySlot(slot)
     LockedGunSlot = slot
     return gun
 end
-
-function F.EquipBestWeapon()
+function F.EquipBestWeapon() LPH_ATTRIBUTES(VM(NONE));
     local char = LocalPlayer.Character
     if not char then return nil end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return nil end
     local equipped = char:FindFirstChildOfClass("Tool")
     local wantSlot = LockedGunSlot or 1
-
     if UseGun then
+        if SelectedGunKey and F.FindGunByKey then
+            local pref = F.FindGunByKey(SelectedGunKey)
+            if pref then
+                if equipped ~= pref then
+                    pcall(function() LPH_ATTRIBUTES(VM(NONE));
+                        if F.EquipOnlyTool then F.EquipOnlyTool(pref)
+                        else hum:EquipTool(pref) end
+                    end)
+                end
+                LockedGunTool = pref
+                return pref
+            end
+        end
         if equipped and not equipped.Name:lower():find("knife") then
-            if wantSlot > 1 then
+            if wantSlot > 1 and F.CollectGuns then
                 local guns = F.CollectGuns()
                 if #guns >= wantSlot and equipped ~= guns[wantSlot] then
                     return F.EquipGunBySlot(wantSlot) or equipped
@@ -2685,10 +2479,12 @@ function F.EquipBestWeapon()
             LockedGunTool = equipped
             return equipped
         end
-        return F.EquipGunBySlot(wantSlot) or equipped
+        if F.EquipSelectedGun then
+            local t = F.EquipSelectedGun()
+            if t then return t end
+        end
+        return (F.EquipGunBySlot and F.EquipGunBySlot(wantSlot)) or equipped
     end
-
-    -- knife mode
     if equipped and equipped.Name:lower():find("knife") then
         F.applyKnifeHitbox()
         return equipped
@@ -2706,17 +2502,15 @@ function F.EquipBestWeapon()
     findKnife(bag)
     findKnife(char)
     if knife then
-        pcall(function() knife.Parent = char end)
+        pcall(function() LPH_ATTRIBUTES(VM(NONE)); knife.Parent = char end)
         F.applyKnifeHitbox()
         return knife
     end
     return equipped
 end
--- NeverLarp-style auto reload: only when Ammo IntValue is 0
-local _ReloadLast = {} -- [toolName] = tick
+local _ReloadLast = {}
 local _ReloadCD = 0.8
-
-function F.TryReload()
+function F.TryReload() LPH_ATTRIBUTES(VM(NONE));
     local char = LocalPlayer.Character
     if not char then return end
     local TOOLS = { "[Revolver]", "[DoubleBarrel]", "[TacticalShotgun]", "[SMG]", "[Shotgun]", "[Silencer]", "[Uzi]" }
@@ -2730,7 +2524,7 @@ function F.TryReload()
                 if ammo and ammo:IsA("IntValue") and ammo.Value == 0 then
                     if not _ReloadLast then _ReloadLast = {} end
                     _ReloadLast[name] = tick()
-                    pcall(function()
+                    pcall(function() LPH_ATTRIBUTES(VM(NONE));
                         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
                         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
                     end)
@@ -2738,7 +2532,6 @@ function F.TryReload()
             end
         end
     end
-    -- also any equipped tool with Ammo 0
     for _, tool in ipairs(char:GetChildren()) do
         if tool:IsA("Tool") and not tool.Name:lower():find("knife") then
             local scr = tool:FindFirstChild("Script")
@@ -2749,7 +2542,7 @@ function F.TryReload()
                 if tick() - last >= 1 then
                     if not _ReloadLast then _ReloadLast = {} end
                     _ReloadLast[n] = tick()
-                    pcall(function()
+                    pcall(function() LPH_ATTRIBUTES(VM(NONE));
                         VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.R, false, game)
                         VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.R, false, game)
                     end)
@@ -2758,19 +2551,14 @@ function F.TryReload()
         end
     end
 end
-
 if getgenv()._NamelessAutoReloadConn then pcall(function() getgenv()._NamelessAutoReloadConn:Disconnect() end) end
-getgenv()._NamelessAutoReloadConn = RunService.RenderStepped:Connect(function()
+getgenv()._NamelessAutoReloadConn = RunService.RenderStepped:Connect(function() LPH_ATTRIBUTES(VM(NONE));
     F.TryReload()
 end)
-
-
 function F.getEquippedCombatTool()
     local char = LocalPlayer.Character
     return char and char:FindFirstChildOfClass("Tool")
 end
--- ========== UNIFIED FORCEHIT (NeverLarp-style, NO camera lock) ==========
--- Same packet used by forcehit + kill aura
 function F.getMuzzleOrigin()
     local char = LocalPlayer.Character
     if not char then return nil end
@@ -2788,7 +2576,6 @@ function F.getMuzzleOrigin()
     if hrp then return hrp.Position + hrp.CFrame.LookVector * 4 end
     return nil
 end
-
 function F.validTarget(target, fromPos)
     if not target or not target.Character then return false end
     local char = target.Character
@@ -2804,14 +2591,10 @@ function F.validTarget(target, fromPos)
     if not part then return false end
     return true, part
 end
-
--- Core fire: NeverLarp FH packet + rapid volleys + controller-only tracers
 _lastFHFire = 0
 FHTracerFolder = nil
-
 function F.DrawForceHitTracer(...) end
 function F.DrawForceHitTracer_DISABLED(origin, hitPos)
-    -- ONLY controller sees bullet tracers (bots skip for FPS)
     if not F.IsControllerClient() then return end
     if not origin or not hitPos then return end
     pcall(function()
@@ -2860,8 +2643,6 @@ function F.DrawForceHitTracer_DISABLED(origin, hitPos)
         end)
     end)
 end
-
--- Controller-only: visual tracers from online bots toward nearest enemy
 task.spawn(function()
     while task.wait(0.08) do
         if F.IsControllerClient() and BotEspEnabled and RapidFireEnabled then
@@ -2897,8 +2678,7 @@ task.spawn(function()
         end
     end
 end)
-
-function F.FireForceHit(target)
+function F.FireForceHit(target) LPH_ATTRIBUTES(VM(NONE));
     if not MainEvent then
         MainEvent = game:GetService("ReplicatedStorage"):FindFirstChild("MainEvent")
             or game:GetService("ReplicatedStorage"):FindFirstChild("MainRemoteEvent")
@@ -2937,7 +2717,6 @@ function F.FireForceHit(target)
     end
     if not tool or not tool:FindFirstChild("Handle") then return false end
     if tool.Name:lower():find("knife") then return false end
-
     local handlePos = tool.Handle.Position
     local hitPos = hitPart.Position
     local name = string.lower(tool.Name)
@@ -2972,15 +2751,13 @@ function F.FireForceHit(target)
         ORIGIN = handlePos,
         HITS = hits,
     }
-    pcall(function() MainEvent:FireServer("Shoot", packet) end)
-    pcall(function() tool:Activate() end)
+    pcall(function() LPH_ATTRIBUTES(VM(NONE)); MainEvent:FireServer("Shoot", packet) end)
+    pcall(function() LPH_ATTRIBUTES(VM(NONE)); tool:Activate() end)
     _lastFHFire = now
     _lastFHT = now
     return true
 end
-
-function F.forceHitTick(target)
-    -- NeverLarp FH_Fire only
+function F.forceHitTick(target) LPH_ATTRIBUTES(VM(NONE));
     F.FireForceHit(target)
     F.TryReload()
 end
@@ -2990,7 +2767,6 @@ end
 function F.forceHitTickTest(target)
     F.forceHitTick(target)
 end
-
 function F.StartKillAura()
     if KillAuraConnection then KillAuraConnection:Disconnect() KillAuraConnection = nil end
     local ka = getgenv().KillAura
@@ -3009,7 +2785,7 @@ function F.StartKillAura()
     UseGun = true
     pcall(function() F.EquipSelectedGun() end)
     local lastShot = 0
-    KillAuraConnection = RunService.Heartbeat:Connect(function()
+    KillAuraConnection = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         ka = getgenv().KillAura
         if not ka or not ka.Enabled then
             if ka then ka.CurrentTarget = nil end
@@ -3041,7 +2817,6 @@ function F.StartKillAura()
                     local h = c:FindFirstChildOfClass("Humanoid")
                     if h and h.Health > 0 then
                         local skip = false
-                        -- knocked / KO check
                         if ka.KnockedCheck ~= false or ka.DeathCheck then
                             if F.isKnocked(c) then skip = true end
                             local be = c:FindFirstChild("BodyEffects")
@@ -3058,7 +2833,6 @@ function F.StartKillAura()
                         if not skip and part then
                             local d = (hrp.Position - part.Position).Magnitude
                             if d <= range then
-                                -- wall check
                                 if ka.WallCheck and F.HasWallBetween(hrp.Position, part.Position) then
                                     skip = true
                                 end
@@ -3079,7 +2853,6 @@ function F.StartKillAura()
         end
     end)
 end
-
 function F.StopKillAura()
     KillAuraEnabled = false
     if getgenv().KillAura then
@@ -3088,41 +2861,64 @@ function F.StopKillAura()
     end
     if KillAuraConnection then KillAuraConnection:Disconnect() KillAuraConnection = nil end
 end
-
 function F.DoSingleStomp(target)
-    if (MySlot or 1) ~= StompBotSlot or not StompOnKill then return end
+    if not StompOnKill then return end
+    local slot = tonumber(MySlot) or 1
+    local need = tonumber(StompBotSlot) or 1
+    if slot ~= need and slot ~= 1 then return end
     local tc = target and target.Character
     if not tc then return end
-    local ut = tc:FindFirstChild("UpperTorso") or tc:FindFirstChild("HumanoidRootPart")
-    local hrp = getgenv().get_root_part()
+    local ut = tc:FindFirstChild("UpperTorso")
+        or tc:FindFirstChild("LowerTorso")
+        or tc:FindFirstChild("HumanoidRootPart")
+        or tc:FindFirstChild("Head")
+    local hrp = getgenv().get_root_part and getgenv().get_root_part()
+        or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart"))
     local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
     if not ut or not hrp or not hum then return end
-    F.StopGlue()
-    F.StopCameraLock()
-    F.StopSlotSpam()
+    if not MainEvent then
+        MainEvent = game:GetService("ReplicatedStorage"):FindFirstChild("MainEvent")
+            or game:GetService("ReplicatedStorage"):FindFirstChild("MainRemoteEvent")
+    end
+    pcall(function()
+        if F.StopGlue then F.StopGlue() end
+        if F.StopCameraLock then F.StopCameraLock() end
+        if F.StopSlotSpam then F.StopSlotSpam() end
+    end)
     pcall(function() hum:UnequipTools() end)
     hum.Sit = false
     hum.PlatformStand = false
     pcall(function() hum:ChangeState(Enum.HumanoidStateType.GettingUp) end)
-    hrp.AssemblyLinearVelocity = Vector3.zero
-    local stompOff = Vector3.new(0, StompHeight or 1.2, 0)
-    hrp.CFrame = CFrame.new(ut.Position + stompOff)
-    RunService.Heartbeat:Wait()
-    for _ = 1, 5 do if MainEvent then pcall(function() MainEvent:FireServer("Stomp") end) end end
+    pcall(function()
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.AssemblyAngularVelocity = Vector3.zero
+    end)
+    local stompOff = Vector3.new(0, StompHeight or 3.4, 0)
+    for _ = 1, 8 do
+        if not ut.Parent or not hrp.Parent then break end
+        hrp.CFrame = CFrame.new(ut.Position + stompOff)
+        if MainEvent then
+            for __ = 1, 5 do
+                pcall(function() MainEvent:FireServer("Stomp") end)
+            end
+        end
+        RunService.Heartbeat:Wait()
+    end
     local t0 = tick()
     while tick() - t0 < PostStompHold do
         if ut.Parent and hrp.Parent then hrp.CFrame = CFrame.new(ut.Position + stompOff) end
         RunService.Heartbeat:Wait()
     end
 end
-
 function F.StopAll()
+    if CurrentAction == "bring" or not StompOnKill then
+        StompOnKill = true
+    end
     CurrentAction = "idle"
     TargetPlayer, TargetList = nil, {}
     FormationTarget, FormationType = nil, nil
     BringStage, GrabOnceDone = nil, false
     KillPhase, StompDoneForCycle = "attack", false
-    -- end orbit 3 combat suite
     Orbit3Combat = false
     RapidFireEnabled = false
     if F.StopOrbit3CombatLoop then F.StopOrbit3CombatLoop() end
@@ -3169,7 +2965,6 @@ function F.PlayEmote(id)
         CurrentDance:Play(0.1, 1, 1)
     end)
 end
-
 function F.StartDefaultEmote()
     local id = DefaultEmoteId or Emotes.darktriad
     if not id or id == "" then return end
@@ -3177,9 +2972,7 @@ function F.StartDefaultEmote()
     LastDanceId = id
     F.PlayEmote(id)
 end
-
-function F.EnsureDancePlaying()
-    -- always keep an emote playing (default if none set)
+function F.EnsureDancePlaying() LPH_ATTRIBUTES(VM(NONE));
     if not LastDanceId then
         LastDanceId = DefaultEmoteId
         DancePersistent = true
@@ -3189,25 +2982,19 @@ function F.EnsureDancePlaying()
             F.PlayEmote(LastDanceId)
         end
     elseif ExecuteEmoteForced then
-        pcall(function() if F.StartDefaultEmote then F.StartDefaultEmote() end end)
+        pcall(function() LPH_ATTRIBUTES(VM(NONE)); if F.StartDefaultEmote then F.StartDefaultEmote() end end)
     end
 end
-
--- Auto stomp: ONLY the current kill target when KO'd (no nearest scan)
--- Target-only autostomp (source-style: save CF, TP on UpperTorso +3.5, Stomp x5, return)
--- Only stomps AutostompTarget or TargetPlayer - never nearest KO scan
 function F.StartContinuousAutostomp()
     if AutoStompConnection then AutoStompConnection:Disconnect() AutoStompConnection = nil end
     getgenv()._AS_Running = false
     getgenv()._AS_Return = nil
     getgenv()._AS_Target = nil
-
     local function resolveStompTarget()
         local t = getgenv().AutostompTarget or TargetPlayer or ForceHitCmdTarget or ForceHitKeybindTarget
         if t and t.Parent then return t end
         return nil
     end
-
     local function targetStillKO(t)
         if not t or not t.Parent then return false end
         local tc = t.Character
@@ -3221,11 +3008,10 @@ function F.StartContinuousAutostomp()
         local hum = tc:FindFirstChildOfClass("Humanoid")
         return hum and hum.Health <= 0
     end
-
     local function runLoop()
         if getgenv()._AS_Running then return end
         getgenv()._AS_Running = true
-        task.spawn(function()
+        task.spawn(function() LPH_ATTRIBUTES(VM(NONE));
             while AutoStompEnabled do
                 local c = LocalPlayer.Character
                 local hrp = c and c:FindFirstChild("HumanoidRootPart")
@@ -3233,10 +3019,9 @@ function F.StartContinuousAutostomp()
                 if c and hrp and hum then
                     local t = resolveStompTarget()
                     getgenv()._AS_Target = t
-
                     if not targetStillKO(t) then
                         if getgenv()._AS_Return and hrp then
-                            pcall(function() hrp.CFrame = getgenv()._AS_Return end)
+                            pcall(function() LPH_ATTRIBUTES(VM(NONE)); hrp.CFrame = getgenv()._AS_Return end)
                         end
                         getgenv()._AS_Return = nil
                     else
@@ -3246,7 +3031,7 @@ function F.StartContinuousAutostomp()
                             if not getgenv()._AS_Return then
                                 getgenv()._AS_Return = hrp.CFrame
                             end
-                            pcall(function()
+                            pcall(function() LPH_ATTRIBUTES(VM(NONE));
                                 hum.Sit = false
                                 hum.PlatformStand = false
                                 hum:ChangeState(Enum.HumanoidStateType.GettingUp)
@@ -3260,11 +3045,11 @@ function F.StartContinuousAutostomp()
                                 or ReplicatedStorage:FindFirstChild("MainRemoteEvent")
                             if me then
                                 for _ = 1, 5 do
-                                    pcall(function() me:FireServer("Stomp") end)
+                                    pcall(function() LPH_ATTRIBUTES(VM(NONE)); me:FireServer("Stomp") end)
                                 end
                             end
                             if getgenv()._AS_Return then
-                                pcall(function() hrp.CFrame = getgenv()._AS_Return end)
+                                pcall(function() LPH_ATTRIBUTES(VM(NONE)); hrp.CFrame = getgenv()._AS_Return end)
                             end
                         end
                     end
@@ -3276,8 +3061,7 @@ function F.StartContinuousAutostomp()
             getgenv()._AS_Running = false
         end)
     end
-
-    AutoStompConnection = RunService.Heartbeat:Connect(function()
+    AutoStompConnection = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         if not AutoStompEnabled then return end
         if not getgenv()._AS_Running then
             runLoop()
@@ -3285,7 +3069,6 @@ function F.StartContinuousAutostomp()
     end)
     runLoop()
 end
-
 function F.StopContinuousAutostomp()
     AutoStompEnabled = false
     if AutoStompConnection then AutoStompConnection:Disconnect() AutoStompConnection = nil end
@@ -3298,29 +3081,18 @@ function F.StopContinuousAutostomp()
     getgenv()._AS_Return = nil
     getgenv()._AS_Target = nil
 end
-
--- Fast kill cycle (pure CFrame - glue fully off):
--- 1) Snap BEHIND target (stable look - does not break if target stops walking)
--- 2) Approach at FastKillMoveSpeed; triggerbot at FastKillHitDist
--- 3) Fly FRONT at FastKillMoveSpeed
--- 4) Repeat until dead
--- Top-down camera lock on target. Obstacles cleared on start.
-FastKillPhase = "behind" -- behind | hit | front
+FastKillPhase = "behind"
 FastKillFrontCF = nil
 FastKillTweening = false
 FastKillTweenStart = 0
 FastKillTweenFrom = nil
 FastKillLastStep = 0
 FastKillLastTrigger = 0
-
--- Client visual spoof: real kill on Heartbeat, RenderStepped shows orbit around target
 KillVisualSpoof = true
 KillSpoofConn = nil
 LastRealKillCF = nil
 OrbitVisualAngle = 0
-
-
-function F.GetPlayerInFront(fromPlr, maxDist, maxAngleDeg)
+function F.GetPlayerInFront(fromPlr, maxDist, maxAngleDeg) LPH_ATTRIBUTES(VM(NONE));
     maxDist = maxDist or 120
     maxAngleDeg = maxAngleDeg or 35
     if not fromPlr or not fromPlr.Character then return nil end
@@ -3352,63 +3124,143 @@ function F.GetPlayerInFront(fromPlr, maxDist, maxAngleDeg)
     end
     return best
 end
-
-function F.StartSentry()
-    if SentryConnection then pcall(function() SentryConnection:Disconnect() end) SentryConnection = nil end
-    SentryEnabled = true
-    local ctrl = F.GetController and F.GetController() or nil
-    if ctrl and ctrl.Character then
-        local h = ctrl.Character:FindFirstChildOfClass("Humanoid")
-        if h then LastControllerHealth = h.Health end
+function F.GetDamageAttacker(victim)
+    if not victim or not victim.Character then return nil end
+    local char = victim.Character
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    local hr = char:FindFirstChild("HumanoidRootPart")
+    if not hum or not hr then return nil end
+    local creator = hum:FindFirstChild("creator") or hum:FindFirstChild("Creator")
+    if creator and creator.Value then
+        local v = creator.Value
+        if typeof(v) == "Instance" then
+            if v:IsA("Player") then return v end
+            local p = Players:GetPlayerFromCharacter(v)
+            if p then return p end
+        end
     end
-    SentryConnection = RunService.Heartbeat:Connect(function()
-        if not SentryEnabled then return end
-        local c = F.GetController and F.GetController() or nil
-        if not c or not c.Character then return end
-        local h = c.Character:FindFirstChildOfClass("Humanoid")
-        local hr = c.Character:FindFirstChild("HumanoidRootPart")
-        if not h or not hr then return end
-        local cur = h.Health
-        if cur < (LastControllerHealth or cur) and cur > 0 then
-            -- damaged: shoot nearest hostile, prefer who faces controller
-            local best = F.GetPlayerInFront(c, 50, 90)
-            if not best then
-                local bd = 50
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if p ~= LocalPlayer and not (F.IsOwner and F.IsOwner(p)) and not (F.isWhitelisted and F.isWhitelisted(p)) and p.Character then
-                        local pr = p.Character:FindFirstChild("HumanoidRootPart")
-                        local hum = p.Character:FindFirstChildOfClass("Humanoid")
-                        if pr and hum and hum.Health > 0 then
-                            local d = (pr.Position - hr.Position).Magnitude
-                            if d < bd then bd, best = d, p end
+    local be = char:FindFirstChild("BodyEffects")
+    if be then
+        for _, name in ipairs({"Attacker", "LastAttacker", "Damager", "Killer", "Shooting", "ShotBy"}) do
+            local o = be:FindFirstChild(name)
+            if o and o.Value then
+                local v = o.Value
+                if typeof(v) == "Instance" then
+                    if v:IsA("Player") then return v end
+                    local p = Players:GetPlayerFromCharacter(v)
+                    if p then return p end
+                elseif type(v) == "string" then
+                    local p = Players:FindFirstChild(v)
+                    if p then return p end
+                end
+            end
+        end
+    end
+    local best, bestScore = nil, -1
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= victim and plr ~= LocalPlayer
+            and not (F.IsOwner and F.IsOwner(plr))
+            and not (F.isWhitelisted and F.isWhitelisted(plr)) then
+            local pc = plr.Character
+            if pc then
+                local ph = pc:FindFirstChildOfClass("Humanoid")
+                local pr = pc:FindFirstChild("HumanoidRootPart")
+                if ph and pr and ph.Health > 0 then
+                    local tool = pc:FindFirstChildOfClass("Tool")
+                    if tool then
+                        local tn = tool.Name:lower()
+                        if not (tn:find("knife") or tn:find("combat") or tn:find("food") or tn:find("taco") or tn:find("pizza") or tn:find("burger") or tn:find("chicken")) then
+                            local dist = (pr.Position - hr.Position).Magnitude
+                            if dist <= 250 then
+                                local toVic = (hr.Position - pr.Position)
+                                if toVic.Magnitude >= 0.1 then
+                                    local look = pr.CFrame.LookVector
+                                    local dot = look:Dot(toVic.Unit)
+                                    if dot > 0.35 then
+                                        local score = dot * 100 - dist * 0.05
+                                        if score > bestScore then
+                                            bestScore, best = score, plr
+                                        end
+                                    end
+                                end
+                            end
                         end
                     end
                 end
             end
-            if best then
-                if F.FireForceHit then pcall(F.FireForceHit, best) end
-                if F.StartKill and CurrentAction ~= "kill" and CurrentAction ~= "autokill" then
-                    pcall(F.StartKill, { best }, true)
-                end
-            end
         end
-        LastControllerHealth = cur
+    end
+    return best
+end
+function F.StartSentry()
+if LocalPlayer.Character then pcall(function() F.BindAutoHealHealth(LocalPlayer.Character) end) end
+    if SentryConnection then pcall(function() SentryConnection:Disconnect() end) SentryConnection = nil end
+    if getgenv()._SentryHealthConn then pcall(function() getgenv()._SentryHealthConn:Disconnect() end) getgenv()._SentryHealthConn = nil end
+    if getgenv()._SentryCharConn then pcall(function() getgenv()._SentryCharConn:Disconnect() end) getgenv()._SentryCharConn = nil end
+    SentryEnabled = true
+    getgenv()._SentryLastHit = 0
+    local function bindController(c)
+        if not c then return end
+        local function bindHum(char)
+            local h = char and char:FindFirstChildOfClass("Humanoid")
+            if not h then return end
+            LastControllerHealth = h.Health
+            if getgenv()._SentryHealthConn then pcall(function() getgenv()._SentryHealthConn:Disconnect() end) end
+            getgenv()._SentryHealthConn = h.HealthChanged:Connect(function(newHp)
+                if not SentryEnabled then return end
+                local old = LastControllerHealth or newHp
+                LastControllerHealth = newHp
+                if newHp >= old or newHp <= 0 then return end
+                local now = tick()
+                if now - (getgenv()._SentryLastHit or 0) < 0.12 then return end
+                getgenv()._SentryLastHit = now
+                local attacker = F.GetDamageAttacker(c)
+                if not attacker then return end
+                if F.IsOwner and F.IsOwner(attacker) then return end
+                if F.isWhitelisted and F.isWhitelisted(attacker) then return end
+                if F.FireForceHit then pcall(F.FireForceHit, attacker) end
+                if CurrentAction ~= "kill" and CurrentAction ~= "autokill" and CurrentAction ~= "bring" then
+                    if F.StartKill then pcall(F.StartKill, { attacker }, true) end
+                elseif TargetPlayer ~= attacker and F.FireForceHit then
+                    pcall(F.FireForceHit, attacker)
+                end
+            end)
+        end
+        if c.Character then bindHum(c.Character) end
+        if getgenv()._SentryCharConn then pcall(function() getgenv()._SentryCharConn:Disconnect() end) end
+        getgenv()._SentryCharConn = c.CharacterAdded:Connect(function(char)
+            task.wait(0.3)
+            bindHum(char)
+        end)
+    end
+    local ctrl = F.GetController and F.GetController() or nil
+    bindController(ctrl)
+    SentryConnection = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
+        if not SentryEnabled then return end
+        local c = F.GetController and F.GetController() or nil
+        if not c then return end
+        if not getgenv()._SentryBoundTo or getgenv()._SentryBoundTo ~= c then
+            getgenv()._SentryBoundTo = c
+            bindController(c)
+        end
+        local h = c.Character and c.Character:FindFirstChildOfClass("Humanoid")
+        if h then LastControllerHealth = h.Health end
     end)
 end
-
 function F.StopSentry()
     SentryEnabled = false
     if SentryConnection then pcall(function() SentryConnection:Disconnect() end) SentryConnection = nil end
+    if getgenv()._SentryHealthConn then pcall(function() getgenv()._SentryHealthConn:Disconnect() end) getgenv()._SentryHealthConn = nil end
+    if getgenv()._SentryCharConn then pcall(function() getgenv()._SentryCharConn:Disconnect() end) getgenv()._SentryCharConn = nil end
+    getgenv()._SentryBoundTo = nil
 end
-
 function F.StartSentry2()
     if getgenv()._Sentry2Conn then pcall(function() getgenv()._Sentry2Conn:Disconnect() end) end
     Sentry2Enabled = true
-    getgenv()._Sentry2Conn = RunService.Heartbeat:Connect(function()
+    getgenv()._Sentry2Conn = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         if not Sentry2Enabled then return end
         local c = F.GetController and F.GetController() or nil
         if not c then return end
-        -- who the controller is looking at / engaging
         local tgt = F.GetPlayerInFront(c, 150, 28)
         if not tgt and getgenv().NamelessSentry2Target and getgenv().NamelessSentry2Target.Parent then
             tgt = getgenv().NamelessSentry2Target
@@ -3416,7 +3268,6 @@ function F.StartSentry2()
         if not tgt then return end
         Sentry2Target = tgt
         getgenv().NamelessSentry2Target = tgt
-        -- bots (and self if bot) shoot that target with forcehit
         if F.isWhitelisted and F.isWhitelisted(tgt) then return end
         if F.FireForceHit then
             pcall(F.FireForceHit, tgt)
@@ -3425,7 +3276,6 @@ function F.StartSentry2()
         if F.TryReload then pcall(F.TryReload) end
     end)
 end
-
 function F.StopSentry2()
     Sentry2Enabled = false
     Sentry2Target = nil
@@ -3434,25 +3284,22 @@ function F.StopSentry2()
         getgenv()._Sentry2Conn = nil
     end
 end
-
-
-function F.GetKillOffset(tRoot, posName, dist)
+function F.GetKillOffset(tRoot, posName, dist) LPH_ATTRIBUTES(VM(NONE));
     if not tRoot then return Vector3.zero end
     local look = F.getFastKillStableLook(tRoot)
     local right = Vector3.new(-look.Z, 0, look.X)
     if right.Magnitude < 0.05 then right = Vector3.new(1, 0, 0) else right = right.Unit end
     local d = dist or KillDistance or 8
     local n = (posName or KillPosition or "Back"):lower()
-    -- slot-based spread when knife / multi-bot
     if n == "slot" or n == "auto" or (not UseGun and MySlot) then
         local slot = tonumber(MySlot) or 1
         local positions = {
-            Vector3.new(0, d, 0), -- 1 top
-            Vector3.new(0, -d, 0), -- 2 bottom
-            -look * d, -- 3 back
-            look * d, -- 4 front
-            -right * d, -- 5 left
-            right * d, -- 6 right
+            Vector3.new(0, d, 0),
+            Vector3.new(0, -d, 0),
+            -look * d,
+            look * d,
+            -right * d,
+            right * d,
         }
         if slot <= 6 then
             return positions[slot]
@@ -3468,14 +3315,12 @@ function F.GetKillOffset(tRoot, posName, dist)
     else return -look * d
     end
 end
-
 function F.GetKillVisualCF(target)
     if not target or not target.Character then return nil end
     local tRoot = target.Character:FindFirstChild("HumanoidRootPart")
         or target.Character:FindFirstChild("UpperTorso")
         or target.Character:FindFirstChild("Head")
     if not tRoot then return nil end
-    -- smooth orbit visual around target (client only)
     OrbitVisualAngle = OrbitVisualAngle + (OrbitSpeed or 30) * 0.016
     local dist = KillDistance or 8
     local h = (OrbitHeight or 1) + 1.5
@@ -3484,12 +3329,10 @@ function F.GetKillVisualCF(target)
     local pos = tRoot.Position + Vector3.new(x, h, z)
     return CFrame.lookAt(pos, tRoot.Position)
 end
-
 function F.StartKillVisualSpoof()
     F.StopKillVisualSpoof()
     if not KillVisualSpoof then return end
-    -- Camera orbits target so SCREEN looks like orbit; body keeps real kill CFrame
-    KillSpoofConn = RunService.RenderStepped:Connect(function()
+    KillSpoofConn = RunService.RenderStepped:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         if not KillVisualSpoof then return end
         if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then return end
         if KillPhase ~= "attack" and KillPhase ~= "waitff" then return end
@@ -3511,7 +3354,6 @@ function F.StartKillVisualSpoof()
         cam.CFrame = CFrame.lookAt(camPos, tRoot.Position)
     end)
 end
-
 function F.StopKillVisualSpoof()
     if KillSpoofConn then
         KillSpoofConn:Disconnect()
@@ -3523,7 +3365,6 @@ function F.StopKillVisualSpoof()
         if cam then cam.CameraType = Enum.CameraType.Custom end
     end)
 end
-
 function F.ForceGlueOff()
     if getgenv().glue_active or getgenv().connection_loop then
         getgenv().glue_active = false
@@ -3542,9 +3383,7 @@ function F.ForceGlueOff()
         CustomGlueCF = nil
     end
 end
-
--- Stable horizontal facing: move dir -> LookVector -> last good (won't collapse when target stops)
-function F.getFastKillStableLook(tRoot)
+function F.getFastKillStableLook(tRoot) LPH_ATTRIBUTES(VM(NONE));
     if not tRoot then return FastKillStableLook end
     local hum = tRoot.Parent and tRoot.Parent:FindFirstChildOfClass("Humanoid")
     local md = hum and hum.MoveDirection or Vector3.zero
@@ -3560,8 +3399,7 @@ function F.getFastKillStableLook(tRoot)
     end
     return FastKillStableLook
 end
-
-function F.FastKillTriggerBot(target)
+function F.FastKillTriggerBot(target) LPH_ATTRIBUTES(VM(NONE));
     if tick() - FastKillLastTrigger < FastKillTriggerRate then return end
     FastKillLastTrigger = tick()
     local method = F.GetKillMethod and F.GetKillMethod() or KillMethod
@@ -3572,11 +3410,11 @@ function F.FastKillTriggerBot(target)
         if not knife then
             local bag = LocalPlayer:FindFirstChild("Backpack")
             knife = bag and (bag:FindFirstChild("[Knife]") or bag:FindFirstChild("Knife"))
-            if knife then pcall(function() knife.Parent = char end) end
+            if knife then pcall(function() LPH_ATTRIBUTES(VM(NONE)); knife.Parent = char end) end
         end
         if knife then
             F.applyKnifeHitbox()
-            pcall(function() knife:Activate() end)
+            pcall(function() LPH_ATTRIBUTES(VM(NONE)); knife:Activate() end)
         end
         return
     end
@@ -3584,15 +3422,13 @@ function F.FastKillTriggerBot(target)
     if not tool then return end
     if tool.Name:lower():find("knife") then
         F.applyKnifeHitbox()
-        pcall(function() tool:Activate() end)
+        pcall(function() LPH_ATTRIBUTES(VM(NONE)); tool:Activate() end)
     else
         F.FireForceHit(target)
         F.TryReload()
     end
 end
-
--- Tween path by TweenPath setting (not KillPosition)
-function F.getTweenKillPath(tRoot)
+function F.getTweenKillPath(tRoot) LPH_ATTRIBUTES(VM(NONE));
     local look = F.getFastKillStableLook(tRoot)
     local right = Vector3.new(-look.Z, 0, look.X)
     if right.Magnitude < 0.05 then right = Vector3.new(1, 0, 0) else right = right.Unit end
@@ -3603,7 +3439,6 @@ function F.getTweenKillPath(tRoot)
     local d2 = FastKillFrontDist or 22
     local path = (TweenPath or "backfront"):lower()
     local startPos, hitPos, endPos
-
     if path == "topbottom" then
         startPos = origin + up * d0
         hitPos = origin + up * math.max(d1 * 0.35, 2)
@@ -3637,33 +3472,27 @@ function F.getTweenKillPath(tRoot)
         hitPos = origin
         endPos = origin + b * d2
     else
-        -- backfront (default)
         startPos = origin - look * d0
         hitPos = origin - look * d1
         endPos = origin + look * d2
     end
     return startPos, hitPos, endPos, path
 end
-
-function F.FastKillStep(target)
+function F.FastKillStep(target) LPH_ATTRIBUTES(VM(NONE));
     local tChar = target and target.Character
     if not tChar then return false end
     local tRoot = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
     local r = getgenv().get_root_part()
     if not tRoot or not r then return false end
-
     local hum = tChar:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 or F.isKnocked(tChar) then
         FastKillPhase = "behind"
         FastKillTweenStart = 0
         return true
     end
-
     local now = tick()
     local dt = FastKillLastStep > 0 and math.clamp(now - FastKillLastStep, 0, 0.05) or 0.016
     FastKillLastStep = now
-
-    -- tweenkill: 100 stud / 1000 speed; gun fastkill uses injected FastKillMoveSpeed/HitDist
     local m = F.GetKillMethod and F.GetKillMethod() or "tween"
     if m == "tween" then
         FastKillFrontDist = 100
@@ -3673,21 +3502,17 @@ function F.FastKillStep(target)
     end
     local startPos, hitPos, endPos = F.getTweenKillPath(tRoot)
     local speed = math.max(FastKillMoveSpeed or 1000, 200)
-
-    -- pure CFrame tween (no PhysicsRep fight during path)
-    pcall(function() workspace.FallenPartsDestroyHeight = -50000 end)
+    pcall(function() LPH_ATTRIBUTES(VM(NONE)); workspace.FallenPartsDestroyHeight = -50000 end)
     r.CanCollide = false
     r.AssemblyLinearVelocity = Vector3.zero
     r.AssemblyAngularVelocity = Vector3.zero
     F.SetPhysicsRepRootPart(r, r)
-
     local function snapOrStep(goal)
         local dist = (r.Position - goal).Magnitude
         if dist <= 4 then
             r.CFrame = CFrame.lookAt(goal, tRoot.Position)
             return true
         end
-        -- long range: snap halfway then finish so it actually reaches
         if dist > 80 then
             local dir = (goal - r.Position).Unit
             r.CFrame = CFrame.lookAt(r.Position + dir * math.min(dist * 0.85, speed * dt * 3), tRoot.Position)
@@ -3703,11 +3528,9 @@ function F.FastKillStep(target)
         r.CFrame = CFrame.lookAt(r.Position + dir.Unit * step, tRoot.Position)
         return (r.Position - goal).Magnitude < 4
     end
-
     if FastKillPhase ~= "behind" and FastKillPhase ~= "hit" and FastKillPhase ~= "front" then
         FastKillPhase = "behind"
     end
-
     if FastKillPhase == "behind" then
         if snapOrStep(startPos) then
             r.CFrame = CFrame.lookAt(startPos, tRoot.Position)
@@ -3718,7 +3541,6 @@ function F.FastKillStep(target)
         end
         return false
     end
-
     if FastKillPhase == "hit" then
         if not snapOrStep(hitPos) then
             return false
@@ -3733,7 +3555,6 @@ function F.FastKillStep(target)
         end
         return false
     end
-
     if snapOrStep(endPos) then
         r.CFrame = CFrame.lookAt(endPos, tRoot.Position)
         FastKillPhase = "behind"
@@ -3741,10 +3562,7 @@ function F.FastKillStep(target)
     end
     return false
 end
-
--- Heartbeat driver for fast kill / normal kill attack (smooth on bot's screen)
--- Orbit kill: stick in orbit CF and shoot (no tween path)
-function F.OrbitKillStep(target)
+function F.OrbitKillStep(target) LPH_ATTRIBUTES(VM(NONE));
     local tChar = target and target.Character
     if not tChar then return true end
     local tRoot = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
@@ -3767,29 +3585,20 @@ function F.OrbitKillStep(target)
     F.FastKillTriggerBot(target)
     return false
 end
-
--- Real void dive: hard teleport, else tween at SpamVoidTweenSpeed (100000)
-function F.GoToVoid(r, surfaceCF)
+function F.GoToVoid(r, surfaceCF) LPH_ATTRIBUTES(VM(NONE));
     if not r then return false end
-    pcall(function() workspace.FallenPartsDestroyHeight = -50000 end)
-    -- break PhysicsRep so we are not glued to the target while voiding
+    pcall(function() LPH_ATTRIBUTES(VM(NONE)); workspace.FallenPartsDestroyHeight = -50000 end)
     F.SetPhysicsRepRootPart(r, r)
     r.CanCollide = false
     r.AssemblyLinearVelocity = Vector3.zero
     r.AssemblyAngularVelocity = Vector3.zero
-
     local base = surfaceCF or r.CFrame
     local depth = SpamVoidDepth or 500
     local voidPos = Vector3.new(base.Position.X, base.Position.Y - depth, base.Position.Z)
-    -- also allow absolute deep void
     local absVoid = Vector3.new(base.Position.X, (VoidY or -500), base.Position.Z)
     if absVoid.Y < voidPos.Y then voidPos = absVoid end
-
-    -- 1) hard teleport
     r.CFrame = CFrame.new(voidPos)
     r.AssemblyLinearVelocity = Vector3.zero
-
-    -- 2) if still not deep enough, tween dive at 100000 studs/s
     if r.Position.Y > (base.Position.Y - depth * 0.6) then
         local goal = Vector3.new(base.Position.X, base.Position.Y - depth, base.Position.Z)
         local dir = goal - r.Position
@@ -3802,9 +3611,7 @@ function F.GoToVoid(r, surfaceCF)
     end
     return r.Position.Y < (base.Position.Y - 50)
 end
-
--- Spamvoid kill: surface shoot -> REAL void -> surface (timings customisable)
-function F.SpamVoidKillStep(target)
+function F.SpamVoidKillStep(target) LPH_ATTRIBUTES(VM(NONE));
     UseGun = false
     local tChar = target and target.Character
     if not tChar then return true end
@@ -3818,25 +3625,19 @@ function F.SpamVoidKillStep(target)
         F.GoToVoid(r, SpamVoidSurfaceCF or r.CFrame)
         return false
     end
-
     local now = tick()
-    -- slot-based positions for multi-bot knife spamvoid
     local off = F.GetKillOffset(tRoot, "slot", KillDistance or FastKillHitDist or 6)
     local surfacePos = tRoot.Position + off + Vector3.new(0, 1.0, 0)
-
     r.CanCollide = false
     r.AssemblyLinearVelocity = Vector3.zero
     r.AssemblyAngularVelocity = Vector3.zero
-
     local inT = (SpamVoidInTime or 0.10)
     local outT = (SpamVoidOutTime or 0.10)
-
     if SpamVoidPhase == "surface" then
         F.SetPhysicsRepRootPart(r, tRoot)
         r.CFrame = CFrame.lookAt(surfacePos, tRoot.Position)
         SpamVoidSurfaceCF = CFrame.new(surfacePos)
-        -- equip knife and autoswing
-        pcall(function()
+        pcall(function() LPH_ATTRIBUTES(VM(NONE));
             local char = LocalPlayer.Character
             local hum2 = char and char:FindFirstChildOfClass("Humanoid")
             local bag = LocalPlayer:FindFirstChild("Backpack")
@@ -3860,7 +3661,6 @@ function F.SpamVoidKillStep(target)
         F.GoToVoid(r, SpamVoidSurfaceCF)
         return false
     end
-
     if SpamVoidPhase == "void" then
         F.GoToVoid(r, SpamVoidSurfaceCF)
         if now >= SpamVoidUntil then
@@ -3873,11 +3673,9 @@ function F.SpamVoidKillStep(target)
         end
         return false
     end
-
     SpamVoidPhase = "surface"
     return false
 end
-
 KillAttackConn = nil
 function F.StopKillAttackLoop()
     if KillAttackConn then KillAttackConn:Disconnect() KillAttackConn = nil end
@@ -3887,8 +3685,7 @@ function F.StopKillAttackLoop()
     SpamVoidSurfaceCF = nil
     SpamVoidHitDone = false
 end
-
-function F.UziKillStep(target)
+function F.UziKillStep(target) LPH_ATTRIBUTES(VM(NONE));
     local tChar = target and target.Character
     if not tChar then return true end
     local tRoot = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
@@ -3903,7 +3700,7 @@ function F.UziKillStep(target)
     local flat = Vector3.new(look.X, 0, look.Z)
     if flat.Magnitude < 0.05 then flat = Vector3.new(0, 0, 1) else flat = flat.Unit end
     local goal = tRoot.Position - flat * 0.01 + Vector3.new(0, 200, 0)
-    pcall(function()
+    pcall(function() LPH_ATTRIBUTES(VM(NONE));
         r.CanCollide = false
         r.AssemblyLinearVelocity = Vector3.zero
         r.CFrame = CFrame.lookAt(goal, tRoot.Position)
@@ -3911,17 +3708,26 @@ function F.UziKillStep(target)
     if F.SetPhysicsRepRootPart then
         pcall(F.SetPhysicsRepRootPart, r, tRoot)
     elseif sethiddenproperty then
-        pcall(function() sethiddenproperty(r, "PhysicsRepRootPart", tRoot) end)
+        pcall(function() LPH_ATTRIBUTES(VM(NONE)); sethiddenproperty(r, "PhysicsRepRootPart", tRoot) end)
     end
-    -- equip uzi specifically, reload before first shot
-    if F.SelectGun then pcall(F.SelectGun, "uzi") end
+    SelectedGunKey = "silencer"
+    UseGun = true
+    if F.SelectGun then pcall(F.SelectGun, "silencer") end
     local char = LocalPlayer.Character
     local tool = char and char:FindFirstChildOfClass("Tool")
-    if not tool or not string.lower(tool.Name):find("uzi") then
-        if F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
-        tool = char and char:FindFirstChildOfClass("Tool")
+    local function isSil(t)
+        if not t then return false end
+        local n = string.lower(t.Name)
+        return n:find("silencer") ~= nil
     end
-    -- first-mag fix: ensure loaded before shooting
+    if not isSil(tool) then
+        if F.FindGunByKey then
+            local s = F.FindGunByKey("silencer")
+            if s and F.EquipOnlyTool then pcall(F.EquipOnlyTool, s) tool = s end
+        end
+        if not isSil(tool) and F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
+        tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+    end
     getgenv()._UziReadyAt = getgenv()._UziReadyAt or 0
     if tool then
         if tick() < (getgenv()._UziReadyAt or 0) then
@@ -3939,19 +3745,16 @@ function F.UziKillStep(target)
     end
     return false
 end
-
-function F.GetGunHitDistance()
+function F.GetGunHitDistance() LPH_ATTRIBUTES(VM(NONE));
     local char = LocalPlayer.Character
     local tool = char and char:FindFirstChildOfClass("Tool")
     local n = tool and string.lower(tool.Name) or ""
     if n:find("shotgun") or n:find("tactical") or n:find("db") or n:find("double") or n:find("sg") then
         return 9
     end
-    -- rev / silencer / uzi / default
     return 30
 end
-
-function F.DBFastKillStep(target)
+function F.DBFastKillStep(target) LPH_ATTRIBUTES(VM(NONE));
     local tChar = target and target.Character
     if not tChar then return true end
     local tRoot = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
@@ -3962,7 +3765,6 @@ function F.DBFastKillStep(target)
     if not hum or hum.Health <= 0 then return true end
     if tChar:FindFirstChildOfClass("ForceField") then return false end
     UseGun = true
-    -- keep currently equipped gun; only equip if none
     local char = LocalPlayer.Character
     local tool = char and char:FindFirstChildOfClass("Tool")
     if not tool or tool.Name:lower():find("knife") then
@@ -3977,7 +3779,7 @@ function F.DBFastKillStep(target)
         done = F.FastKillStep(target)
     else
         local off = F.GetKillOffset(tRoot, KillPosition, hitDist)
-        pcall(function()
+        pcall(function() LPH_ATTRIBUTES(VM(NONE));
             r.CFrame = CFrame.lookAt(tRoot.Position + off, tRoot.Position)
             r.AssemblyLinearVelocity = Vector3.zero
         end)
@@ -3986,7 +3788,6 @@ function F.DBFastKillStep(target)
     FastKillHitDist, FastKillMoveSpeed = prevHit, prevSpeed
     return done
 end
-
 function F.StartKillAttackLoop()
     F.StopKillAttackLoop()
     getgenv()._UziPrimed = false
@@ -3999,9 +3800,8 @@ function F.StartKillAttackLoop()
     SpamVoidUntil = 0
     SpamVoidSurfaceCF = nil
     SpamVoidHitDone = false
-    -- Heartbeat = real kill path; RenderStepped visual = orbit spoof
     F.StartKillVisualSpoof()
-    KillAttackConn = RunService.Heartbeat:Connect(function()
+    KillAttackConn = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then return end
         if KillPhase ~= "attack" then return end
         local t = TargetPlayer
@@ -4011,14 +3811,18 @@ function F.StartKillAttackLoop()
         local hum = tChar:FindFirstChildOfClass("Humanoid")
         if not hum or hum.Health <= 0 then return end
         if tChar:FindFirstChildOfClass("ForceField") then return end
-        F.EquipBestWeapon()
         local m = F.GetKillMethod()
-        if m == "spamvoid" then
+        if m == "spamvoid" or m == "tween" then
             UseGun = false
+        else
+            UseGun = true
+        end
+        F.EquipBestWeapon()
+        if m == "spamvoid" then
             F.SpamVoidKillStep(t)
         elseif m == "orbit" then
             F.OrbitKillStep(t)
-        elseif m == "uzikill" then
+        elseif m == "uzikill" or m == "skill" then
             F.UziKillStep(t)
         elseif m == "fastkill" then
             F.DBFastKillStep(t)
@@ -4028,23 +3832,49 @@ function F.StartKillAttackLoop()
         if UseGun and tick() - LastReload > 1.8 then F.TryReload() end
     end)
 end
-
--- forward funcs on F: F.StartKill, F.StartFollow, F.OnChatted, F.RunSilent
 F.RunSilent = function(cmdLine)
+    cmdLine = tostring(cmdLine or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if cmdLine == "" then return end
     getgenv()._StandGuiSilent = true
-    pcall(function() F.OnChatted(LocalPlayer, PREFIX .. cmdLine) end)
+    getgenv()._NamelessBridgeCmd = true
+    local msg = tostring(PREFIX or "NAMELESS.HVH | !") .. cmdLine
+    pcall(function()
+        F.OnChatted(LocalPlayer, msg)
+    end)
     getgenv()._StandGuiSilent = false
+    getgenv()._NamelessBridgeCmd = false
 end
-
--- GUI commands: always chat; if sync bots on, also run locally on controller
-F.GuiCommand = function(cmdLine)
-    F.ChatCommand(cmdLine)
-    if SyncBotsEnabled then
-        F.RunSilent(cmdLine)
+ChatlessGui = false
+getgenv().NAMELESS_CMD_FILE = getgenv().NAMELESS_CMD_FILE or "nameless_cmd_bridge.txt"
+getgenv().NAMELESS_BRIDGE_SECRET = getgenv().NAMELESS_BRIDGE_SECRET or "nameless-targetonyou-bridge"
+getgenv()._NamelessNtfySince = getgenv()._NamelessNtfySince or "all"
+local function bridgeTopic()
+    local secret = tostring(getgenv().NAMELESS_BRIDGE_SECRET or "nameless-hvh-bridge")
+    local owner = tostring(OriginalControllerName or ControllerName or "owner"):lower():gsub("[^%w]", "")
+    return ("nameless-" .. owner .. "-" .. secret:gsub("[^%w%-]", "")):sub(1, 64)
+end
+local function httpRequest(opts)
+    local req = (syn and syn.request) or http_request or request or (http and http.request)
+    if req then
+        local ok, res = pcall(req, opts)
+        if ok then return res end
     end
+    if opts.Method == "GET" and game.HttpGet then
+        local ok, body = pcall(function() return game:HttpGet(opts.Url) end)
+        if ok then return { StatusCode = 200, Body = body } end
+    end
+    return nil
 end
-
--- Send real chat so bots on other devices hear the command
+F.BroadcastCommand = function(cmdLine)
+    cmdLine = tostring(cmdLine or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    if cmdLine == "" then return end
+    pcall(function() F.ChatCommand(cmdLine) end)
+end
+F.GuiCommand = function(cmdLine)
+    pcall(function() F.ChatCommand(cmdLine) end)
+end
+F.StartChatlessPoll = function()
+end
 F.ChatCommand = function(cmdLine)
     local msg = (PREFIX or "NAMELESS.HVH | !") .. tostring(cmdLine or "")
     local sent = false
@@ -4067,11 +3897,8 @@ F.ChatCommand = function(cmdLine)
             if say then say:FireServer(msg, "All") sent = true end
         end)
     end
-    -- also run locally for controller-side silent tools
     pcall(function() F.RunSilent(cmdLine) end)
 end
-
--- Black screen for stands/bots
 BlackScreenGui = nil
 function F.CreateBlackScreen()
     if BlackScreenGui then return end
@@ -4120,7 +3947,6 @@ end
 function F.DestroyBlackScreen()
     if BlackScreenGui then pcall(function() BlackScreenGui:Destroy() end) BlackScreenGui = nil end
 end
-
 function F.Notify(text)
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
@@ -4138,8 +3964,6 @@ function F.Notify(text)
         })
     end)
 end
-
--- Controller-only username ESP for bots in BotList
 BotEspFolder = nil
 local BotEspConns = {}
 function F.ClearBotEsp()
@@ -4192,7 +4016,7 @@ function F.MakeBotEsp(plr)
         if BotEspConns[plr.Name .. "_hb"] then
             pcall(function() BotEspConns[plr.Name .. "_hb"]:Disconnect() end)
         end
-        BotEspConns[plr.Name .. "_hb"] = RunService.Heartbeat:Connect(function()
+        BotEspConns[plr.Name .. "_hb"] = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
             if not BotEspEnabled or not lab.Parent then return end
             local c = plr.Character
             if not c then
@@ -4231,9 +4055,6 @@ function F.OnBotJoined(plr)
         F.MakeBotEsp(plr)
     end
 end
-
-
-
 function F.DestroyBotGui()
     pcall(function()
         if getgenv().library and getgenv().library.unload then
@@ -4251,25 +4072,20 @@ function F.DestroyBotGui()
     BotGui = nil
     MenuOpen = false
 end
-
-
--- ========== FORCEHIT / DESYNC / VISUAL / CONTROLLER KILL (working wiring) ==========
 ForceHitFOV = ForceHitFOV or 20
 ForceHitFOVEnabled = ForceHitFOVEnabled or false
 ForceHitKeybindTarget = ForceHitKeybindTarget or nil
 ForceHitKeyCode = ForceHitKeyCode or Enum.KeyCode.Q
 ForceHitFireRate = ForceHitFireRate or 0.05
 if ForceHitConn then pcall(function() ForceHitConn:Disconnect() end) ForceHitConn = nil end
-
-function F.GetClosestInFOV()
+function F.GetClosestInFOV() LPH_ATTRIBUTES(VM(NONE));
     local cam = workspace.CurrentCamera
     if not cam then return nil end
     local best, bd = nil, ForceHitFOV or 20
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and F.isFullyAlive and F.isFullyAlive(plr) then
             if F.isWhitelisted and F.isWhitelisted(plr) then
-                -- skip
-                do end -- skip
+                do end
             else
                 local head = plr.Character and plr.Character:FindFirstChild("Head")
                 if head then
@@ -4288,8 +4104,7 @@ function F.GetClosestInFOV()
     end
     return best
 end
-
-function F.GetForceHitTarget()
+function F.GetForceHitTarget() LPH_ATTRIBUTES(VM(NONE));
     if ForceHitCmdTarget and ForceHitCmdTarget.Parent and F.isFullyAlive and F.isFullyAlive(ForceHitCmdTarget) then
         return ForceHitCmdTarget
     end
@@ -4301,10 +4116,9 @@ function F.GetForceHitTarget()
     end
     return nil
 end
-
 function F.StartForceHitLoop()
     if ForceHitConn then return end
-    ForceHitConn = RunService.Heartbeat:Connect(function()
+    ForceHitConn = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         local target = F.GetForceHitTarget()
         if not target then return end
         if F.HasWallBetween and LocalPlayer.Character then
@@ -4318,12 +4132,11 @@ function F.StartForceHitLoop()
             pcall(F.forceHitTick, target)
         end
         if F.TryReload then pcall(F.TryReload) end
-        -- stomp target option
         if StompSelectedTarget and target.Character then
             local be = target.Character:FindFirstChild("BodyEffects")
             local ko = be and (be:FindFirstChild("K.O") or be:FindFirstChild("KO"))
             if ko and ko.Value and MainEvent then
-                pcall(function()
+                pcall(function() LPH_ATTRIBUTES(VM(NONE));
                     local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                     local ut = target.Character:FindFirstChild("UpperTorso") or target.Character:FindFirstChild("HumanoidRootPart")
                     if hrp and ut then
@@ -4337,10 +4150,7 @@ function F.StartForceHitLoop()
         end
     end)
 end
-
 F.StartForceHitLoop()
-
--- Keybind: set / clear forcehit target
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
@@ -4349,7 +4159,6 @@ UserInputService.InputBegan:Connect(function(input, gp)
             ForceHitKeybindTarget = nil
         else
             ForceHitKeybindTarget = F.GetClosestInFOV()
-            -- if none in FOV, pick closest world target
             if not ForceHitKeybindTarget then
                 local best, bd = nil, 200
                 local my = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -4369,8 +4178,6 @@ UserInputService.InputBegan:Connect(function(input, gp)
         end
     end
 end)
-
--- Controller local kill (no chat)
 function F.ControllerKill(name, isAuto)
     local target = nil
     if typeof(name) == "Instance" then
@@ -4391,17 +4198,13 @@ function F.ControllerKill(name, isAuto)
         warn("[NAMELESS] ControllerKill: target not found: " .. tostring(name))
         return
     end
-    -- lock forcehit + autostomp onto this target only
     ForceHitCmdTarget = target
     ForceHitKeybindTarget = target
     getgenv().AutostompTarget = target
     ForceHitFOVEnabled = true
-
-    -- use the same kill methods as bots (orbit / tween / spamvoid via StartKillAttackLoop)
     if F.StartKill then
         F.StartKill({ target }, isAuto and true or false)
     else
-        -- fallback
         getgenv()._CTRL_KILL_GEN = (getgenv()._CTRL_KILL_GEN or 0) + 1
         local gen = getgenv()._CTRL_KILL_GEN
         CurrentAction = isAuto and "autokill" or "kill"
@@ -4411,7 +4214,7 @@ function F.ControllerKill(name, isAuto)
         if F.StartCameraLock then F.StartCameraLock(target) end
         if F.EquipBestWeapon then F.EquipBestWeapon() end
         if F.StartKillAttackLoop then F.StartKillAttackLoop() end
-        task.spawn(function()
+        task.spawn(function() LPH_ATTRIBUTES(VM(NONE));
             while getgenv()._CTRL_KILL_GEN == gen and (CurrentAction == "kill" or CurrentAction == "autokill") do
                 if not target.Parent then break end
                 local tChar = target.Character
@@ -4419,24 +4222,22 @@ function F.ControllerKill(name, isAuto)
                 local dead = tChar and tChar:FindFirstChildOfClass("Humanoid") and tChar:FindFirstChildOfClass("Humanoid").Health <= 0
                 if ko or dead then
                     if AutoStompEnabled or true then
-                        -- one stomp cycle on this target only
                         local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
                         local ut = tChar and (tChar:FindFirstChild("UpperTorso") or tChar:FindFirstChild("HumanoidRootPart"))
                         local ret = hrp and hrp.CFrame
                         if hrp and ut then
-                            pcall(function()
+                            pcall(function() LPH_ATTRIBUTES(VM(NONE));
                                 hrp.CFrame = CFrame.new(ut.Position + Vector3.new(0, StompHeight or 3.4, 0))
                                 hrp.AssemblyLinearVelocity = Vector3.zero
                             end)
                             RunService.RenderStepped:Wait()
                             if MainEvent then
-                                for _ = 1, 5 do pcall(function() MainEvent:FireServer("Stomp") end) end
+                                for _ = 1, 5 do pcall(function() LPH_ATTRIBUTES(VM(NONE)); MainEvent:FireServer("Stomp") end) end
                             end
-                            if ret then pcall(function() hrp.CFrame = ret end) end
+                            if ret then pcall(function() LPH_ATTRIBUTES(VM(NONE)); hrp.CFrame = ret end) end
                         end
                     end
                     if not isAuto then break end
-                    -- wait FF then continue
                     task.wait(0.2)
                 else
                     local ff = tChar and tChar:FindFirstChildOfClass("ForceField")
@@ -4455,34 +4256,29 @@ function F.ControllerKill(name, isAuto)
         end)
     end
 end
-
-
--- Desync
 getgenv().NamelessDesync = getgenv().NamelessDesync or {
     VoidSpam = false, VoidSpamKey = Enum.KeyCode.V,
     FakePos = false, FakePosKey = Enum.KeyCode.F,
     NetDesync = false, NetDesyncKey = Enum.KeyCode.N,
     VoidIn = 0.15, VoidOut = 0.10, VoidDist = 200,
 }
-
 function F.SetFakePos(on)
     getgenv().FakePosToggleEnabled = on and true or false
     if getgenv()._FakePosConn then pcall(function() getgenv()._FakePosConn:Disconnect() end) getgenv()._FakePosConn = nil end
     if not on then return end
     local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
     if hrp then getgenv().FakePosServerPos = hrp.Position end
-    getgenv()._FakePosConn = RunService.Heartbeat:Connect(function()
+    getgenv()._FakePosConn = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         if not getgenv().FakePosToggleEnabled then return end
         local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not r then return end
         if not getgenv().FakePosServerPos then getgenv().FakePosServerPos = r.Position return end
         local real = r.CFrame
-        pcall(function() r.CFrame = CFrame.new(getgenv().FakePosServerPos) end)
+        pcall(function() LPH_ATTRIBUTES(VM(NONE)); r.CFrame = CFrame.new(getgenv().FakePosServerPos) end)
         RunService.RenderStepped:Wait()
-        pcall(function() r.CFrame = real end)
+        pcall(function() LPH_ATTRIBUTES(VM(NONE)); r.CFrame = real end)
     end)
 end
-
 function F.SetNetDesync(on)
     getgenv().PhysicsRepDesyncEnabled = on and true or false
     pcall(function()
@@ -4498,7 +4294,7 @@ function F.SetNetDesync(on)
     end)
     if getgenv()._NetDesyncConn then pcall(function() getgenv()._NetDesyncConn:Disconnect() end) getgenv()._NetDesyncConn = nil end
     if not on then return end
-    getgenv()._NetDesyncConn = RunService.Heartbeat:Connect(function()
+    getgenv()._NetDesyncConn = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         if not getgenv().PhysicsRepDesyncEnabled then return end
         local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if r and sethiddenproperty then
@@ -4506,11 +4302,10 @@ function F.SetNetDesync(on)
         end
     end)
 end
-
 function F.StartVoidSpam()
     if getgenv()._VoidSpamRunning then return end
     getgenv()._VoidSpamRunning = true
-    task.spawn(function()
+    task.spawn(function() LPH_ATTRIBUTES(VM(NONE));
         local DS = getgenv().NamelessDesync or {}
         while getgenv()._VoidSpamRunning do
             local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -4521,14 +4316,14 @@ function F.StartVoidSpam()
                 local vin = DS.VoidIn or 0.15
                 while tick() - t0 < vin and getgenv()._VoidSpamRunning do
                     local a = math.min(1, (tick() - t0) / math.max(0.01, vin))
-                    pcall(function() r.CFrame = origin:Lerp(CFrame.new(goal), a) end)
+                    pcall(function() LPH_ATTRIBUTES(VM(NONE)); r.CFrame = origin:Lerp(CFrame.new(goal), a) end)
                     RunService.Heartbeat:Wait()
                 end
                 t0 = tick()
                 local vout = DS.VoidOut or 0.1
                 while tick() - t0 < vout and getgenv()._VoidSpamRunning do
                     local a = math.min(1, (tick() - t0) / math.max(0.01, vout))
-                    pcall(function() r.CFrame = CFrame.new(goal):Lerp(origin, a) end)
+                    pcall(function() LPH_ATTRIBUTES(VM(NONE)); r.CFrame = CFrame.new(goal):Lerp(origin, a) end)
                     RunService.Heartbeat:Wait()
                 end
             else
@@ -4537,12 +4332,9 @@ function F.StartVoidSpam()
         end
     end)
 end
-
 function F.StopVoidSpam()
     getgenv()._VoidSpamRunning = false
 end
-
--- Visuals
 getgenv().NamelessVisual = getgenv().NamelessVisual or {}
 local function ensureVS()
     local VS = getgenv().NamelessVisual
@@ -4561,7 +4353,6 @@ local function ensureVS()
     return VS
 end
 ensureVS()
-
 SKYBOX_PRESETS = {
     realistic = {
         SkyboxBk = "rbxassetid://12216109205", SkyboxDn = "rbxassetid://12216109875",
@@ -4589,7 +4380,6 @@ SKYBOX_PRESETS = {
         SkyboxRt = "rbxassetid://15536110634", SkyboxUp = "rbxassetid://15536117282",
     },
 }
-
 function F.ApplySkybox(presetName)
     local Lighting = game:GetService("Lighting")
     local VS = ensureVS()
@@ -4607,7 +4397,6 @@ function F.ApplySkybox(presetName)
     local name = VS.SkyboxType or "realistic"
     local preset = SKYBOX_PRESETS[name] or SKYBOX_PRESETS.realistic
     pcall(function()
-        -- remove all skies so ours shows
         for _, c in ipairs(Lighting:GetChildren()) do
             if c:IsA("Sky") then c:Destroy() end
         end
@@ -4623,7 +4412,6 @@ function F.ApplySkybox(presetName)
         sky.StarCount = 3000
         sky.SkyboxOrientation = Vector3.new(0, 0, 0)
         sky.Parent = Lighting
-        -- clear atmosphere fog that can hide sky
         local atm = Lighting:FindFirstChildOfClass("Atmosphere")
         if atm then
             atm.Density = 0.1
@@ -4632,7 +4420,6 @@ function F.ApplySkybox(presetName)
         Lighting.FogEnd = 100000
     end)
 end
-
 function F.StopWeather()
     if getgenv()._NamelessRainConn then
         pcall(function() getgenv()._NamelessRainConn:Disconnect() end)
@@ -4647,13 +4434,10 @@ function F.StopWeather()
         getgenv()._NamelessRainFolder = nil
     end
 end
-
 function F.StartWeather()
     F.StopWeather()
     local VS = ensureVS()
     if not VS.WeatherEnabled then return end
-
-    -- Exact NeverLarp rain particle setup
     local part = Instance.new("Part")
     part.Name = "NamelessRain"
     part.Size = Vector3.new(40, 40, 85)
@@ -4665,7 +4449,6 @@ function F.StartWeather()
     part.Parent = workspace
     getgenv()._NamelessRain = part
     getgenv().WV_weatherPart = part
-
     local pe = Instance.new("ParticleEmitter")
     pe.Speed = NumberRange.new(60, 60)
     pe.LockedToPart = true
@@ -4689,8 +4472,7 @@ function F.StartWeather()
     pe.Parent = part
     getgenv()._NamelessRainParticle = pe
     getgenv().WV_weatherParticle = pe
-
-    getgenv()._NamelessRainConn = RunService.Heartbeat:Connect(function()
+    getgenv()._NamelessRainConn = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         local cam = workspace.CurrentCamera
         local p = getgenv()._NamelessRain
         if cam and p and p.Parent then
@@ -4698,7 +4480,6 @@ function F.StartWeather()
         end
     end)
 end
-
 function F.ApplyWeather()
     local VS = ensureVS()
     if VS.WeatherEnabled then
@@ -4707,7 +4488,6 @@ function F.ApplyWeather()
         F.StopWeather()
     end
 end
-
 function F.ApplyVisuals()
     local VS = ensureVS()
     local Lighting = game:GetService("Lighting")
@@ -4760,21 +4540,17 @@ function F.ApplyVisuals()
     pcall(function() if F.ApplySkybox then F.ApplySkybox() end end)
     pcall(function() if F.ApplyWeather then F.ApplyWeather() end end)
 end
-
-
--- CFrame speed + fly (controller)
 GuiState = GuiState or {
     CFrameSpeed = false, SpeedValue = 50, SpeedKey = Enum.KeyCode.LeftControl,
     CFrameFly = false, FlySpeed = 50, FlyKey = Enum.KeyCode.LeftAlt,
 }
 if getgenv()._NamelessCFConn then pcall(function() getgenv()._NamelessCFConn:Disconnect() end) end
 if getgenv()._NamelessFlyConn then pcall(function() getgenv()._NamelessFlyConn:Disconnect() end) end
-
 function F.SetCFrameSpeed(on)
     GuiState.CFrameSpeed = on and true or false
     if getgenv()._NamelessCFConn then pcall(function() getgenv()._NamelessCFConn:Disconnect() end) getgenv()._NamelessCFConn = nil end
     if not on then return end
-    getgenv()._NamelessCFConn = RunService.Heartbeat:Connect(function(dt)
+    getgenv()._NamelessCFConn = RunService.Heartbeat:Connect(function(dt) LPH_ATTRIBUTES(VM(NONE));
         if not GuiState.CFrameSpeed then return end
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -4786,7 +4562,6 @@ function F.SetCFrameSpeed(on)
         hrp.CFrame = hrp.CFrame + move.Unit * spd
     end)
 end
-
 function F.SetCFrameFly(on)
     GuiState.CFrameFly = on and true or false
     if getgenv()._NamelessFlyConn then pcall(function() getgenv()._NamelessFlyConn:Disconnect() end) getgenv()._NamelessFlyConn = nil end
@@ -4795,7 +4570,7 @@ function F.SetCFrameFly(on)
         if hum then hum.PlatformStand = false end
         return
     end
-    getgenv()._NamelessFlyConn = RunService.RenderStepped:Connect(function(dt)
+    getgenv()._NamelessFlyConn = RunService.RenderStepped:Connect(function(dt) LPH_ATTRIBUTES(VM(NONE));
         if not GuiState.CFrameFly then return end
         local char = LocalPlayer.Character
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
@@ -4818,8 +4593,6 @@ function F.SetCFrameFly(on)
         hrp.AssemblyLinearVelocity = Vector3.zero
     end)
 end
-
--- keybind hold/toggle for speed & fly
 UserInputService.InputBegan:Connect(function(input, gp)
     if gp then return end
     if input.UserInputType ~= Enum.UserInputType.Keyboard then return end
@@ -4829,9 +4602,6 @@ UserInputService.InputBegan:Connect(function(input, gp)
         F.SetCFrameFly(not GuiState.CFrameFly)
     end
 end)
-
-
--- Aimbot + Triggerbot (controller Main)
 AimbotEnabled = AimbotEnabled or false
 AimbotKey = AimbotKey or Enum.KeyCode.E
 AimbotSmooth = AimbotSmooth or 0.25
@@ -4839,13 +4609,11 @@ AimbotSticky = AimbotSticky ~= false
 AimbotWallCheck = AimbotWallCheck ~= false
 AimbotKnockCheck = AimbotKnockCheck ~= false
 AimbotTarget = nil
-
 TriggerbotEnabled = TriggerbotEnabled or false
 TriggerbotKey = TriggerbotKey or Enum.KeyCode.T
 TriggerbotRange = TriggerbotRange or 40
 TriggerbotLastShot = 0
-
-function F.AimbotGetTarget()
+function F.AimbotGetTarget() LPH_ATTRIBUTES(VM(NONE));
     if AimbotSticky and AimbotTarget and AimbotTarget.Parent and F.isFullyAlive and F.isFullyAlive(AimbotTarget) then
         return AimbotTarget
     end
@@ -4869,16 +4637,14 @@ function F.AimbotGetTarget()
     if AimbotSticky then AimbotTarget = best end
     return best
 end
-
 function F.SetAimbot(on)
     AimbotEnabled = on and true or false
     if getgenv()._AimbotConn then pcall(function() getgenv()._AimbotConn:Disconnect() end) getgenv()._AimbotConn = nil end
     if not on then AimbotTarget = nil return end
-    getgenv()._AimbotConn = RunService.RenderStepped:Connect(function()
+    getgenv()._AimbotConn = RunService.RenderStepped:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         if not AimbotEnabled then return end
         if not UserInputService:IsKeyDown(AimbotKey) and AimbotKey ~= Enum.KeyCode.Unknown then
-            -- hold mode when key is not Unknown; if always on key Unknown then always
-                do end -- skip
+                do end
         end
         local hold = UserInputService:IsKeyDown(AimbotKey)
         if not hold then return end
@@ -4898,12 +4664,11 @@ function F.SetAimbot(on)
         cam.CFrame = cam.CFrame:Lerp(goal, s)
     end)
 end
-
 function F.SetTriggerbot(on)
     TriggerbotEnabled = on and true or false
     if getgenv()._TrigConn then pcall(function() getgenv()._TrigConn:Disconnect() end) getgenv()._TrigConn = nil end
     if not on then return end
-    getgenv()._TrigConn = RunService.Heartbeat:Connect(function()
+    getgenv()._TrigConn = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         if not TriggerbotEnabled then return end
         if TriggerbotKey ~= Enum.KeyCode.Unknown and not UserInputService:IsKeyDown(TriggerbotKey) then return end
         local mouse = LocalPlayer:GetMouse()
@@ -4919,19 +4684,16 @@ function F.SetTriggerbot(on)
         local now = tick()
         if now - (TriggerbotLastShot or 0) < 0.05 then return end
         TriggerbotLastShot = now
-        -- click / shoot
-        pcall(function()
+        pcall(function() LPH_ATTRIBUTES(VM(NONE));
             mouse1press()
             task.wait()
             mouse1release()
         end)
-        pcall(function()
+        pcall(function() LPH_ATTRIBUTES(VM(NONE));
             if F.FireForceHit then F.FireForceHit(plr) end
         end)
     end)
 end
-
--- Chat spy GUI
 function F.CreateChatSpy()
     if getgenv()._NamelessChatSpyGui then return end
     local pg = LocalPlayer:FindFirstChild("PlayerGui") or LocalPlayer:WaitForChild("PlayerGui", 3)
@@ -4974,7 +4736,6 @@ function F.CreateChatSpy()
     getgenv()._NamelessChatSpyScroll = scroll
     getgenv()._NamelessChatSpyList = list
 end
-
 function F.ChatSpyAdd(line, isNameless)
     if not getgenv()._NamelessChatSpyGui then return end
     local scroll = getgenv()._NamelessChatSpyScroll
@@ -4991,7 +4752,6 @@ function F.ChatSpyAdd(line, isNameless)
     lbl.Parent = scroll
     scroll.CanvasSize = UDim2.new(0, 0, 0, getgenv()._NamelessChatSpyList.AbsoluteContentSize.Y + 4)
     scroll.CanvasPosition = Vector2.new(0, scroll.CanvasSize.Y.Offset)
-    -- limit messages
     local kids = scroll:GetChildren()
     local labels = {}
     for _, c in ipairs(kids) do
@@ -5002,7 +4762,6 @@ function F.ChatSpyAdd(line, isNameless)
         table.remove(labels, 1)
     end
 end
-
 function F.SetChatSpy(on)
     if on then
         F.CreateChatSpy()
@@ -5015,8 +4774,6 @@ function F.SetChatSpy(on)
         end
     end
 end
-
--- hook chat into spy
 pcall(function()
     local function onChat(plr, msg)
         if not getgenv().NamelessChatSpyEnabled then return end
@@ -5031,8 +4788,8 @@ pcall(function()
         plr.Chatted:Connect(function(m) onChat(plr, m) end)
     end)
 end)
-
 function F.CreateNamelessGui()
+    do return end -- Keep the legacy GUI disabled; return must end its block.
     if not (F.IsControllerClient and F.IsControllerClient()) then return end
     F.DestroyBotGui()
     local Players = game:GetService("Players")
@@ -5044,14 +4801,12 @@ function F.CreateNamelessGui()
     for _, name in ipairs(BotListOrdered or {}) do
         if name and name ~= "" and BotEnabled[name] == nil then BotEnabled[name] = true end
     end
-
     local gui = Instance.new("ScreenGui")
     gui.Name = "NamelessHVH_Simple"
     gui.ResetOnSpawn = false
     gui.Parent = pg
     BotGui = gui
     MenuOpen = true
-
     local frame = Instance.new("Frame")
     frame.Name = "Main"
     frame.Size = UDim2.new(0, 280, 0, 260)
@@ -5062,11 +4817,9 @@ function F.CreateNamelessGui()
     frame.Active = true
     frame.Parent = gui
     Instance.new("UICorner", frame).CornerRadius = UDim.new(0, 8)
-
     local minimized = false
     local fullSize = UDim2.new(0, 280, 0, 260)
     local miniSize = UDim2.new(0, 150, 0, 32)
-
     local title = Instance.new("TextLabel")
     title.Size = UDim2.new(1, -70, 0, 26)
     title.Position = UDim2.new(0, 8, 0, 4)
@@ -5077,7 +4830,6 @@ function F.CreateNamelessGui()
     title.TextSize = 14
     title.TextXAlignment = Enum.TextXAlignment.Left
     title.Parent = frame
-
     local minBtn = Instance.new("TextButton")
     minBtn.Size = UDim2.new(0, 26, 0, 26)
     minBtn.Position = UDim2.new(1, -60, 0, 4)
@@ -5088,7 +4840,6 @@ function F.CreateNamelessGui()
     minBtn.TextSize = 16
     minBtn.Parent = frame
     Instance.new("UICorner", minBtn).CornerRadius = UDim.new(0, 4)
-
     local closeBtn = Instance.new("TextButton")
     closeBtn.Size = UDim2.new(0, 26, 0, 26)
     closeBtn.Position = UDim2.new(1, -30, 0, 4)
@@ -5100,14 +4851,12 @@ function F.CreateNamelessGui()
     closeBtn.Parent = frame
     Instance.new("UICorner", closeBtn).CornerRadius = UDim.new(0, 4)
     closeBtn.MouseButton1Click:Connect(function() F.DestroyBotGui() end)
-
     local body = Instance.new("Frame")
     body.Name = "Body"
     body.Size = UDim2.new(1, -12, 1, -36)
     body.Position = UDim2.new(0, 6, 0, 32)
     body.BackgroundTransparency = 1
     body.Parent = frame
-
     minBtn.MouseButton1Click:Connect(function()
         minimized = not minimized
         if minimized then
@@ -5120,8 +4869,6 @@ function F.CreateNamelessGui()
             minBtn.Text = "-"
         end
     end)
-
-    -- drag
     local dragging, dragStart, startPos
     title.InputBegan:Connect(function(input)
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -5139,7 +4886,6 @@ function F.CreateNamelessGui()
             frame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + d.X, startPos.Y.Scale, startPos.Y.Offset + d.Y)
         end
     end)
-
     local targetBox = Instance.new("TextBox")
     targetBox.Size = UDim2.new(1, 0, 0, 22)
     targetBox.BackgroundColor3 = Color3.fromRGB(28, 28, 34)
@@ -5152,7 +4898,6 @@ function F.CreateNamelessGui()
     targetBox.ClearTextOnFocus = false
     targetBox.Parent = body
     Instance.new("UICorner", targetBox).CornerRadius = UDim.new(0, 4)
-
     local cmdScroll = Instance.new("ScrollingFrame")
     cmdScroll.Size = UDim2.new(0.55, -4, 1, -28)
     cmdScroll.Position = UDim2.new(0, 0, 0, 26)
@@ -5165,7 +4910,6 @@ function F.CreateNamelessGui()
     local cmdList = Instance.new("UIListLayout")
     cmdList.Padding = UDim.new(0, 3)
     cmdList.Parent = cmdScroll
-
     local botScroll = Instance.new("ScrollingFrame")
     botScroll.Size = UDim2.new(0.45, -4, 1, -28)
     botScroll.Position = UDim2.new(0.55, 4, 0, 26)
@@ -5177,7 +4921,6 @@ function F.CreateNamelessGui()
     local botList = Instance.new("UIListLayout")
     botList.Padding = UDim.new(0, 3)
     botList.Parent = botScroll
-
     local function selectedBots()
         local names = {}
         for _, name in ipairs(BotListOrdered or {}) do
@@ -5188,9 +4931,7 @@ function F.CreateNamelessGui()
     local function runCmd(line)
         local bots = selectedBots()
         if #bots > 0 then line = line .. " " .. table.concat(bots, " ") end
-        if F.ChatCommand then F.ChatCommand(line)
-        elseif F.GuiCommand then F.GuiCommand(line) end
-        if SyncBotsEnabled and F.RunSilent then pcall(F.RunSilent, line) end
+        if F.ChatCommand then F.ChatCommand(line) end
     end
     local function addSec(n)
         local l = Instance.new("TextLabel")
@@ -5219,7 +4960,6 @@ function F.CreateNamelessGui()
             if line then runCmd(line) end
         end)
     end
-
     addSec("KILL")
     addBtn("summon", function() return "summon" end)
     addBtn("stop", function() return "stop" end)
@@ -5227,7 +4967,8 @@ function F.CreateNamelessGui()
     addBtn("kill", function(t) return t ~= "" and ("kill "..t) end)
     addBtn("bring", function(t) return t ~= "" and ("bring "..t) end)
     addBtn("autokill", function(t) return t ~= "" and ("autokill "..t) end)
-    addBtn("uzikill", function(t) return t ~= "" and ("uzikill "..t) end)
+    addBtn("skill", function(t) return t ~= "" and ("skill "..t) end)
+    addBtn("uzikill", function(t) return t ~= "" and ("skill "..t) end)
     addBtn("fastkill", function(t) return t ~= "" and ("fastkill "..t) end)
     addBtn("orbit", function(t) return t ~= "" and ("aorbit "..t) or "orbitkill" end)
     addBtn("tween", function(t) return t ~= "" and ("atween "..t) or "tweenkill" end)
@@ -5246,13 +4987,15 @@ function F.CreateNamelessGui()
     addBtn("reset", function() return "reset" end)
     addBtn("dance", function() return "dance" end)
     addBtn("spinbot", function() return "spinbot" end)
+    addBtn("autoheal on", function() return "autoheal on" end)
+    addBtn("autoheal off", function() return "autoheal off" end)
+    addBtn("sentry on", function() return "sentry on" end)
+    addBtn("sentry off", function() return "sentry off" end)
     addBtn("autostomp on", function() return "autostomp on" end)
     addBtn("autostomp off", function() return "autostomp off" end)
-
     cmdList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         cmdScroll.CanvasSize = UDim2.new(0, 0, 0, cmdList.AbsoluteContentSize.Y + 8)
     end)
-
     local bh = Instance.new("TextLabel")
     bh.Size = UDim2.new(1, -6, 0, 16)
     bh.BackgroundTransparency = 1
@@ -5262,7 +5005,6 @@ function F.CreateNamelessGui()
     bh.TextSize = 10
     bh.TextXAlignment = Enum.TextXAlignment.Left
     bh.Parent = botScroll
-
     local online = {}
     for _, plr in ipairs(Players:GetPlayers()) do online[plr.Name] = true end
     for _, name in ipairs(BotListOrdered or {}) do
@@ -5288,7 +5030,6 @@ function F.CreateNamelessGui()
     botList:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
         botScroll.CanvasSize = UDim2.new(0, 0, 0, botList.AbsoluteContentSize.Y + 8)
     end)
-
     pcall(function()
         if getgenv()._NamelessMenuConn then getgenv()._NamelessMenuConn:Disconnect() end
         getgenv()._NamelessMenuConn = UIS.InputBegan:Connect(function(input, gp)
@@ -5299,8 +5040,8 @@ function F.CreateNamelessGui()
         end)
     end)
 end
-
 function F.ToggleLoadGui()
+    do return end -- Keep the legacy GUI disabled; return must end its block.
     if MenuOpen and BotGui then
         F.DestroyBotGui()
         MenuOpen = false
@@ -5312,7 +5053,6 @@ function F.ToggleLoadGui()
         MenuOpen = false
     end
 end
-
 function F.ApplyChickenClient(char)
     if not char then return end
     local hum = char:FindFirstChildOfClass("Humanoid")
@@ -5390,19 +5130,18 @@ function F.ApplyChickenClient(char)
         end
     end)
 end
-
 LocalPlayer.CharacterAdded:Connect(function(char)
     F.refreshChar(char)
     F.StopGlue()
     F.StopCameraLock()
     F.StopSlotSpam()
     F.stopFlyAnims()
-    F.HookKO(char) -- antistomp for stands + controller
+    F.HookKO(char)
     if F.IsControllerClient and F.IsControllerClient() then
         pcall(function()
             game:GetService("StarterGui"):SetCore("ResetButtonCallback", true)
         end)
-        return -- no chicken / stand emotes on controller
+        return
     end
     task.defer(function() F.ApplyChickenClient(char) end)
     DancePersistent = true
@@ -5421,11 +5160,9 @@ LocalPlayer.CharacterAdded:Connect(function(char)
         end)
     end
 end)
--- Apply once on current character
 if LocalPlayer.Character and not (F.IsControllerClient and F.IsControllerClient()) then
     task.defer(function() F.ApplyChickenClient(LocalPlayer.Character) end)
 end
--- Client view of marked bots
 Players.PlayerAdded:Connect(function(p)
     p.CharacterAdded:Connect(function(char)
         if BotList[p.Name:lower()] then
@@ -5442,7 +5179,6 @@ for _, p in ipairs(Players:GetPlayers()) do
         end)
     end
 end
-
 F.StartFollow = function()
     if FrozenByPrivilege then return end
     if not F.CanSummon() then return end
@@ -5452,14 +5188,38 @@ F.StartFollow = function()
     F.StopAll()
     PendingAutokill, SavedKillTargets = keepA, keepT
     CurrentAction = "follow"
+    pcall(function()
+        local tr = ctrl.Character and (ctrl.Character:FindFirstChild("HumanoidRootPart") or ctrl.Character:FindFirstChild("UpperTorso"))
+        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if tr and r then
+            local slot = tonumber(MySlot) or 1
+            local col = (slot - 1) % 3
+            local row = math.floor((slot - 1) / 3)
+            local x = (col - 1) * (FollowSpacing or 3)
+            local z = (FollowBack or 4) + row * (FollowBack or 4)
+            local y = (HeightPerRow or 3) * row
+            r.CFrame = tr.CFrame * CFrame.new(x, y, z)
+            r.AssemblyLinearVelocity = Vector3.zero
+            r.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
     F.StartGlue("follow", ctrl)
-    F.loadFlyAnims()
-    F.updateFlyAnim()
+    task.defer(function()
+        pcall(function()
+            if F.stopFlyAnims then F.stopFlyAnims() end
+            local auraId = (DanceIds and (DanceIds["aura"] or DanceIds["headless_aura"])) or "rbxassetid://98893149829644"
+            if type(auraId) == "string" and not auraId:find("rbxassetid") then
+                auraId = "rbxassetid://" .. auraId
+            end
+            DancePersistent = true
+            LastDanceId = auraId
+            CurrentDance = "aura"
+            if F.StartDance then F.StartDance("aura", auraId) end
+            if F.EnsureDancePlaying then F.EnsureDancePlaying() end
+        end)
+    end)
 end
-
-
 function F.FireAtControllerNoHit(ctrl)
-    -- Shoot controller with wallbang-style origin so the server should not register a real hit
     if not ctrl or not ctrl.Character then return end
     if not MainEvent then
         MainEvent = game:GetService("ReplicatedStorage"):FindFirstChild("MainEvent")
@@ -5479,7 +5239,6 @@ function F.FireAtControllerNoHit(ctrl)
     if not tool or not tool:FindFirstChild("Handle") then return end
     local handlePos = tool.Handle.Position
     local hitPos = hitPart.Position
-    -- wallbang origin at target (should error / not register on controller)
     local dir = hitPos - handlePos
     if dir.Magnitude < 0.05 then dir = Vector3.new(0, 0, -1) else dir = dir.Unit end
     local originPos = hitPos - dir * 1.5
@@ -5499,9 +5258,7 @@ function F.FireAtControllerNoHit(ctrl)
     }
     pcall(function() MainEvent:FireServer("Shoot", packet) end)
 end
-
-function F.FireOrbit3FakeShot(ctrl)
-    -- visual shots at controller; origin at target so server should not register
+function F.FireOrbit3FakeShot(ctrl) LPH_ATTRIBUTES(VM(NONE));
     if not ctrl or not ctrl.Character then return end
     if not MainEvent then
         MainEvent = game:GetService("ReplicatedStorage"):FindFirstChild("MainEvent")
@@ -5515,7 +5272,7 @@ function F.FireOrbit3FakeShot(ctrl)
     local tool = myChar and myChar:FindFirstChildOfClass("Tool")
     if not tool or not tool:FindFirstChild("Handle") then return end
     local hitPos = hitPart.Position
-    local originPos = hitPos + Vector3.new(0, 0.05, 0) -- invalid / at-target origin
+    local originPos = hitPos + Vector3.new(0, 0.05, 0)
     getgenv().FH_Index = ((getgenv().FH_Index or 0) + 1) % 100
     local packet = {
         INDEX = getgenv().FH_Index,
@@ -5528,15 +5285,13 @@ function F.FireOrbit3FakeShot(ctrl)
             PART = hitPart,
         }},
     }
-    pcall(function() MainEvent:FireServer("Shoot", packet) end)
-    pcall(function() tool:Activate() end)
+    pcall(function() LPH_ATTRIBUTES(VM(NONE)); MainEvent:FireServer("Shoot", packet) end)
+    pcall(function() LPH_ATTRIBUTES(VM(NONE)); tool:Activate() end)
 end
-
 function F.StartOrbit3CombatLoop()
     if getgenv()._Orbit3Conn then pcall(function() getgenv()._Orbit3Conn:Disconnect() end) end
-    -- fire-rate -10 => no positive throttle; spam fake shots
     local fakeRate = -10
-    getgenv()._Orbit3Conn = RunService.Heartbeat:Connect(function()
+    getgenv()._Orbit3Conn = RunService.Heartbeat:Connect(function() LPH_ATTRIBUTES(VM(NONE));
         if not Orbit3Combat or CurrentAction ~= "formation" or FormationType ~= "corbit" then
             return
         end
@@ -5546,7 +5301,6 @@ function F.StartOrbit3CombatLoop()
         if F.EquipBestWeapon then pcall(F.EquipBestWeapon) end
         local ctrl = F.GetController and F.GetController()
         if ctrl then
-            -- rate -10: always allow (skip positive rate gate)
             if fakeRate <= 0 or (tick() - (getgenv()._Orbit3LastShot or 0)) >= fakeRate then
                 getgenv()._Orbit3LastShot = tick()
                 pcall(F.FireOrbit3FakeShot, ctrl)
@@ -5555,7 +5309,6 @@ function F.StartOrbit3CombatLoop()
         if F.TryReload then pcall(F.TryReload) end
     end)
 end
-
 function F.StopOrbit3CombatLoop()
     Orbit3Combat = false
     RapidFireEnabled = false
@@ -5564,7 +5317,6 @@ function F.StopOrbit3CombatLoop()
         getgenv()._Orbit3Conn = nil
     end
 end
-
 function F.StartControllerOrbit(mode)
     if FrozenByPrivilege then return end
     if not F.CanSummon() then return end
@@ -5573,7 +5325,6 @@ function F.StartControllerOrbit(mode)
     CurrentAction = "formation"
     FormationType = "corbit"
     FormationTarget = F.GetController()
-    -- orbit 3: normal orbit + uzi + rapid + wallbang + magic bullet
     if CtrlOrbitMode == 3 then
         Orbit3Combat = true
         RapidFireEnabled = false
@@ -5589,7 +5340,6 @@ function F.StartControllerOrbit(mode)
     F.StartGlue("formation", FormationTarget)
     F.loadFlyAnims()
 end
-
 function F.StartFormation(ft, name)
     if FrozenByPrivilege then return end
     if not name and not F.CanSummon() then return end
@@ -5602,11 +5352,9 @@ function F.StartFormation(ft, name)
     F.StartGlue("formation", t)
     F.loadFlyAnims()
 end
-
 F.StartKill = function(targets, isAuto)
     if FrozenByPrivilege then return end
     if typeof(targets) ~= "table" then targets = { targets } end
-    -- Filter whitelist / bots / controller
     local filtered = {}
     for _, t in ipairs(targets) do
         if t and not F.isWhitelisted(t) then filtered[#filtered + 1] = t end
@@ -5620,7 +5368,6 @@ F.StartKill = function(targets, isAuto)
     FastKillPhase, FastKillFrontCF, FastKillTweening = "behind", nil, false
     FastKillTweenFrom = nil
     if isAuto then PendingAutokill, SavedKillTargets = true, targets else PendingAutokill, SavedKillTargets = nil, nil end
-    -- Always run glue loop with PhysicsRep so controller sees the bot
     F.StartGlue(UseGun and "gun" or "knife", TargetPlayer)
     do
         local tr = TargetPlayer and TargetPlayer.Character and (
@@ -5640,43 +5387,103 @@ F.StartKill = function(targets, isAuto)
     end
     F.StartCameraLock(TargetPlayer)
     F.StopSlotSpam()
-    -- equip first gun once at kill start
     if UseGun then F.EquipBestWeapon() end
     F.StartKillAttackLoop()
     task.spawn(function()
         while CurrentAction == "kill" or CurrentAction == "autokill" do
-            local t = TargetPlayer
-            if not F.inGame(t) then
-                PendingAutokill, SavedKillTargets = nil, nil
-                F.StopKillAttackLoop()
-                if not F.IsSelfControlled() then F.StartFollow() else F.StopAll() end
-                break
+            local function targetDown(plr)
+                if not plr then return true end
+                if not F.inGame(plr) then return true end
+                local c = plr.Character
+                if not c then return true end
+                local h = c:FindFirstChildOfClass("Humanoid")
+                if h and h.Health <= 0 then return true end
+                if F.isKnocked and F.isKnocked(c) then return true end
+                local be = c:FindFirstChild("BodyEffects")
+                local koV = be and (be:FindFirstChild("K.O") or be:FindFirstChild("KO"))
+                if koV and koV.Value then return true end
+                return false
             end
+            local function nextLiveTarget()
+                local list = TargetList or {}
+                for i = 1, #list do
+                    if list[i] and not targetDown(list[i]) then return list[i] end
+                end
+                return nil
+            end
+            local function allTargetsDown()
+                local list = TargetList or { TargetPlayer }
+                if #list == 0 then return true end
+                for i = 1, #list do
+                    if list[i] and not targetDown(list[i]) then return false end
+                end
+                return true
+            end
+            local t = TargetPlayer
+            if (not t or not F.inGame(t)) and not allTargetsDown() then
+                local nxt = nextLiveTarget()
+                if nxt then
+                    TargetPlayer = nxt
+                    t = nxt
+                    KillPhase = "attack"
+                    F.StartGlue(UseGun and "gun" or "knife", t)
+                    F.StartCameraLock(t)
+                    F.StartKillAttackLoop()
+                end
+            elseif allTargetsDown() and KillPhase == "attack" then
+                F.StopKillAttackLoop()
+                F.StopCameraLock()
+                F.ForceGlueOff()
+                KillPhase = "stomp_all"
+                getgenv()._StompAllIndex = 1
+            end
+            t = TargetPlayer
             local myHum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
             if not myHum or myHum.Health <= 0 then
                 F.StopKillAttackLoop()
                 break
             end
             F.EnsureDancePlaying()
-            local tChar = t.Character
+            local tChar = t and t.Character
             local hum = tChar and tChar:FindFirstChildOfClass("Humanoid")
             local ko = tChar and F.isKnocked(tChar)
             local dead = hum and hum.Health <= 0
             if KillPhase == "attack" then
-                -- combat is driven by F.StartKillAttackLoop(Heartbeat)
-                if not tChar or ko or dead then
-                    pcall(function()
-                        local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-                        if h then h:UnequipTools() end
-                    end)
-                    F.StopKillAttackLoop()
-                    F.StopCameraLock()
-                    F.StopSlotSpam()
-                    F.ForceGlueOff()
-                    KillPhase = "stomp"
-                    StompDoneForCycle = false
-                    WaitFFUntil = nil
-                    F.SayKillChat()
+                if t and (not tChar or ko or dead or targetDown(t)) then
+                    local nxt = nextLiveTarget()
+                    if nxt then
+                        TargetPlayer = nxt
+                        F.StartGlue(UseGun and "gun" or "knife", nxt)
+                        F.StartCameraLock(nxt)
+                        F.StartKillAttackLoop()
+                    elseif allTargetsDown() then
+                        pcall(function()
+                            local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+                            if h then h:UnequipTools() end
+                        end)
+                        F.StopKillAttackLoop()
+                        F.StopCameraLock()
+                        F.StopSlotSpam()
+                        F.ForceGlueOff()
+                        KillPhase = "stomp_all"
+                        getgenv()._StompAllIndex = 1
+                        WaitFFUntil = nil
+                        F.SayKillChat()
+                    end
+                end
+            elseif KillPhase == "stomp_all" then
+                local list = TargetList or { TargetPlayer }
+                local idx = getgenv()._StompAllIndex or 1
+                if idx <= #list then
+                    local tp = list[idx]
+                    if tp then pcall(function() F.DoSingleStomp(tp) end) end
+                    getgenv()._StompAllIndex = idx + 1
+                    task.wait(0.12)
+                else
+                    if F.IsSelfControlled() then
+                        if isAuto then KillPhase = "waitff" getgenv()._StompAllIndex = 1
+                        else PendingAutokill, SavedKillTargets = nil, nil F.StopAll() break end
+                    else KillPhase = "summon" end
                 end
             elseif KillPhase == "stomp" then
                 if not StompDoneForCycle then F.DoSingleStomp(t) StompDoneForCycle = true end
@@ -5689,7 +5496,6 @@ F.StartKill = function(targets, isAuto)
                 F.StopCameraLock()
                 F.StopSlotSpam()
                 F.ForceGlueOff()
-                -- teleport to controller (no glue summon)
                 pcall(function()
                     local ctrl = F.GetController and F.GetController()
                     local cr = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
@@ -5714,7 +5520,6 @@ F.StartKill = function(targets, isAuto)
                     if not F.IsSelfControlled() then F.StartFollow() else F.StopAll() end
                     break
                 end
-                -- sit in void while waiting forcefield / respawn
                 do
                     local r = getgenv().get_root_part()
                     if r then
@@ -5725,7 +5530,6 @@ F.StartKill = function(targets, isAuto)
                 local ff = char and char:FindFirstChildOfClass("ForceField")
                 local alive = F.isFullyAlive(t)
                 if alive and not ff then
-                    -- resume as soon as forcefield is gone (no timed wait)
                     WaitFFUntil = nil
                     StompDoneForCycle = false
                     KillPhase = "attack"
@@ -5738,7 +5542,6 @@ F.StartKill = function(targets, isAuto)
                     CurrentAction = "autokill"
                     F.StartKillAttackLoop()
                 else
-                    -- still dead or forcefield present: do not shoot
                     WaitFFUntil = nil
                     task.wait(0.05)
                 end
@@ -5750,7 +5553,6 @@ F.StartKill = function(targets, isAuto)
         F.StopSlotSpam()
     end)
 end
-
 function F.EquipDoubleBarrel()
     local char = LocalPlayer.Character
     if not char then return nil end
@@ -5776,8 +5578,6 @@ function F.EquipDoubleBarrel()
     end
     return char:FindFirstChildOfClass("Tool") or tool
 end
-
--- Max-damage DB forcehit (manipulated hits packet like mini stand)
 function F.FireDBMaxDamage(target)
     if not MainEvent then
         MainEvent = game:GetService("ReplicatedStorage"):FindFirstChild("MainEvent")
@@ -5807,7 +5607,6 @@ function F.FireDBMaxDamage(target)
     local origin = root.Position
     local handle = tool:FindFirstChild("Handle")
     if handle then origin = handle.Position end
-    -- 5-hit max damage packet (mini stand style)
     local hits = {}
     local tparts = {}
     for i = 1, 5 do
@@ -5818,7 +5617,6 @@ function F.FireDBMaxDamage(target)
         }
         tparts[i] = { thePart = targetPart, theOffset = Vector3.zero }
     end
-    -- Also try NeverLarp-style packet if available
     pcall(function()
         MainEvent:FireServer("Shoot", {
             hits,
@@ -5828,14 +5626,12 @@ function F.FireDBMaxDamage(target)
             workspace:GetServerTimeNow(),
         })
     end)
-    -- Dual fire with INDEX/AIM style if FireForceHit uses different format
     pcall(function()
         if F.FireForceHit then F.FireForceHit(target) end
     end)
     pcall(function() tool:Activate() end)
     return true
 end
-
 function F.PressGrab()
     pcall(function()
         local VIM = game:GetService("VirtualInputManager")
@@ -5848,7 +5644,6 @@ function F.PressGrab()
         pcall(function() MainEvent:FireServer("Grabbing") end)
     end
 end
-
 function F.PressDrop()
     pcall(function()
         local VIM = game:GetService("VirtualInputManager")
@@ -5864,7 +5659,6 @@ function F.PressDrop()
         if h then h:UnequipTools() end
     end)
 end
-
 function F.IsBodyGrabbed()
     local char = LocalPlayer.Character
     if not char then return false end
@@ -5875,7 +5669,6 @@ function F.IsBodyGrabbed()
             return true
         end
     end
-    -- also check if we have a weld to another character
     for _, d in ipairs(char:GetDescendants()) do
         if d:IsA("Weld") or d:IsA("WeldConstraint") then
             local p1 = d.Part1 or d.Part0
@@ -5886,33 +5679,29 @@ function F.IsBodyGrabbed()
     end
     return false
 end
-
--- !bring: DB + CFrame follow + max-damage forcehit -> grab -> TP to controller -> drop
 function F.StartBring(targets)
     if FrozenByPrivilege then return end
     local target = typeof(targets) == "table" and targets[1] or targets
     if not target then return end
-    -- only slot 1 carries
     if MySlot and MySlot > 1 then
         CurrentAction = "idle"
         return
     end
     PendingAutokill, SavedKillTargets = nil, nil
     F.StopAll()
+    StompOnKill = false
     CurrentAction, TargetPlayer, BringStage = "bring", target, "kill"
     local bringGen = (getgenv()._BRING_GEN or 0) + 1
     getgenv()._BRING_GEN = bringGen
-
     local BODY_PARTS = { "HumanoidRootPart", "UpperTorso", "LowerTorso", "Head" }
     local savedCF = nil
     local activeGun, activeHeight, activeDist, knifeMode = "uzi", 200, 0.01, false
     local lastReload, lastTp, lastG = 0, 0, 0
-
-    local function getRoot()
+    local function getRoot() LPH_ATTRIBUTES(VM(NONE));
         local c = LocalPlayer.Character
         return c and (c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso"))
     end
-    local function isKnocked(char)
+    local function isKnocked(char) LPH_ATTRIBUTES(VM(NONE));
         if not char then return true end
         if F.isKnocked and F.isKnocked(char) then return true end
         local hum = char:FindFirstChildOfClass("Humanoid")
@@ -5924,13 +5713,13 @@ function F.StartBring(targets)
         end
         return false
     end
-    local function bodyStill(char)
+    local function bodyStill(char) LPH_ATTRIBUTES(VM(NONE));
         local hrp = char and char:FindFirstChild("HumanoidRootPart")
         if not hrp then return false end
         local v = hrp.AssemblyLinearVelocity or hrp.Velocity or Vector3.zero
         return v.Magnitude <= 0.35
     end
-    local function isGrabbed()
+    local function isGrabbed() LPH_ATTRIBUTES(VM(NONE));
         local char = LocalPlayer.Character
         if not char then return false end
         local be = char:FindFirstChild("BodyEffects")
@@ -5940,15 +5729,15 @@ function F.StartBring(targets)
         end
         return false
     end
-    local function setGlue(part)
+    local function setGlue(part) LPH_ATTRIBUTES(VM(NONE));
         local root = getRoot()
         if not root or not part then return end
         if F.SetPhysicsRepRootPart then
             pcall(F.SetPhysicsRepRootPart, root, part)
         elseif sethiddenproperty then
-            pcall(function() sethiddenproperty(root, "PhysicsRepRootPart", part) end)
+            pcall(function() LPH_ATTRIBUTES(VM(NONE)); sethiddenproperty(root, "PhysicsRepRootPart", part) end)
         end
-        pcall(function()
+        pcall(function() LPH_ATTRIBUTES(VM(NONE));
             root.CanCollide = false
             root.AssemblyLinearVelocity = Vector3.zero
         end)
@@ -6003,7 +5792,7 @@ function F.StartBring(targets)
         end
         return nil
     end
-    local function tryReload()
+    local function tryReload() LPH_ATTRIBUTES(VM(NONE));
         local now = tick()
         if now - lastReload < 0.35 then return end
         local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
@@ -6011,12 +5800,12 @@ function F.StartBring(targets)
         local ammo = tool:FindFirstChild("Ammo", true)
         if ammo and ammo:IsA("ValueBase") and ammo.Value == 0 then
             lastReload = now
-            pcall(function()
+            pcall(function() LPH_ATTRIBUTES(VM(NONE));
                 game:GetService("VirtualInputManager"):SendKeyEvent(true, Enum.KeyCode.R, false, game)
                 task.wait(0.03)
                 game:GetService("VirtualInputManager"):SendKeyEvent(false, Enum.KeyCode.R, false, game)
             end)
-            if MainEvent then pcall(function() MainEvent:FireServer("Reload") end) end
+            if MainEvent then pcall(function() LPH_ATTRIBUTES(VM(NONE)); MainEvent:FireServer("Reload") end) end
         end
     end
     local function pressG()
@@ -6042,12 +5831,12 @@ function F.StartBring(targets)
         end)
         if MainEvent then pcall(function() MainEvent:FireServer("Grabbing", false) end) end
     end
-    local function killPos()
+    local function killPos() LPH_ATTRIBUTES(VM(NONE));
         local root = getRoot()
         local thrp = TargetPlayer.Character and TargetPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not root or not thrp then return end
         if knifeMode then
-            pcall(function()
+            pcall(function() LPH_ATTRIBUTES(VM(NONE));
                 root.CFrame = CFrame.new(thrp.Position + Vector3.new(0, -math.abs(activeDist), 0), thrp.Position)
                 root.AssemblyLinearVelocity = Vector3.zero
             end)
@@ -6056,7 +5845,7 @@ function F.StartBring(targets)
             local flat = Vector3.new(look.X, 0, look.Z)
             if flat.Magnitude < 0.05 then flat = Vector3.new(0, 0, 1) else flat = flat.Unit end
             local goal = thrp.Position - flat * activeDist + Vector3.new(0, activeHeight, 0)
-            pcall(function()
+            pcall(function() LPH_ATTRIBUTES(VM(NONE));
                 root.CFrame = CFrame.new(goal, thrp.Position)
                 root.AssemblyLinearVelocity = Vector3.zero
             end)
@@ -6077,19 +5866,17 @@ function F.StartBring(targets)
         end)
         setGlue(part)
     end
-
-    task.spawn(function()
+    task.spawn(function() LPH_ATTRIBUTES(VM(NONE));
         local r0 = getRoot()
         if r0 then savedCF = r0.CFrame end
         resolveWeapon()
         while CurrentAction == "bring" and getgenv()._BRING_GEN == bringGen do
             if not TargetPlayer or not TargetPlayer.Parent then break end
             local tChar = TargetPlayer.Character
-
             if BringStage == "kill" then
                 if tChar and isKnocked(tChar) then
                     BringStage = "waitstill"
-                    pcall(function()
+                    pcall(function() LPH_ATTRIBUTES(VM(NONE));
                         local h = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
                         if h then h:UnequipTools() end
                     end)
@@ -6100,7 +5887,7 @@ function F.StartBring(targets)
                     end
                     if knifeMode then
                         local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-                        if tool then pcall(function() tool:Activate() end) end
+                        if tool then pcall(function() LPH_ATTRIBUTES(VM(NONE)); tool:Activate() end) end
                     else
                         tryReload()
                         if F.FireForceHit then
@@ -6108,7 +5895,6 @@ function F.StartBring(targets)
                         end
                     end
                 end
-
             elseif BringStage == "waitstill" then
                 local stillStart, deadline = nil, tick() + 6
                 while CurrentAction == "bring" and getgenv()._BRING_GEN == bringGen and tick() < deadline do
@@ -6123,7 +5909,6 @@ function F.StartBring(targets)
                     RunService.Heartbeat:Wait()
                 end
                 BringStage = "grab"
-
             elseif BringStage == "grab" then
                 local grabbedSince, deadline = nil, tick() + 8
                 while CurrentAction == "bring" and getgenv()._BRING_GEN == bringGen and tick() < deadline do
@@ -6143,7 +5928,6 @@ function F.StartBring(targets)
                     break
                 end
                 BringStage = "carry"
-
             elseif BringStage == "carry" then
                 local t0 = tick()
                 while CurrentAction == "bring" and getgenv()._BRING_GEN == bringGen and tick() - t0 < 2 do
@@ -6155,8 +5939,7 @@ function F.StartBring(targets)
                     RunService.Heartbeat:Wait()
                 end
                 if BringStage == "grab" then
-                    -- re-enter grab
-                do end -- skip
+                do end
                 elseif isGrabbed() then
                     BringStage = "return"
                 else
@@ -6164,12 +5947,10 @@ function F.StartBring(targets)
                     TargetPlayer = nil
                     break
                 end
-
             elseif BringStage == "return" then
-                -- hard TP home only after secure carry
                 local root = getRoot()
                 if root and savedCF then
-                    pcall(function()
+                    pcall(function() LPH_ATTRIBUTES(VM(NONE));
                         root.AssemblyLinearVelocity = Vector3.zero
                         root.CFrame = savedCF
                     end)
@@ -6179,7 +5960,7 @@ function F.StartBring(targets)
                 task.wait(0.15)
                 pressDrop()
                 root = getRoot()
-                if root and savedCF then pcall(function() root.CFrame = savedCF end) end
+                if root and savedCF then pcall(function() LPH_ATTRIBUTES(VM(NONE)); root.CFrame = savedCF end) end
                 CurrentAction = "idle"
                 TargetPlayer = nil
                 BringStage = nil
@@ -6192,14 +5973,10 @@ function F.StartBring(targets)
         end
     end)
 end
-
-
 function F.ParsePrefix(msg)
     local lower = (msg or ""):lower():gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
-    -- NAMELESS.HVH | !command  (spaces optional around |)
     local a, b = lower:find("nameless%.hvh%s*|%s*!")
     if a == 1 then
-        -- map back onto original length roughly via lower index
         return lower:sub(b + 1):match("^%s*(.-)%s*$")
     end
     if lower:sub(1, 14) == "nameless.hvh|!" then
@@ -6208,7 +5985,6 @@ function F.ParsePrefix(msg)
     if lower:sub(1, 15) == "nameless.hvh |!" then
         return lower:sub(16):match("^%s*(.-)%s*$")
     end
-    -- legacy
     if lower:sub(1, 11) == "nameless:!" or lower:sub(1, 10) == "nameless:!" then
         return lower:sub(11):match("^%s*(.-)%s*$") or lower:sub(12):match("^%s*(.-)%s*$")
     end
@@ -6222,7 +5998,6 @@ function F.ParsePrefix(msg)
     end
     return nil
 end
-
 F.OnChatted = function(player, message)
     message = message:gsub("%s+", " "):match("^%s*(.-)%s*$") or message
     local raw = message:lower()
@@ -6236,15 +6011,11 @@ F.OnChatted = function(player, message)
     for w in body:gmatch("%S+") do args[#args+1] = w:lower() end
     local cmd = args[1]
     if not cmd then return end
-    local fromGui = (player == LocalPlayer and getgenv()._StandGuiSilent == true)
-    -- Controller never runs bot actions unless SyncBotsEnabled
+    local fromGui = (getgenv()._StandGuiSilent == true) or (getgenv()._NamelessBridgeCmd == true)
     if F.IsControllerClient() then
         if cmd == "load" and player == LocalPlayer then F.ToggleLoadGui() return end
-        if not SyncBotsEnabled and not fromGui then return end
-        if not SyncBotsEnabled and fromGui then return end
-        -- if sync on, fall through and execute like a stand
+        if not SyncBotsEnabled then return end
     end
-    -- Stand clients only obey controller / owners
     if F.IsStandClient() and not fromGui and not F.IsOwner(player) and not F.IsPrivileged(player) then
         return
     end
@@ -6273,7 +6044,6 @@ pcall(function()
         end)
         return
     end
-    -- Original controller only: whitelist / unwhitelist (killaura + targeting)
     if cmd == "whitelist" or cmd == "wl" then
         if not F.IsOriginalController(player) and not fromGui then return end
         if not args[2] or args[2] == "list" then
@@ -6296,12 +6066,10 @@ return
         local ok, reason = F.removeWhitelistName(name)
         return
     end
-    -- Transfer ownership (current owner) / reclaim (original only)
     if cmd == "transfer" and args[2] then
         local can = F.IsOwner(player) or F.IsSuperOwner(player) or F.IsOriginalController(player) or fromGui
         if not can then return end
         if args[2] == "me" or args[2] == "self" then
-            -- only original can reclaim this way unless already owner
             if F.IsOriginalController(player) or F.IsOwner(player) then
                 ControllerName = player.Name
                 ExtraOwners = {}
@@ -6320,7 +6088,6 @@ return
         end
         local t = F.FindPlayerAny(args[2])
         local newName = t and t.Name or args[2]
-        -- Remember original if not set
         if not OriginalControllerName or OriginalControllerName == "" then
             OriginalControllerName = ControllerName or player.Name
         end
@@ -6328,7 +6095,7 @@ return
         FrozenByPrivilege = false
 return
     end
-    if cmd == "reclaim" or cmd == "revert" then
+    if cmd == "return" or cmd == "reclaim" or cmd == "revert" then
         if not F.IsOriginalController(player) then return end
         ControllerName = OriginalControllerName or player.Name
         ExtraOwners = {}
@@ -6348,7 +6115,6 @@ return
         local targets, should = F.ParseTargetsAndBots(args, i)
         if should then fn(targets) end
     end
-    
         if cmd == "unforcehit" or cmd == "ufh" then
         ForceHitCmdTarget = nil
         ForceHit1Active = false
@@ -6356,7 +6122,6 @@ return
         return
     end
     if cmd == "forcehit" or cmd == "fh" then
-        -- ONCE: follow 7 studs behind, DB, shoot, stomp, return to owner
         local name = args[2]
         if not name then
             ForceHitCmdTarget = nil
@@ -6413,7 +6178,6 @@ return
         return
     end
     if cmd == "forcehit2" or cmd == "fh2" then
-        -- CONTINUOUS: follow 7 studs, DB, shoot, stomp, wait respawn, repeat
         local name = args[2]
         if not name then return end
         local p = F.FindPlayer and F.FindPlayer(name)
@@ -6432,7 +6196,6 @@ return
             while ForceHit2Active and gen == getgenv()._FH2_GEN do
                 local t = ForceHitCmdTarget
                 if not t or not t.Parent then
-                    -- try re-find by name
                     t = F.FindPlayer and F.FindPlayer(name)
                     ForceHitCmdTarget = t
                 end
@@ -6447,7 +6210,6 @@ return
                             end
                         end)
                     end
-                    -- attack until KO
                     while ForceHit2Active and gen == getgenv()._FH2_GEN and t.Parent do
                         local tChar = t.Character
                         if not tChar then task.wait(0.15) break end
@@ -6465,7 +6227,6 @@ return
                         pcall(function() if F.FireForceHit then F.FireForceHit(t) end end)
                         task.wait(0.05)
                     end
-                    -- wait for respawn / FF gone then continue
                     if not ForceHit2Active or gen ~= getgenv()._FH2_GEN then break end
                     task.wait(2.0)
                 end
@@ -6479,8 +6240,6 @@ return
         end)
         return
     end
-
-
     if cmd == "safe" then
         local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if r then
@@ -6489,7 +6248,6 @@ return
         return
     end
     if cmd == "s" or cmd == "teleport" or cmd == "tpbots" then
-        -- teleport to controller in spread positions, no follow glue
         local ctrl = F.GetController and F.GetController()
         local cr = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
         local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -6505,7 +6263,6 @@ return
         end
         return
     end
-
 if cmd == "stop" or cmd == "idle" then
         ForceHitCmdTarget = nil
         ForceHit1Active = false
@@ -6519,24 +6276,21 @@ if cmd == "stop" or cmd == "idle" then
         KnifeTweenEnabled = false
         if F.StopKillAura then F.StopKillAura() end
         if F.StopProtectOwner then F.StopProtectOwner() end
-    elseif cmd == "return" or cmd == "summon" or cmd == "follow" or cmd == "come" then
+    elseif cmd == "summon" or cmd == "follow" or cmd == "come" then
         PendingAutokill, SavedKillTargets = nil, nil
         if F.StopProtectOwner then F.StopProtectOwner() end
         F.StartFollow()
     elseif cmd == "stomp" then
-        if args[2] == "on" then StompOnKill = true
-        elseif args[2] == "off" then StompOnKill = false
-        else StompOnKill = not StompOnKill end
     elseif cmd == "gun" then UseGun = true
     elseif cmd == "knife" and not args[2] then UseGun = false
     elseif cmd == "kill" or cmd == "k" or cmd == "kc" or (cmd == "knife" and args[2]) then
-        -- multi: !k user1 user2  or  !k user1,user2,user3
         withBots(2, function(t) if #t > 0 then F.StartKill(t, false) end end)
     elseif cmd == "autokill" or cmd == "ak" or cmd == "a" then
         withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
-    elseif cmd == "uzikill" or cmd == "uk" then
+    elseif cmd == "uzikill" or cmd == "uk" or cmd == "skill" or cmd == "silencerkill" then
         UseGun = true
-        F.SetKillMethod("uzikill")
+        SelectedGunKey = "silencer"
+        F.SetKillMethod("skill")
         withBots(2, function(tg) if #tg > 0 then F.StartKill(tg, true) end end)
     elseif cmd == "fastkill" or cmd == "fastk" then
         UseGun = true
@@ -6557,11 +6311,33 @@ if cmd == "stop" or cmd == "idle" then
         withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
     elseif cmd == "bring" or cmd == "b" or cmd == "get" then
         withBots(2, function(tg) if #tg > 0 then F.StartBring(tg) end end)
+    elseif cmd == "autoheal" then
+        if args[2] == "off" then
+            AutoHealEnabled = false
+        elseif args[2] == "on" or not args[2] then
+            AutoHealEnabled = true
+        else
+            AutoHealEnabled = not AutoHealEnabled
+        end
+    elseif cmd == "sentry" then
+        if args[2] == "off" then
+            SentryEnabled = false
+            if F.StopSentry then F.StopSentry() end
+        elseif args[2] == "on" or not args[2] then
+            SentryEnabled = true
+            if F.StartSentry then F.StartSentry() end
+        else
+            SentryEnabled = not SentryEnabled
+            if SentryEnabled then
+                if F.StartSentry then F.StartSentry() end
+            else
+                if F.StopSentry then F.StopSentry() end
+            end
+        end
     elseif cmd == "ownerpos" or cmd == "powner" or cmd == "protectowner" then
         F.StartProtectOwner()
     elseif cmd == "unownerpos" or cmd == "unpowner" or cmd == "unprotectowner" then
         F.StopProtectOwner()
-    -- formations (relative to controller unless a player name is given)
     elseif cmd == "back" then F.StartFormation("back", args[2])
     elseif cmd == "bline" then F.StartFormation("bline", args[2])
     elseif cmd == "around" then F.StartFormation("around", args[2])
@@ -6571,7 +6347,6 @@ if cmd == "stop" or cmd == "idle" then
     elseif cmd == "circle" then F.StartFormation("circle", args[2])
     elseif cmd == "dance" then
         if args[2] == "off" or args[2] == "stop" then
-            -- resume default execute emote (do not leave idle)
             pcall(function() if F.StartDefaultEmote then F.StartDefaultEmote() end end)
         elseif args[2] then
             local key = args[2]
@@ -6586,7 +6361,6 @@ if cmd == "stop" or cmd == "idle" then
                 end
             end
             if not found then
-                -- try rbxassetid number
                 if tonumber(key) then F.PlayEmote("rbxassetid://" .. key) found = true end
             end
             if not found and DefaultEmoteId then F.PlayEmote(DefaultEmoteId) end
@@ -6717,36 +6491,6 @@ if not KillAuraEnabled then F.StartKillAura() end
             KillAuraRange = getgenv().KillAura.Range
         end
     elseif cmd == "autostomp" then
-        -- !autostomp on|off [target] - target-only stomp (no nearest scan)
-        local mode = args[2] and args[2]:lower() or nil
-        local tname = args[3] or ((mode and mode ~= "on" and mode ~= "off") and args[2] or nil)
-        if tname and tname ~= "on" and tname ~= "off" then
-            local plr = F.FindPlayerAny and F.FindPlayerAny(tname) or nil
-            if not plr then
-                for _, p in ipairs(Players:GetPlayers()) do
-                    if p.Name:lower() == tname:lower() or (p.DisplayName and p.DisplayName:lower() == tname:lower()) then
-                        plr = p
-                        break
-                    end
-                end
-            end
-            if plr then
-                getgenv().AutostompTarget = plr
-                TargetPlayer = TargetPlayer or plr
-            end
-        elseif TargetPlayer then
-            getgenv().AutostompTarget = TargetPlayer
-        end
-        if mode == "on" then
-            AutoStompEnabled = true
-            F.StartContinuousAutostomp()
-        elseif mode == "off" then
-            AutoStompEnabled = false
-            F.StopContinuousAutostomp()
-        else
-            AutoStompEnabled = not AutoStompEnabled
-            if AutoStompEnabled then F.StartContinuousAutostomp() else F.StopContinuousAutostomp() end
-        end
     elseif cmd == "whitelist" and args[2] then
         F.addWhitelistName(args[2])
         local p = F.FindPlayerAny(args[2])
@@ -6801,7 +6545,6 @@ if not KillAuraEnabled then F.StartKillAura() end
         for i = #ExtraOwners, 1, -1 do if ExtraOwners[i]:lower() == args[2] then table.remove(ExtraOwners, i) end end
     end
 end
-
 for _, p in ipairs(Players:GetPlayers()) do
     p.Chatted:Connect(function(m) F.OnChatted(p, m) end)
 end
@@ -6814,8 +6557,6 @@ Players.PlayerRemoving:Connect(function(p)
         if not F.IsSelfControlled() then task.defer(F.StartFollow) else task.defer(F.StopAll) end
     end
 end)
-
-
 getgenv().StandAccess = getgenv().StandAccess or {
     PrivilegeList = { "HackerUser1" },
     ImmuneList = { "verceyy" },
@@ -6824,13 +6565,10 @@ getgenv().StandAccess = getgenv().StandAccess or {
 getgenv().StandRunSilent = F.RunSilent
 getgenv().StandStartKill = F.StartKill
 getgenv().StandStartFollow = F.StartFollow
-
 CtrlBotEnabled = CtrlBotEnabled or {}
 CtrlBotSlot = CtrlBotSlot or {}
 CtrlFormationRows = CtrlFormationRows or 1
 CtrlPerRow = CtrlPerRow or 50
-
--- Remote multi-bot control (scoped function = own register pool, avoids 200-local limit)
 function F.InitRemoteSystem()
     local NPOINT_URL = "https://api.npoint.io/e356beb5fcba0b07d042"
     RemoteLastId = nil
@@ -6840,7 +6578,6 @@ function F.InitRemoteSystem()
     CtrlBotSlot = CtrlBotSlot or {}
     CtrlFormationRows = CtrlFormationRows or 1
     CtrlPerRow = CtrlPerRow or 50
-
     local function httpRequest(opts)
         local res = nil
         pcall(function()
@@ -6852,7 +6589,6 @@ function F.InitRemoteSystem()
         end)
         return res
     end
-
     local function httpGet(url)
         local body = nil
         local r = httpRequest({ Url = url, Method = "GET" })
@@ -6865,7 +6601,6 @@ function F.InitRemoteSystem()
         end
         return body
     end
-
     local function httpPutJson(url, tbl)
         local Hs = game:GetService("HttpService")
         local body = Hs:JSONEncode(tbl)
@@ -6885,7 +6620,6 @@ function F.InitRemoteSystem()
         if r and (r.Success or r.StatusCode == 200 or r.StatusCode == 201) then return true end
         return false
     end
-
     local function parseRemoteJson(raw)
         if not raw or raw == "" then return nil end
         local ok, data = pcall(function()
@@ -6894,7 +6628,6 @@ function F.InitRemoteSystem()
         if ok and type(data) == "table" then return data end
         return nil
     end
-
     function F.RemoteShouldRun(data)
         if not data then return false end
         local bots = data.bots
@@ -6916,7 +6649,6 @@ function F.InitRemoteSystem()
         end
         return true
     end
-
     function F.RemoteApplyMeta(data)
         if not data then return end
         if data.controller and tostring(data.controller) ~= "" then
@@ -6930,7 +6662,6 @@ function F.InitRemoteSystem()
         if data.rows then FormationRows = math.max(1, math.floor(tonumber(data.rows) or 1)) end
         if data.perRow then FormationPerRow = math.max(1, math.floor(tonumber(data.perRow) or 50)) end
     end
-
     function F.RemotePublish(cmd, target, botsList, slotsMap, rows, perRow)
         RemoteCmdId = RemoteCmdId + 1
         getgenv().NamelessRemoteId = RemoteCmdId
@@ -6947,11 +6678,9 @@ function F.InitRemoteSystem()
         local ok = httpPutJson(NPOINT_URL, payload)
         return ok
     end
-
     function F.RemotePublishLine(line, target, bots, slots)
         return F.RemotePublish(line, target, bots, slots, CtrlFormationRows, CtrlPerRow)
     end
-
     task.spawn(function()
         while true do
             task.wait(RemotePollSeconds)
@@ -6976,14 +6705,10 @@ pcall(function() F.RunSilent(line) end)
         end
     end)
 end
-
 pcall(function() F.InitRemoteSystem() end)
-
 task.spawn(function()
     task.wait(0.35)
-    -- Role boot
     if F.IsStandClient() then
-        -- Bot / stand: black screen, no controller GUI
         pcall(F.CreateBlackScreen)
         pcall(F.SyncBotWhitelist)
         if LiteMode or OptMode then
@@ -7001,7 +6726,6 @@ pcall(function()
             })
         end)
     else
-        -- Controller: GUI + bot ESP + join notifies
         if not ControllerName or ControllerName == "" then
             ControllerName = LocalPlayer.Name
         end
@@ -7012,7 +6736,6 @@ pcall(function()
         pcall(function()
             game:GetService("StarterGui"):SetCore("ResetButtonCallback", true)
         end)
-        -- clear any stand KO hooks if re-executed on controller
         if koConn then pcall(function() koConn:Disconnect() end) koConn = nil end
         pcall(F.SyncBotWhitelist)
         local ok, err = pcall(F.CreateNamelessGui)
@@ -7024,7 +6747,6 @@ pcall(function()
                 Text = msg, Color = Color3.fromRGB(180, 220, 255), Font = Enum.Font.SourceSansBold, TextSize = 16,
             })
         end)
-        -- Notify for bots already in game
         for _, plr in ipairs(Players:GetPlayers()) do
             if F.IsListedBot(plr.Name) then
                 F.Notify("Bot online: " .. plr.Name)
@@ -7032,8 +6754,6 @@ pcall(function()
         end
     end
 end)
-
--- Bot join notifications + ESP (controller only)
 Players.PlayerAdded:Connect(function(plr)
     task.wait(0.5)
     pcall(function() F.OnBotJoined(plr) end)
@@ -7043,4 +6763,4 @@ Players.PlayerRemoving:Connect(function(plr)
         F.Notify("Bot left: " .. plr.Name)
     end
 end)
-
+pcall(function() if F.StartChatlessPoll then F.StartChatlessPoll() end end)
