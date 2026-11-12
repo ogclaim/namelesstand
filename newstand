@@ -371,7 +371,7 @@ SpamVoidWeapon = "gun"
 ProtectOwnerEnabled = false
 ProtectOwnerConn = nil
 KnifeTweenEnabled = false
-local CFrameFollowEnabled = false
+local CFrameFollowEnabled = false -- must stay false so summon uses glue
 local CFrameKillEnabled = false
 local FastKillStableLook = Vector3.new(0, 0, -1)
 local Whitelist = {}
@@ -5363,21 +5363,35 @@ F.StartFollow = function()
     F.StopAll()
     PendingAutokill, SavedKillTargets = keepA, keepT
     CurrentAction = "follow"
+    CFrameFollowEnabled = false
+    -- 1) CFrame into formation slots first
     pcall(function()
-        local tr = ctrl.Character and (ctrl.Character:FindFirstChild("HumanoidRootPart") or ctrl.Character:FindFirstChild("UpperTorso"))
         local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if tr and r then
-            local slot = tonumber(MySlot) or 1
-            local col = (slot - 1) % 3
-            local row = math.floor((slot - 1) / 3)
-            local x = (col - 1) * (FollowSpacing or 3)
-            local z = (FollowBack or 4) + row * (FollowBack or 4)
-            local y = (HeightPerRow or 3) * row
-            r.CFrame = tr.CFrame * CFrame.new(x, y, z)
+        if not r then return end
+        r.Anchored = false
+        local dest = F.GetSummonWorldCF and F.GetSummonWorldCF()
+        if not dest then
+            local tr = ctrl.Character and (ctrl.Character:FindFirstChild("HumanoidRootPart") or ctrl.Character:FindFirstChild("UpperTorso"))
+            if tr then
+                local slot = tonumber(MySlot) or 1
+                local col = (slot - 1) % 3
+                local row = math.floor((slot - 1) / 3)
+                local x = (col - 1) * (FollowSpacing or 3)
+                local z = (FollowBack or 4) + row * (FollowBack or 4)
+                local y = (HeightPerRow or 3) * row + 6
+                dest = tr.CFrame * CFrame.new(x, y, z)
+            end
+        end
+        if dest then
+            r.CFrame = dest
             r.AssemblyLinearVelocity = Vector3.zero
             r.AssemblyAngularVelocity = Vector3.zero
+            r.CanCollide = false
         end
     end)
+    -- 2) then enable glue (PhysicsRep + CFrame loop) so they stick with 0 delay
+    GlueMode = "follow"
+    GlueTargetPlayer = ctrl
     F.StartGlue("follow", ctrl)
     task.defer(function()
         pcall(function()
@@ -6451,6 +6465,17 @@ if cmd == "stop" or cmd == "idle" then
         KnifeTweenEnabled = false
         if F.StopKillAura then F.StopKillAura() end
         if F.StopProtectOwner then F.StopProtectOwner() end
+    elseif cmd == "blackscreen" or cmd == "bk" or cmd == "bscreen" then
+        local on = true
+        if args[2] == "off" or args[2] == "0" or args[2] == "false" then on = false end
+        if args[2] == "on" or args[2] == "1" or args[2] == "true" then on = true end
+        if on then
+            pcall(function() if F.CreateBlackScreen then F.CreateBlackScreen() end end)
+            pcall(function() if F.SetNoRender then F.SetNoRender(true) end end)
+        else
+            pcall(function() if F.DestroyBlackScreen then F.DestroyBlackScreen() end end)
+            pcall(function() if F.SetNoRender then F.SetNoRender(false) end end)
+        end
     elseif cmd == "summon" or cmd == "follow" or cmd == "come" then
         PendingAutokill, SavedKillTargets = nil, nil
         if F.StopProtectOwner then F.StopProtectOwner() end
