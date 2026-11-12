@@ -400,7 +400,7 @@ local KA_LastStep = 0
 local AutoSummonAfterReset = false
 local AutoHealEnabled = false
 local AutoHealBusy = false
-local AutoChatEnabled = true
+local AutoChatEnabled = false
 local KillChatPhrases = {
     "This is a simple stand dude",
     "Lock in",
@@ -674,6 +674,7 @@ function F.CanSummon()
     return true
 end
 function F.SayKillChat()
+    return -- trashtalk disabled
     if not AutoChatEnabled then return end
     if tick() - LastKillChat < 1.2 then return end
     LastKillChat = tick()
@@ -1737,27 +1738,25 @@ function F.GetSummonWorldCF()
     local oRoot = owner.Character:FindFirstChild("HumanoidRootPart")
     if not oRoot then return end
     local slot = math.max(1, math.floor(MySlot or 1))
-    local rows = math.max(1, math.floor(FormationRows or 1))
-    local perRow = math.max(1, math.floor(FormationPerRow or 50))
-    local col, row
-    if rows <= 1 then
-        col = slot - 1
-        row = 0
-    else
-        col = (slot - 1) % perRow
-        row = math.floor((slot - 1) / perRow)
+    -- count active bot slots for even left/right balance
+    local total = 0
+    for i, name in ipairs(BotListOrdered or {}) do
+        if type(name) == "string" and name ~= "" then
+            total = total + 1
+        end
     end
-    local center = (rows <= 1) and ((slot - 1) * 0.5) or ((perRow - 1) * 0.5)
-    local x = (col - (rows <= 1 and 0 or center)) * FollowSpacing
-    if rows <= 1 then
-        x = (slot - 1) * FollowSpacing
-    end
+    if total < 1 then total = MaxBots or 10 end
+    -- alternate left/right from center: 1 left, 2 right, 3 left, 4 right...
+    local pairIndex = math.ceil(slot / 2)
+    local side = (slot % 2 == 1) and -1 or 1  -- odd = left, even = right
+    local spacing = FollowSpacing or 3
+    local x = side * pairIndex * spacing
+    local row = math.floor((slot - 1) / 6)  -- stack extra depth every 6 bots
     local cf = oRoot.CFrame
-    local fm = FLY_MODE_OFFSET and FLY_MODE_OFFSET[FlyMode or "Hover"] or { y = 2.5, back = 0, lerp = 0.35 }
     local pos = oRoot.Position
-        - cf.LookVector * (FollowBack + row * 0.75 + (fm.back or 0))
+        - cf.LookVector * ((FollowBack or 4) + row * (FollowBack or 4))
         + cf.RightVector * x
-        + Vector3.new(0, FollowHeight + row * HeightPerRow + (fm.y or 0) + 6, 0)
+        + Vector3.new(0, (FollowHeight or 3) + row * (HeightPerRow or 3), 0)
     return CFrame.new(pos, pos + cf.LookVector)
 end
 function F.GetControllerOrbitCF()
@@ -2198,6 +2197,9 @@ function F.loadFlyAnims()
     end
 end
 function F.updateFlyAnim()
+    -- fly/float anims disabled
+    pcall(function() if F.stopFlyAnims then F.stopFlyAnims() end end)
+    return
     if CurrentAction ~= "follow" and CurrentAction ~= "formation" then
         return
     end
@@ -3823,8 +3825,9 @@ function F.SpamVoidKillStep(target)
         return false
     end
     local now = tick()
-    local off = F.GetKillOffset(tRoot, "slot", KillDistance or FastKillHitDist or 6)
-    local surfacePos = tRoot.Position + off + Vector3.new(0, 1.0, 0)
+    -- ksk: inside target body (orbitkill knife style), still spam void in/out
+    local off = (F.GetInsideOffset and F.GetInsideOffset(tRoot, MySlot)) or Vector3.new(0, 0.4, 0)
+    local surfacePos = tRoot.Position + off
     r.CanCollide = false
     r.AssemblyLinearVelocity = Vector3.zero
     r.AssemblyAngularVelocity = Vector3.zero
@@ -5474,18 +5477,13 @@ F.StartFollow = function()
             end)
         end
     end)
+    -- no fly idle / float / aura animation on summon
     task.defer(function()
         pcall(function()
             if F.stopFlyAnims then F.stopFlyAnims() end
-            local auraId = (DanceIds and (DanceIds["aura"] or DanceIds["headless_aura"])) or "rbxassetid://98893149829644"
-            if type(auraId) == "string" and not auraId:find("rbxassetid") then
-                auraId = "rbxassetid://" .. auraId
-            end
-            DancePersistent = true
-            LastDanceId = auraId
-            CurrentDance = "aura"
-            if F.StartDance then F.StartDance("aura", auraId) end
-            if F.EnsureDancePlaying then F.EnsureDancePlaying() end
+            DancePersistent = false
+            LastDanceId = nil
+            if CurrentDance then pcall(function() CurrentDance:Stop() end) CurrentDance = nil end
         end)
     end)
 end
@@ -5638,6 +5636,25 @@ F.StartKill = function(targets, isAuto)
     FastKillPhase, FastKillFrontCF, FastKillTweening = "behind", nil, false
     FastKillTweenFrom = nil
     if isAuto then PendingAutokill, SavedKillTargets = true, targets else PendingAutokill, SavedKillTargets = nil, nil end
+    if UseGun then
+        pcall(function() if F.EquipSelectedGun then F.EquipSelectedGun() end end)
+    else
+        pcall(function()
+            if F.UnequipAllTools then F.UnequipAllTools() end
+            local char = LocalPlayer.Character
+            local bag = LocalPlayer:FindFirstChild("Backpack")
+            for _, parent in ipairs({ char, bag }) do
+                if parent then
+                    for _, tool in ipairs(parent:GetChildren()) do
+                        if tool:IsA("Tool") and tool.Name:lower():find("knife") then
+                            tool.Parent = char
+                            break
+                        end
+                    end
+                end
+            end
+        end)
+    end
     F.StartGlue(UseGun and "gun" or "knife", TargetPlayer)
     do
         local tr = TargetPlayer and TargetPlayer.Character and (
@@ -7060,7 +7077,7 @@ task.spawn(function()
             pcall(F.CreateBlackScreen)
             pcall(function() F.SetNoRender(true) end)
         end
-        if not LiteMode then pcall(F.StartDefaultEmote) end
+        pcall(function() if F.stopFlyAnims then F.stopFlyAnims() end end)
         local msg = "Stand ready | slot " .. tostring(MySlot) .. " | controller: " .. tostring(ControllerName)
 pcall(function()
             game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
