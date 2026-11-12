@@ -1,9 +1,8 @@
 --[[
     NAMELESS.HVH - Da Hood Stand
-    Converted from Da Hood GUI -> multi-bot stand (chat control)
-    NO fakepos / desync
-    Prefix: ! or . or no prefix for bare cmds
-    Execute on BOT accounts. Controller chats commands.
+    Chat-only control (no GUI) | CFrame only (no glue)
+    Prefix: ! or .
+    Execute on bot accounts. Controller chats commands.
 ]]
 
 ------------------------ EDIT THESE ------------------------
@@ -13,34 +12,21 @@ local BotListOrdered = {
     "Kipsh6295",
     "Drokspan7917",
     "Warneed6752",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
-    "",
 }
-local MaxBots = 20
+local MaxBots = 3
 -------------------------------------------------------------
 
+-- Safe getgenv
 if type(getgenv) ~= "function" then
-    getgenv = function() return type(_G) == "table" and _G or {} end
-end
-if type(task) ~= "table" then
-    task = {
-        spawn = spawn or function(f) coroutine.resume(coroutine.create(f)) end,
-        wait = wait,
-        defer = spawn or function(f) coroutine.resume(coroutine.create(f)) end,
-    }
+    getgenv = function()
+        return type(_G) == "table" and _G or {}
+    end
 end
 
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Workspace = game:GetService("Workspace")
-local TweenService = game:GetService("TweenService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
 local LocalPlayer = Players.LocalPlayer
 
 local MainEvent = ReplicatedStorage:FindFirstChild("MainEvent")
@@ -54,79 +40,112 @@ local function refreshMainEvent()
     return MainEvent
 end
 
--- bot slot
+-- Bot list map
 local BotList = {}
-local MySlot = 1
-for i, name in ipairs(BotListOrdered) do
-    if type(name) == "string" and name ~= "" then
-        BotList[name:lower()] = true
-        if name:lower() == LocalPlayer.Name:lower() then
-            MySlot = i
-        end
+for i, n in ipairs(BotListOrdered) do
+    if type(n) == "string" and n ~= "" then
+        BotList[n:lower()] = i
     end
 end
 
-local Whitelist = {}
+local MySlot = BotList[LocalPlayer.Name:lower()] or 1
 local ExtraOwners = {}
+local Whitelist = {}
+local ControllerName_LC = ControllerName:lower()
+
+-- State
 local CurrentAction = "idle"
 local TargetPlayer = nil
 local TargetList = {}
-local KillMethod = "orbit" -- orbit | sky | stand | stkill | tkill
-local UseGun = true
-local SelectedGun = "rifle"
+local KillMethod = "orbitkill" -- orbitkill, skykill, standkill, knifekill
+local SelectedGuns = { "rifle" } -- can be multiple
+local UseKnife = false
 local StompOnKill = true
 local AutoStompEnabled = false
-local KillConn = nil
+local SpinbotEnabled = false
+local SpinbotSpeed = 25
+local HoldMode = nil -- "gun" / "knife"
+local GlueConn = nil
+local ActionConn = nil
 local FollowConn = nil
+local DanceTrack = nil
+local CurrentDance = nil
+local OrbitAngle = 0
 local FormationType = nil
-local SpreadModifier = false
-local FollowBack, FollowSpacing, HeightPerRow = 5, 3.5, 3
+local FormationTarget = nil
+local Character, Humanoid, Root
 
-local GUN_KEYS = {
-    rifle = {"rifle", "[rifle]"},
-    db = {"double-barrel", "double barrel", "[double-barrel sg]", "db"},
-    rev = {"revolver", "[revolver]", "rev"},
-    silencer = {"silencer", "[silencer]"},
-    lmg = {"lmg", "[lmg]"},
-    flintlock = {"flintlock", "[flintlock]"},
-    aug = {"aug", "[aug]"},
+local FollowBack, FollowSide, FollowHeight = 4, 3, 2
+local FormationRows, FormationPerRow = 3, 3
+local OrbitRadius, OrbitSpeed = 5, 4
+local StompBotSlot = 1
+local ArmorBuyPercent = 50
+local AutoArmor = true
+local AutoReload = true
+local AutoBlock = true
+local AntiStomp = true
+local AutoBuyGuns = true
+
+-- Gun aliases -> shop / tool name fragments
+local GUN_MAP = {
+    rifle = { tools = {"rifle", "[rifle]"}, shop = "[Rifle]", ammo = {"rifle ammo", "[rifle ammo]"} },
+    db = { tools = {"double-barrel", "double barrel", "[double-barrel sg]", "db"}, shop = "[Double-Barrel SG]", ammo = {"double-barrel ammo", "double barrel ammo", "db ammo"} },
+    rev = { tools = {"revolver", "[revolver]", "rev"}, shop = "[Revolver]", ammo = {"revolver ammo", "[revolver ammo]"} },
+    silencer = { tools = {"silencer", "[silencer]"}, shop = "[Silencer]", ammo = {"silencer ammo", "[silencer ammo]"} },
+    lmg = { tools = {"lmg", "[lmg]"}, shop = "[LMG]", ammo = {"lmg ammo", "[lmg ammo]"} },
+    flintlock = { tools = {"flintlock", "[flintlock]"}, shop = "[Flintlock]", ammo = {"flintlock ammo", "[flintlock ammo]"} },
+}
+local AutoBuyAmmo = true
+local AMMO_LOW_THRESHOLD = 0   -- buy when mag is empty (0)
+local AMMO_LOW_CLICKS = 10     -- clicks when low
+local AMMO_AFTER_GUN_CLICKS = 30 -- clicks right after buying a gun
+
+local DANCES = {
+    floss = "rbxassetid://10714340543",
+    happier = "rbxassetid://15609995579",
+    takel = "rbxassetid://118343267142519",
+    darktriad = "rbxassetid://131564504226925",
+    vampire = "rbxassetid://70751304705790",
+    aura = "rbxassetid://105274889965322",
+    headless_aura = "rbxassetid://98893149829644",
+    spin = "rbxassetid://2516930867",
+    tornado = "rbxassetid://135373056067761",
+    dance = "rbxassetid://118683780156744",
 }
 
-pcall(function() workspace.FallenPartsDestroyHeight = -0 / 0 end)
-
+-------------------------------------------------------------
+-- Helpers
+-------------------------------------------------------------
 local function getChar(plr)
     return plr and plr.Character
 end
-local function getRoot(char)
-    if not char then return nil end
-    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
-end
+
 local function getHum(char)
     return char and char:FindFirstChildOfClass("Humanoid")
 end
 
-local function getController()
-    if not ControllerName then return nil end
-    local c = Players:FindFirstChild(ControllerName)
-    if c then return c end
-    local want = tostring(ControllerName):lower()
-    for _, p in ipairs(Players:GetPlayers()) do
-        if p.Name:lower() == want or (p.DisplayName and p.DisplayName:lower() == want) then
-            return p
-        end
+local function getRoot(char)
+    if not char then return nil end
+    return char:FindFirstChild("HumanoidRootPart")
+        or char:FindFirstChild("UpperTorso")
+        or char:FindFirstChild("Torso")
+end
+
+local function refreshChar()
+    Character = LocalPlayer.Character
+    if Character then
+        Humanoid = Character:FindFirstChildOfClass("Humanoid")
+        Root = getRoot(Character)
     end
-    return nil
 end
 
 local function isOwner(plr)
     if not plr then return false end
-    local want = tostring(ControllerName or ""):lower()
-    if plr.Name:lower() == want then return true end
-    if plr.DisplayName and plr.DisplayName:lower() == want then return true end
-    local o = tostring(OriginalControllerName or ""):lower()
-    if o ~= "" and (plr.Name:lower() == o or (plr.DisplayName and plr.DisplayName:lower() == o)) then return true end
+    local n = plr.Name:lower()
+    if n == ControllerName:lower() then return true end
+    if n == OriginalControllerName:lower() then return true end
     for _, e in ipairs(ExtraOwners) do
-        if plr.Name:lower() == tostring(e):lower() then return true end
+        if n == tostring(e):lower() then return true end
     end
     return false
 end
@@ -140,150 +159,260 @@ local function isWhitelisted(plr)
 end
 
 local function findPlayer(name)
-    if not name then return nil end
+    if not name or name == "" then return nil end
     name = tostring(name):lower()
     for _, p in ipairs(Players:GetPlayers()) do
         if p.Name:lower() == name or (p.DisplayName and p.DisplayName:lower() == name) then
             return p
         end
-        if p.Name:lower():sub(1, #name) == name then return p end
+    end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p.Name:lower():find(name, 1, true) or (p.DisplayName and p.DisplayName:lower():find(name, 1, true)) then
+            return p
+        end
     end
     return nil
 end
 
 local function isKO(char)
     if not char then return true end
-    local hum = getHum(char)
-    if hum and hum.Health <= 0 then return true end
     local be = char:FindFirstChild("BodyEffects")
     if be then
         local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
-        if ko and ko.Value == true then return true end
+        if ko and ko.Value then return true end
         local dead = be:FindFirstChild("Dead")
-        if dead and dead.Value == true then return true end
+        if dead and dead.Value then return true end
     end
+    local h = getHum(char)
+    if h and h.Health <= 0 then return true end
     return false
 end
 
 local function hasForceField(char)
-    return char and char:FindFirstChildOfClass("ForceField") ~= nil
+    if not char then return true end
+    if char:FindFirstChildOfClass("ForceField") then return true end
+    if char:FindFirstChild("ForceField") then return true end
+    local be = char:FindFirstChild("BodyEffects")
+    if be then
+        local ff = be:FindFirstChild("ForceField") or be:FindFirstChild("FF")
+        if ff and ff:IsA("BoolValue") and ff.Value then return true end
+    end
+    return false
 end
 
-local function unequipAll()
+local function shouldSkipTarget(plr)
+    if not plr then return true end
+    if isWhitelisted(plr) then return true end
+    local c = getChar(plr)
+    if not c then return true end
+    if isKO(c) then return true end
+    if hasForceField(c) then return true end
+    return false
+end
+
+local function isGrabbed(plr)
+    local c = getChar(plr)
+    if not c then return false end
+    return c:FindFirstChild("GRABBING_CONSTRAINT") ~= nil
+end
+
+local function getController()
+    return Players:FindFirstChild(ControllerName) or findPlayer(ControllerName)
+end
+
+-------------------------------------------------------------
+-- Glue (exact HC stand style: CFrame dest + PhysicsRepRootPart)
+-------------------------------------------------------------
+getgenv().glue_active = false
+getgenv().glue_offset_z = 3
+getgenv().glue_position = "Back"
+getgenv().connection_loop = nil
+local GlueMode = "follow"
+local GlueTargetPlayer = nil
+local NoclipEnabled = true
+local FollowSpacing = 3
+
+getgenv().get_root_part = function()
     local char = LocalPlayer.Character
-    local bag = LocalPlayer:FindFirstChild("Backpack")
-    if not char or not bag then return end
-    for _, t in ipairs(char:GetChildren()) do
-        if t:IsA("Tool") then pcall(function() t.Parent = bag end) end
+    if not char then return nil end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return nil end
+    return hum.RootPart or char:FindFirstChild("HumanoidRootPart")
+end
+
+getgenv().reset_velocity = function()
+    local r = getgenv().get_root_part()
+    if r then
+        r.AssemblyLinearVelocity = Vector3.zero
+        r.AssemblyAngularVelocity = Vector3.zero
     end
 end
 
-local function safeEquip(tool)
-    if not tool then return end
-    local char = LocalPlayer.Character
-    if not char then return end
-    local cur = char:FindFirstChildOfClass("Tool")
-    if cur == tool then return end
-    unequipAll()
-    local hum = getHum(char)
+getgenv().get_position_offset = function()
+    local d = getgenv().glue_offset_z or 3
+    local p = getgenv().glue_position or "Back"
+    if p == "Front" then return CFrame.new(0, 0, -d) end
+    if p == "Left Side" then return CFrame.new(-d, 0, 0) end
+    if p == "Right Side" then return CFrame.new(d, 0, 0) end
+    if p == "Top" then return CFrame.new(0, d, 0) end
+    if p == "Bottom" then return CFrame.new(0, -d, 0) end
+    return CFrame.new(0, 0, d) -- Back
+end
+
+local function SetPhysicsRepRootPart(selfRoot, targetPart)
+    if not selfRoot or not targetPart then return end
+    if sethiddenproperty then
+        pcall(function()
+            sethiddenproperty(selfRoot, "PhysicsRepRootPart", targetPart)
+        end)
+        pcall(function()
+            if InstanceHandle then
+                sethiddenproperty(selfRoot, "PhysicsRepRootRef", InstanceHandle.new(targetPart))
+            end
+        end)
+    end
     pcall(function()
-        if hum then hum:EquipTool(tool) else tool.Parent = char end
+        if setsimulationradius then setsimulationradius(math.huge, math.huge) end
+    end)
+    pcall(function()
+        selfRoot:SetNetworkOwner(LocalPlayer)
     end)
 end
 
-local function findTool(keys)
-    local char = LocalPlayer.Character
-    local bag = LocalPlayer:FindFirstChild("Backpack")
-    for _, parent in ipairs({ char, bag }) do
-        if parent then
-            for _, t in ipairs(parent:GetChildren()) do
-                if t:IsA("Tool") then
-                    local n = t.Name:lower()
-                    for _, k in ipairs(keys) do
-                        if n:find(k:lower(), 1, true) then return t end
-                    end
-                end
+local function GetSummonWorldCF()
+    local owner = getController()
+    if not owner or not owner.Character then return nil end
+    local oRoot = owner.Character:FindFirstChild("HumanoidRootPart")
+    if not oRoot then return nil end
+    local slot = math.max(1, math.floor(MySlot or 1))
+    local perRow = math.max(1, math.floor(FormationPerRow or 3))
+    local col = (slot - 1) % perRow
+    local row = math.floor((slot - 1) / perRow)
+    local x = (col - (perRow - 1) * 0.5) * (FollowSpacing or FollowSide or 3)
+    local z = (FollowBack or 4) + row * (FollowBack or 4)
+    local y = (FollowHeight or 2) * row
+    return oRoot.CFrame * CFrame.new(x, y, z)
+end
+
+local function GetFormationCF()
+    local t = FormationTarget or getController()
+    local tr = getRoot(getChar(t))
+    if not tr then return nil end
+    local slot = MySlot or 1
+    local kind = FormationType or "bline"
+    if kind == "bline" then
+        return tr.CFrame * CFrame.new(0, 0, 3 + slot * 2.5)
+    elseif kind == "back" then
+        local col = (slot - 1) % 4
+        local row = math.floor((slot - 1) / 4)
+        return tr.CFrame * CFrame.new((col - 1.5) * 3, row * 2, 5 + row)
+    elseif kind == "line" then
+        local side = (slot % 2 == 0) and 1 or -1
+        local idx = math.ceil(slot / 2)
+        return tr.CFrame * CFrame.new(side * (3 + idx * 2.5), 0, 0)
+    elseif kind == "around" then
+        local a = ((slot - 1) / math.max(MaxBots, 1)) * math.pi * 2
+        return CFrame.new(tr.Position + Vector3.new(math.cos(a) * 5, 5, math.sin(a) * 5), tr.Position)
+    elseif kind == "orbit" then
+        OrbitAngle = OrbitAngle + 0.08
+        local a = OrbitAngle + ((slot - 1) / math.max(MaxBots, 1)) * math.pi * 2
+        return CFrame.new(tr.Position + Vector3.new(math.cos(a) * 10, 3, math.sin(a) * 10), tr.Position)
+    end
+    return tr.CFrame * CFrame.new(0, 2, 4)
+end
+
+local function resolveTargetRoot()
+    if GlueMode == "follow" then
+        local c = getController()
+        return c and c.Character and c.Character:FindFirstChild("HumanoidRootPart")
+    elseif GlueMode == "formation" then
+        local t = FormationTarget
+        return t and t.Character and t.Character:FindFirstChild("HumanoidRootPart")
+    else
+        local t = GlueTargetPlayer or TargetPlayer
+        return t and t.Character and t.Character:FindFirstChild("HumanoidRootPart")
+    end
+end
+
+-- Pure CFrame only (no PhysicsRep / glue - blocked by anticheat)
+getgenv().unc_connection = function()
+    if getgenv().connection_loop then
+        getgenv().connection_loop:Disconnect()
+        getgenv().connection_loop = nil
+    end
+    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    if hrp then hrp.CanCollide = false end
+    getgenv().connection_loop = RunService.Heartbeat:Connect(function()
+        if not getgenv().glue_active then
+            if getgenv().connection_loop then
+                getgenv().connection_loop:Disconnect()
+                getgenv().connection_loop = nil
+            end
+            getgenv().reset_velocity()
+            return
+        end
+        local selfRoot = getgenv().get_root_part()
+        if not selfRoot then return end
+        selfRoot.CanCollide = false
+
+        -- Kill: killStep sets CFrame; do nothing else here
+        if CurrentAction == "kill" or CurrentAction == "autokill" or CurrentAction == "bring" then
+            return
+        end
+
+        local dest
+        if GlueMode == "follow" or CurrentAction == "follow" then
+            dest = GetSummonWorldCF()
+        elseif GlueMode == "formation" or CurrentAction == "formation" then
+            dest = GetFormationCF()
+        else
+            local targetRoot = resolveTargetRoot()
+            if targetRoot then
+                dest = targetRoot.CFrame * getgenv().get_position_offset()
             end
         end
-    end
-    return nil
-end
-
-local function equipSelected()
-    if not UseGun then
-        local knife = findTool({"knife"})
-        if knife then safeEquip(knife) end
-        return knife
-    end
-    local keys = GUN_KEYS[SelectedGun] or GUN_KEYS.rifle
-    local tool = findTool(keys)
-    if not tool then
-        for _, keys2 in pairs(GUN_KEYS) do
-            tool = findTool(keys2)
-            if tool then break end
+        if dest then
+            selfRoot.AssemblyLinearVelocity = Vector3.zero
+            selfRoot.AssemblyAngularVelocity = Vector3.zero
+            selfRoot.CFrame = dest
         end
-    end
-    if tool then safeEquip(tool) end
-    return tool
-end
-
-local function shootTarget(target)
-    refreshMainEvent()
-    if not MainEvent or not target then return end
-    local tChar = getChar(target)
-    if not tChar or isKO(tChar) or hasForceField(tChar) then return end
-    local head = tChar:FindFirstChild("Head") or getRoot(tChar)
-    local my = getRoot(LocalPlayer.Character)
-    if not head or not my then return end
-    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-    if not tool or tool.Name:lower():find("knife") then return end
-    pcall(function()
-        -- Da Hood style shoot args (best-effort)
-        MainEvent:FireServer("ShootGun", tool, my.Position, head.Position, head, head.Position, head, 999)
-    end)
-    pcall(function()
-        MainEvent:FireServer("Shoot", tool, my.Position, head.Position)
     end)
 end
 
-local function activateKnife()
-    local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-    if tool and tool.Name:lower():find("knife") then
-        pcall(function() tool:Activate() end)
+local function stopGlue()
+    getgenv().glue_active = false
+    if getgenv().connection_loop then
+        pcall(function() getgenv().connection_loop:Disconnect() end)
+        getgenv().connection_loop = nil
     end
+    getgenv().reset_velocity()
+    GlueTargetPlayer = nil
 end
 
-local function doStomp(target)
-    refreshMainEvent()
-    local tChar = getChar(target)
-    if not tChar or not isKO(tChar) then return end
-    local ut = tChar:FindFirstChild("UpperTorso") or getRoot(tChar)
-    local my = getRoot(LocalPlayer.Character)
-    if not ut or not my then return end
-    my.CFrame = CFrame.new(ut.Position + Vector3.new(0, 3.2, 0))
-    my.AssemblyLinearVelocity = Vector3.zero
-    for _ = 1, 5 do
-        pcall(function() MainEvent:FireServer("Stomp") end)
-        task.wait(0.03)
-    end
-end
-
-local function summonCF()
-    local ctrl = getController()
-    if not ctrl then return nil end
-    local oRoot = getRoot(getChar(ctrl))
-    if not oRoot then return nil end
-    local slot = MySlot
-    local pairIndex = math.ceil(slot / 2)
-    local side = (slot % 2 == 1) and -1 or 1
-    local x = side * pairIndex * FollowSpacing
-    local row = math.floor((slot - 1) / 6)
-    local cf = oRoot.CFrame
-    local pos = oRoot.Position
-        - cf.LookVector * (FollowBack + row * FollowBack)
-        + cf.RightVector * x
-        + Vector3.new(0, 2 + row * HeightPerRow, 0)
-    return CFrame.new(pos, pos + cf.LookVector)
+local function startGlue(mode, targetPlr)
+    GlueMode = mode or "follow"
+    GlueTargetPlayer = targetPlr
+    getgenv().glue_active = true
+    -- Instant CFrame only (no PhysicsRep)
+    pcall(function()
+        local selfRoot = getgenv().get_root_part()
+        if not selfRoot then return end
+        local dest
+        if GlueMode == "follow" then
+            dest = GetSummonWorldCF()
+        elseif GlueMode == "formation" then
+            dest = GetFormationCF()
+        else
+            local tr = targetPlr and getRoot(getChar(targetPlr))
+            if tr then dest = tr.CFrame * getgenv().get_position_offset() end
+        end
+        if dest then
+            selfRoot.CFrame = dest
+            selfRoot.AssemblyLinearVelocity = Vector3.zero
+            selfRoot.AssemblyAngularVelocity = Vector3.zero
+        end
+    end)
+    getgenv().unc_connection()
 end
 
 local function stopAll()
@@ -291,311 +420,1192 @@ local function stopAll()
     TargetPlayer = nil
     TargetList = {}
     FormationType = nil
-    if KillConn then pcall(function() KillConn:Disconnect() end) KillConn = nil end
+    FormationTarget = nil
     if FollowConn then pcall(function() FollowConn:Disconnect() end) FollowConn = nil end
-end
-
-local function startFollow()
-    local ctrl = getController()
-    if not ctrl or ctrl == LocalPlayer then return end
-    stopAll()
-    CurrentAction = "follow"
-    FollowConn = RunService.Heartbeat:Connect(function()
-        if CurrentAction ~= "follow" then return end
-        local dest = summonCF()
-        local my = getRoot(LocalPlayer.Character)
-        if dest and my then
-            my.Anchored = false
-            my.CanCollide = false
-            my.CFrame = dest
-            my.AssemblyLinearVelocity = Vector3.zero
-        end
-    end)
-end
-
-local function killOffset(tRoot)
-    local slot = MySlot
-    if KillMethod == "sky" or KillMethod == "skykill" then
-        local ang = ((slot - 1) / math.max(1, MaxBots)) * math.pi * 2
-        return Vector3.new(math.cos(ang) * 10, 175, math.sin(ang) * 10)
-    end
-    if KillMethod == "stand" or KillMethod == "standkill" then
-        local ang = ((slot - 1) / math.max(1, MaxBots)) * math.pi * 2
-        return Vector3.new(math.cos(ang) * 4, 4, math.sin(ang) * 4)
-    end
-    if KillMethod == "stkill" then
-        return Vector3.new(0, 8, 0)
-    end
-    if KillMethod == "tkill" then
-        return Vector3.new(0, 200, 0)
-    end
-    -- orbit / default
-    local ang = ((slot - 1) / math.max(1, MaxBots)) * math.pi * 2
-    local dist = UseGun and 10 or 3
-    return Vector3.new(math.cos(ang) * dist, 2, math.sin(ang) * dist)
-end
-
-local function startKill(targets, isAuto)
-    if type(targets) ~= "table" then targets = { targets } end
-    local filtered = {}
-    for _, t in ipairs(targets) do
-        if t and not isWhitelisted(t) then filtered[#filtered + 1] = t end
-    end
-    if #filtered == 0 then return end
-    stopAll()
-    TargetList = filtered
-    TargetPlayer = filtered[1]
-    CurrentAction = isAuto and "autokill" or "kill"
-    local phase = "attack"
-    local tkillDir = -1
-    KillConn = RunService.Heartbeat:Connect(function()
-        if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then return end
-        local t = TargetPlayer
-        if not t or not t.Parent then
-            if isAuto then
-                -- wait for rejoin / stay idle
-                return
-            end
-            stopAll()
-            startFollow()
-            return
-        end
-        local tChar = getChar(t)
-        if not tChar then return end
-        local my = getRoot(LocalPlayer.Character)
-        local tr = getRoot(tChar)
-        if not my or not tr then return end
-
-        if isKO(tChar) then
-            if StompOnKill or AutoStompEnabled then
-                if (tonumber(MySlot) or 1) == 1 then
-                    doStomp(t)
-                end
-            end
-            if not isAuto then
-                stopAll()
-                startFollow()
-            else
-                -- wait FF gone after respawn
-                phase = "waitff"
-            end
-            return
-        end
-
-        if phase == "waitff" then
-            if hasForceField(tChar) then
-                equipSelected()
-                return
-            end
-            phase = "attack"
-        end
-
-        if hasForceField(tChar) then
-            equipSelected()
-            return
-        end
-
-        equipSelected()
-        my.CanCollide = false
-        my.Anchored = false
-
-        if KillMethod == "tkill" then
-            local top = tr.Position + Vector3.new(0, 200, 0)
-            local bot = tr.Position + Vector3.new(0, -8, 0)
-            if tkillDir < 0 then
-                my.CFrame = CFrame.new(top, tr.Position)
-                tkillDir = 1
-            end
-            local goal = tkillDir > 0 and bot or top
-            local dir = goal - my.Position
-            local step = math.min(1200 * 0.016, dir.Magnitude)
-            if dir.Magnitude > 1 then
-                my.CFrame = CFrame.new(my.Position + dir.Unit * step, tr.Position)
-            else
-                tkillDir = -tkillDir
-            end
-            my.AssemblyLinearVelocity = Vector3.zero
-            if UseGun then shootTarget(t) else activateKnife() end
-            return
-        end
-
-        if KillMethod == "stkill" then
-            my.CFrame = CFrame.new(tr.Position + Vector3.new(0, 8, 0), tr.Position)
-            my.AssemblyLinearVelocity = Vector3.zero
-            if UseGun then shootTarget(t) else activateKnife() end
-            return
-        end
-
-        local off = killOffset(tr)
-        local dest = CFrame.lookAt(tr.Position + off, tr.Position)
-        my.CFrame = dest
-        my.AssemblyLinearVelocity = Vector3.zero
-        if UseGun then shootTarget(t) else activateKnife() end
-    end)
-end
-
-local function startBring(target)
-    if not target then return end
-    if (tonumber(MySlot) or 1) > 1 then
-        startKill({ target }, false)
-        return
-    end
-    stopAll()
-    CurrentAction = "bring"
-    TargetPlayer = target
-    local saved = nil
+    if ActionConn then pcall(function() ActionConn:Disconnect() end) ActionConn = nil end
+    stopGlue()
     pcall(function()
-        local r = getRoot(LocalPlayer.Character)
-        if r then saved = r.CFrame end
-    end)
-    task.spawn(function()
-        local deadline = tick() + 20
-        while CurrentAction == "bring" and tick() < deadline do
-            if isKO(getChar(target)) then break end
-            if not hasForceField(getChar(target)) then
-                equipSelected()
-                local my = getRoot(LocalPlayer.Character)
-                local tr = getRoot(getChar(target))
-                if my and tr then
-                    my.CFrame = CFrame.new(tr.Position + Vector3.new(0, 3, 3), tr.Position)
-                    if UseGun then shootTarget(target) else activateKnife() end
-                end
-            end
-            task.wait(0.05)
-        end
-        if CurrentAction ~= "bring" then return end
-        -- grab
-        local my = getRoot(LocalPlayer.Character)
-        local tr = getRoot(getChar(target))
-        if my and tr then
-            my.CFrame = CFrame.new(tr.Position + Vector3.new(0, 2.5, 0))
-            task.wait(0.25)
-            pcall(function()
-                VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.G, false, game)
-                task.wait(0.05)
-                VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.G, false, game)
-            end)
-            task.wait(0.5)
-        end
-        local ctrl = getController()
-        local cr = getRoot(getChar(ctrl))
-        my = getRoot(LocalPlayer.Character)
-        if my and cr then
-            my.CFrame = cr.CFrame * CFrame.new(0, 0, 3)
-        elseif my and saved then
-            my.CFrame = saved
-        end
-        task.wait(0.2)
-        pcall(function()
-            VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.G, false, game)
-            task.wait(0.05)
-            VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.G, false, game)
-        end)
-        stopAll()
-        startFollow()
+        local h = getHum(LocalPlayer.Character)
+        if h then h:UnequipTools() end
     end)
 end
 
-local function parsePrefix(msg)
-    local lower = (msg or ""):lower():gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
-    if lower:sub(1, 1) == "!" or lower:sub(1, 1) == "." then
-        return lower:sub(2):match("^%s*(.-)%s*$")
+-------------------------------------------------------------
+-- Guns: find / equip / buy / multi-equip
+-------------------------------------------------------------
+local function toolMatches(tool, key)
+    if not tool or not tool:IsA("Tool") then return false end
+    local n = tool.Name:lower()
+    local info = GUN_MAP[key]
+    if not info then return n:find(key, 1, true) ~= nil end
+    for _, frag in ipairs(info.tools) do
+        if n:find(frag, 1, true) then return true end
     end
-    local bare = {
-        summon = true, follow = true, come = true, stop = true, idle = true,
-        kill = true, k = true, autokill = true, ak = true, bring = true, b = true,
-        gun = true, knife = true, reset = true, r = true,
-        ["return"] = true,
-        skykill = true, standkill = true, orbitkill = true, stkill = true, tkill = true,
-    }
-    local first = lower:match("^(%S+)")
-    if first and bare[first] then return lower end
+    return false
+end
+
+local function findTool(key, parent)
+    if not parent then return nil end
+    for _, t in ipairs(parent:GetChildren()) do
+        if toolMatches(t, key) then return t end
+    end
     return nil
 end
 
--- fix bare table - cannot use return= as key in source above - already fixed with bare["return"]
+local function hasGun(key)
+    local bag = LocalPlayer:FindFirstChild("Backpack")
+    local char = LocalPlayer.Character
+    return (findTool(key, bag) ~= nil) or (findTool(key, char) ~= nil)
+end
 
-local function onChat(player, message)
-    if not isOwner(player) then return end
-    local body = parsePrefix(message)
-    if not body then return end
-    local args = {}
-    for w in body:gmatch("%S+") do args[#args + 1] = w:lower() end
-    local cmd = args[1]
-    if not cmd then return end
+local function findClickDetector(obj)
+    if not obj then return nil end
+    local d = obj:FindFirstChildOfClass("ClickDetector") or obj:FindFirstChild("ClickDetector")
+    if d then return d end
+    for _, c in ipairs(obj:GetDescendants()) do
+        if c:IsA("ClickDetector") then return c end
+    end
+    return nil
+end
 
-    if cmd == "stop" or cmd == "idle" then
-        stopAll()
-    elseif cmd == "summon" or cmd == "follow" or cmd == "come" then
-        startFollow()
-    elseif cmd == "return" or cmd == "s" or cmd == "teleport" or cmd == "tp" then
-        startFollow()
-    elseif cmd == "gun" then
-        UseGun = true
-        equipSelected()
-    elseif cmd == "knife" and not args[2] then
-        UseGun = false
-        equipSelected()
-    elseif cmd == "rifle" or cmd == "db" or cmd == "rev" or cmd == "silencer" or cmd == "lmg" or cmd == "flintlock" or cmd == "aug" then
-        SelectedGun = cmd
-        UseGun = true
-        equipSelected()
-    elseif cmd == "orbit" or cmd == "orbitkill" then
-        KillMethod = "orbit"
-    elseif cmd == "skykill" or cmd == "sky" then
-        KillMethod = "sky"
-    elseif cmd == "standkill" or cmd == "stand" then
-        KillMethod = "stand"
-    elseif cmd == "stkill" or cmd == "stk" then
-        KillMethod = "stkill"
-    elseif cmd == "tkill" or cmd == "tweenkill" then
-        KillMethod = "tkill"
-    elseif cmd == "kill" or cmd == "k" then
-        local targets = {}
-        for i = 2, #args do
-            local p = findPlayer(args[i])
-            if p then targets[#targets + 1] = p end
+local function findShopPart(item)
+    if not item then return nil end
+    return item:FindFirstChild("Head")
+        or item:FindFirstChild("ClickDetector") and item:FindFirstChild("ClickDetector").Parent
+        or item:FindFirstChildWhichIsA("BasePart")
+end
+
+-- Da Hood shop: TP on top of item and spam fireclickdetector (max distance)
+local function fireShopClick(det)
+    if not det then return end
+    -- common executor APIs
+    pcall(function() fireclickdetector(det) end)
+    pcall(function() fireclickdetector(det, 0) end)
+    pcall(function() fireclickdetector(det, 10) end)
+    pcall(function() fireclickdetector(det, 100) end)
+    pcall(function()
+        if getconnections then
+            for _, c in ipairs(getconnections(det.MouseClick)) do
+                pcall(function() c:Fire(LocalPlayer) end)
+                pcall(function() c.Function(LocalPlayer) end)
+            end
         end
-        if #targets > 0 then startKill(targets, false) end
-    elseif cmd == "autokill" or cmd == "ak" or cmd == "a" then
-        local targets = {}
-        for i = 2, #args do
-            local p = findPlayer(args[i])
-            if p then targets[#targets + 1] = p end
+    end)
+end
+
+local function shopBuyItem(item, checkFn, tries)
+    tries = tries or 12
+    local root = getRoot(LocalPlayer.Character)
+    if not item or not root then return false end
+    local head = findShopPart(item)
+    local det = findClickDetector(item)
+    if not head then return false end
+    local origin = root.CFrame
+    for i = 1, tries do
+        if checkFn and checkFn() then break end
+        root = getRoot(LocalPlayer.Character)
+        if not root then break end
+        -- stand inside / on the shop part
+        root.CFrame = CFrame.new(head.Position + Vector3.new(0, 2.5, 0))
+        root.AssemblyLinearVelocity = Vector3.zero
+        task.wait(0.08)
+        if det then fireShopClick(det) end
+        -- also try clicking any detector under shop folder nearby
+        task.wait(0.08)
+    end
+    root = getRoot(LocalPlayer.Character)
+    if root then
+        root.CFrame = origin
+        root.AssemblyLinearVelocity = Vector3.zero
+    end
+    return checkFn and checkFn() or false
+end
+
+local function findShopItemByName(frags)
+    local ignored = Workspace:FindFirstChild("Ignored")
+    local shop = ignored and ignored:FindFirstChild("Shop")
+    if not shop then return nil end
+    for _, ch in ipairs(shop:GetChildren()) do
+        local n = ch.Name:lower()
+        for _, f in ipairs(frags) do
+            if n:find(tostring(f):lower():gsub("[%[%]]", ""), 1, true) then
+                return ch
+            end
         end
-        if #targets > 0 then startKill(targets, true) end
-    elseif cmd == "bring" or cmd == "b" or cmd == "get" then
-        local p = findPlayer(args[2])
-        if p then startBring(p) end
-    elseif cmd == "stomp" then
-        if args[2] == "off" then StompOnKill = false
-        elseif args[2] == "on" then StompOnKill = true
-        else StompOnKill = not StompOnKill end
-    elseif cmd == "autostomp" then
-        if args[2] == "off" then AutoStompEnabled = false
-        elseif args[2] == "on" then AutoStompEnabled = true
-        else AutoStompEnabled = not AutoStompEnabled end
-    elseif cmd == "slot" and args[2] then
-        local n = tonumber(args[2])
-        if n then MySlot = math.clamp(math.floor(n), 1, MaxBots) end
-    elseif cmd == "transfer" and args[2] then
-        ControllerName = args[2]
-    elseif cmd == "reclaim" or cmd == "revert" then
-        ControllerName = OriginalControllerName
-    elseif cmd == "whitelist" or cmd == "wl" then
-        if args[2] then Whitelist[args[2]:lower()] = true end
-    elseif cmd == "unwhitelist" or cmd == "unwl" then
-        if args[2] then Whitelist[args[2]:lower()] = nil end
-    elseif cmd == "reset" or cmd == "r" then
-        local hum = getHum(LocalPlayer.Character)
-        if hum then pcall(function() hum.Health = 0 end) end
-    elseif cmd == "leave" or cmd == "l" then
-        pcall(function() LocalPlayer:Kick("left") end)
-    elseif cmd == "help" or cmd == "cmds" then
-        print("[NAMELESS DH] kill/ak/bring/summon/gun/knife/skykill/standkill/orbit/stkill/tkill/stop")
+    end
+    return nil
+end
+
+local function buyGun(key)
+    local info = GUN_MAP[key]
+    if not info then return false end
+    if hasGun(key) then return true end
+    local frags = {}
+    if info.shop then frags[#frags + 1] = info.shop end
+    for _, f in ipairs(info.tools) do frags[#frags + 1] = f end
+    local item = findShopItemByName(frags)
+    if not item then return false end
+    return shopBuyItem(item, function() return hasGun(key) end, 15)
+end
+
+local function buyArmor()
+    local char = LocalPlayer.Character
+    local be = char and char:FindFirstChild("BodyEffects")
+    local armor = be and be:FindFirstChild("Armor")
+    if not armor then return false end
+    if armor.Value >= 100 then return true end
+    local item = findShopItemByName({ "medium armor", "[medium armor]", "armor" })
+    -- prefer exact medium armor $1000
+    local ignored = Workspace:FindFirstChild("Ignored")
+    local shop = ignored and ignored:FindFirstChild("Shop")
+    if shop then
+        item = shop:FindFirstChild("[Medium Armor] - $1000")
+            or shop:FindFirstChild("[Medium Armor]")
+            or item
+    end
+    if not item then return false end
+    local before = armor.Value
+    shopBuyItem(item, function()
+        local a = LocalPlayer.Character
+            and LocalPlayer.Character:FindFirstChild("BodyEffects")
+            and LocalPlayer.Character.BodyEffects:FindFirstChild("Armor")
+        return a and a.Value > before
+    end, 15)
+    local a = LocalPlayer.Character
+        and LocalPlayer.Character:FindFirstChild("BodyEffects")
+        and LocalPlayer.Character.BodyEffects:FindFirstChild("Armor")
+    return a and a.Value > before
+end
+
+local function findAmmoShopItem(key)
+    -- ONLY ammo for this gun key (never fall back to revolver/other)
+    key = tostring(key or ""):lower()
+    local info = GUN_MAP[key]
+    if not info then return nil end
+    local ignored = Workspace:FindFirstChild("Ignored")
+    local shop = ignored and ignored:FindFirstChild("Shop")
+    if not shop then return nil end
+
+    local must = {}
+    if info.ammo then
+        for _, a in ipairs(info.ammo) do
+            must[#must + 1] = tostring(a):lower():gsub("[%[%]]", "")
+        end
+    end
+    if info.shop then
+        local base = info.shop:lower():gsub("[%[%]]", "")
+        must[#must + 1] = base .. " ammo"
+    end
+    for _, frag in ipairs(info.tools or {}) do
+        must[#must + 1] = tostring(frag):lower() .. " ammo"
+    end
+
+    -- Primary: shop name contains ammo + this gun's keyword
+    for _, ch in ipairs(shop:GetChildren()) do
+        local n = ch.Name:lower()
+        if not n:find("ammo", 1, true) then
+            -- not ammo
+        else
+            for _, m in ipairs(must) do
+                if m ~= "" and n:find(m, 1, true) then
+                    return ch
+                end
+            end
+            -- gun keyword + "ammo" in name (e.g. "[Rifle Ammo] - $xx")
+            for _, frag in ipairs(info.tools or {}) do
+                local f = tostring(frag):lower()
+                if f ~= "" and n:find(f, 1, true) then
+                    return ch
+                end
+            end
+        end
+    end
+    return nil -- do NOT buy unrelated ammo
+end
+
+local function getToolAmmoCount()
+    local char = LocalPlayer.Character
+    local bag = LocalPlayer:FindFirstChild("Backpack")
+    local best = nil
+    for _, parent in ipairs({ char, bag }) do
+        if parent then
+            for _, tool in ipairs(parent:GetChildren()) do
+                if tool:IsA("Tool") and not tool.Name:lower():find("knife") then
+                    local ammo = tool:FindFirstChild("Ammo") or tool:FindFirstChild("AMMO")
+                        or tool:FindFirstChild("MaxAmmo")
+                    if ammo and typeof(ammo.Value) == "number" then
+                        return ammo.Value, tool
+                    end
+                    -- nested
+                    for _, d in ipairs(tool:GetDescendants()) do
+                        if d.Name:lower() == "ammo" and d:IsA("ValueBase") then
+                            return d.Value, tool
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return nil, nil
+end
+
+local function buyAmmoClicks(key, clicks)
+    if not AutoBuyAmmo then return false end
+    clicks = math.max(1, math.floor(clicks or 10))
+    key = tostring(key or ""):lower()
+    -- only selected guns; default to first selected, never force revolver
+    if key == "" or not GUN_MAP[key] then
+        key = SelectedGuns[1]
+    end
+    if not key or not GUN_MAP[key] then return false end
+    local item = findAmmoShopItem(key)
+    if not item then return false end -- no wrong-gun ammo
+    local root = getRoot(LocalPlayer.Character)
+    if not root then return false end
+    local head = findShopPart(item)
+    local det = findClickDetector(item)
+    if not head then return false end
+    local origin = root.CFrame
+    for i = 1, clicks do
+        root = getRoot(LocalPlayer.Character)
+        if not root then break end
+        root.CFrame = CFrame.new(head.Position + Vector3.new(0, 2.5, 0))
+        root.AssemblyLinearVelocity = Vector3.zero
+        if det then fireShopClick(det) end
+        task.wait(0.05)
+    end
+    root = getRoot(LocalPlayer.Character)
+    if root then
+        root.CFrame = origin
+        root.AssemblyLinearVelocity = Vector3.zero
+    end
+    return true
+end
+
+local function ensureGuns()
+    for _, key in ipairs(SelectedGuns) do
+        if not hasGun(key) and AutoBuyGuns then
+            local ok = false
+            pcall(function() ok = buyGun(key) end)
+            task.wait(0.15)
+            -- after buying a gun, buy bullets 30 times
+            if hasGun(key) then
+                pcall(function() buyAmmoClicks(key, AMMO_AFTER_GUN_CLICKS) end)
+            end
+            task.wait(0.1)
+        end
     end
 end
 
+-- Auto ammo when low (<= 3 bullets) -> buy 10 times for the SELECTED gun only
+local _ammoBusy = false
+local function gunKeyFromTool(tool)
+    if not tool then return nil end
+    local n = tool.Name:lower()
+    for key, info in pairs(GUN_MAP) do
+        for _, frag in ipairs(info.tools or {}) do
+            if n:find(tostring(frag):lower(), 1, true) then
+                return key
+            end
+        end
+    end
+    return nil
+end
+
+-- Every 4th reload -> buy ammo ONCE for selected gun
+local ReloadCount = 0
+local _ammoBusy = false
+
+local function doAmmoBuyOnce(key)
+    if _ammoBusy then return end
+    key = key or SelectedGuns[1]
+    if not key then return end
+    _ammoBusy = true
+    pcall(function() buyAmmoClicks(key, AMMO_LOW_CLICKS) end)
+    task.wait(0.5)
+    _ammoBusy = false
+end
+
+task.spawn(function()
+    local lastAmmo = nil
+    while true do
+        task.wait(0.2)
+        if not AutoBuyAmmo then
+            lastAmmo = nil
+        elseif CurrentAction ~= "bring" then
+            local count, tool = getToolAmmoCount()
+            if typeof(count) == "number" then
+                -- detect reload: ammo went from 0 (or low) up after reload
+                if lastAmmo ~= nil and lastAmmo <= AMMO_LOW_THRESHOLD and count > lastAmmo then
+                    ReloadCount = ReloadCount + 1
+                    if ReloadCount >= 4 then
+                        ReloadCount = 0
+                        local key = gunKeyFromTool(tool) or SelectedGuns[1]
+                        local allowed = false
+                        if key then
+                            for _, s in ipairs(SelectedGuns) do
+                                if s == key then allowed = true break end
+                            end
+                        end
+                        if not allowed then key = SelectedGuns[1] allowed = key ~= nil end
+                        if allowed then
+                            task.spawn(function() doAmmoBuyOnce(key) end)
+                        end
+                    end
+                end
+                lastAmmo = count
+            end
+        end
+    end
+end)
+
+local function equipSelectedGuns()
+    ensureGuns()
+    local bag = LocalPlayer:FindFirstChild("Backpack")
+    local char = LocalPlayer.Character
+    if not char then return nil end
+    local hum = getHum(char)
+    if not hum then return nil end
+    -- Equip first available selected gun (Roblox only shows one; we cycle if needed)
+    for _, key in ipairs(SelectedGuns) do
+        local t = findTool(key, char) or findTool(key, bag)
+        if t then
+            pcall(function() hum:EquipTool(t) end)
+            return t
+        end
+    end
+    -- any gun
+    if bag then
+        for _, t in ipairs(bag:GetChildren()) do
+            if t:IsA("Tool") and t:FindFirstChild("Handle") and not t.Name:lower():find("knife") then
+                pcall(function() hum:EquipTool(t) end)
+                return t
+            end
+        end
+    end
+    return nil
+end
+
+local function equipKnife()
+    local bag = LocalPlayer:FindFirstChild("Backpack")
+    local char = LocalPlayer.Character
+    local hum = getHum(char)
+    if not hum then return nil end
+    for _, parent in ipairs({ char, bag }) do
+        if parent then
+            for _, t in ipairs(parent:GetChildren()) do
+                if t:IsA("Tool") and t.Name:lower():find("knife") then
+                    pcall(function() hum:EquipTool(t) end)
+                    return t
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function tryReload()
+    if not AutoReload then return end
+    local me = refreshMainEvent()
+    local char = LocalPlayer.Character
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool or tool.Name:lower():find("knife") then return end
+    -- ammo empty or low
+    local ammo = tool:FindFirstChild("Ammo") or tool:FindFirstChild("AMMO")
+    local need = true
+    if ammo and typeof(ammo.Value) == "number" then
+        need = ammo.Value <= 0
+    end
+    if not need then return end
+    if me then
+        pcall(function() me:FireServer("Reload") end)
+        pcall(function() me:FireServer("Reload", tool) end)
+    end
+    pcall(function()
+        local r = tool:FindFirstChild("Reload") or tool:FindFirstChild("Remote")
+        if r and r:IsA("RemoteEvent") then r:FireServer() end
+    end)
+end
+
+-- AutoReload loop (always on when enabled)
+task.spawn(function()
+    while true do
+        task.wait(0.15)
+        if AutoReload then
+            pcall(tryReload)
+        end
+    end
+end)
+
+-------------------------------------------------------------
+-- Shoot (Da Hood Ragebot style) + Stomp
+-------------------------------------------------------------
+local function shootTarget(target)
+    local me = refreshMainEvent()
+    if not me or not target then return false end
+    local tChar = getChar(target)
+    if not tChar or isKO(tChar) or hasForceField(tChar) then return false end
+    local char = LocalPlayer.Character
+    if not char then return false end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if not tool or not tool:FindFirstChild("Handle") or tool.Name:lower():find("knife") then
+        tool = equipSelectedGuns()
+    end
+    if not tool or not tool:FindFirstChild("Handle") then return false end
+    local handle = tool.Handle
+    local head = tChar:FindFirstChild("Head") or getRoot(tChar)
+    if not head then return false end
+    for _ = 1, 3 do
+        pcall(function()
+            me:FireServer("ShootGun", handle, handle.Position, head.Position + Vector3.new(0, 1, 0), head, Vector3.new())
+        end)
+        pcall(function() tool:Activate() end)
+    end
+    tryReload()
+    return true
+end
+
+local function knifeHit(target)
+    local tChar = getChar(target)
+    if not tChar or isKO(tChar) then return false end
+    local tool = equipKnife()
+    local my = getRoot(LocalPlayer.Character)
+    local tr = getRoot(tChar)
+    if not my or not tr then return false end
+    my.CFrame = tr.CFrame * CFrame.new(0, 0, 2)
+    if tool then pcall(function() tool:Activate() end) end
+    return true
+end
+
+local function doStomp(target)
+    if MySlot ~= StompBotSlot and MySlot ~= 1 then return end
+    if not StompOnKill and not AutoStompEnabled then return end
+    local me = refreshMainEvent()
+    local tChar = getChar(target)
+    if not tChar then return end
+    local be = tChar:FindFirstChild("BodyEffects")
+    local ko = be and (be:FindFirstChild("K.O") or be:FindFirstChild("KO"))
+    if ko and not ko.Value then return end
+    if isGrabbed(target) then return end
+    local my = getRoot(LocalPlayer.Character)
+    local ut = tChar:FindFirstChild("UpperTorso") or getRoot(tChar)
+    if not my or not ut then return end
+    local last = my.CFrame
+    my.CFrame = CFrame.new(ut.Position + Vector3.new(0, 2.5, 0))
+    for _ = 1, 8 do
+        if me then pcall(function() me:FireServer("Stomp") end) end
+        RunService.Heartbeat:Wait()
+        if ut.Parent then my.CFrame = CFrame.new(ut.Position + Vector3.new(0, 2.5, 0)) end
+    end
+    task.wait(0.1)
+    if my.Parent then my.CFrame = last end
+end
+
+-------------------------------------------------------------
+-- Kill methods
+-------------------------------------------------------------
+local function posSky(slot, targetRoot)
+    local a = ((slot - 1) / math.max(MaxBots, 1)) * math.pi * 2
+    local r = 12
+    return CFrame.new(targetRoot.Position + Vector3.new(math.cos(a) * r, 200, math.sin(a) * r), targetRoot.Position)
+end
+
+local function posStand(slot, targetRoot)
+    -- behind target at 3 studs (slot spreads slightly left/right)
+    local side = ((slot - 1) % 5 - 2) * 1.2
+    return targetRoot.CFrame * CFrame.new(side, 1.5, 3)
+end
+
+local function posOrbit(slot, targetRoot, ang)
+    local a = ang + ((slot - 1) / math.max(MaxBots, 1)) * math.pi * 2
+    local r = OrbitRadius or 5
+    return CFrame.new(targetRoot.Position + Vector3.new(math.cos(a) * r, 2, math.sin(a) * r), targetRoot.Position)
+end
+
+local function killStep(target)
+    if not target or isWhitelisted(target) then return true end
+    local tChar = getChar(target)
+    if not tChar or isKO(tChar) then return true end
+    if hasForceField(tChar) then return false end
+    local tr = getRoot(tChar)
+    local my = getRoot(LocalPlayer.Character)
+    if not tr or not my then return false end
+
+    my.CanCollide = false
+
+    if KillMethod == "skykill" then
+        my.CFrame = posSky(MySlot, tr)
+        shootTarget(target)
+    elseif KillMethod == "standkill" then
+        my.CFrame = posStand(MySlot, tr)
+        shootTarget(target)
+    elseif KillMethod == "orbitkill" then
+        OrbitAngle = OrbitAngle + (OrbitSpeed or 4) * 0.05
+        my.CFrame = posOrbit(MySlot, tr, OrbitAngle)
+        shootTarget(target)
+    elseif KillMethod == "knifekill" then
+        if MySlot == 1 then
+            startGlue("knife", target)
+            knifeHit(target)
+        else
+            my.CFrame = posStand(MySlot, tr)
+        end
+    elseif KillMethod == "stkill" then
+        -- handled in dedicated loop (spam teleport kill)
+        return false
+    else
+        OrbitAngle = OrbitAngle + 0.15
+        my.CFrame = posOrbit(MySlot, tr, OrbitAngle)
+        shootTarget(target)
+    end
+    my.AssemblyLinearVelocity = Vector3.zero
+    return false
+end
+
+local function startKill(targets, isAuto, method)
+    stopAll()
+    if typeof(targets) ~= "table" then targets = { targets } end
+    local filtered = {}
+    for _, p in ipairs(targets) do
+        if p and not isWhitelisted(p) then filtered[#filtered + 1] = p end
+    end
+    if #filtered == 0 then return end
+    if method then KillMethod = method end
+    if KillMethod ~= "knifekill" then
+        if #SelectedGuns == 0 then SelectedGuns = { "rifle" } end
+        equipSelectedGuns()
+    end
+    TargetList = filtered
+    TargetPlayer = filtered[1]
+    CurrentAction = isAuto and "autokill" or "kill"
+
+    -- !stkill / spam teleport kill
+    if KillMethod == "stkill" then
+        ActionConn = nil
+        task.spawn(function()
+            while CurrentAction == "kill" or CurrentAction == "autokill" do
+                local live = nil
+                for _, p in ipairs(TargetList) do
+                    if p and getChar(p) and not isKO(getChar(p)) then
+                        live = p
+                        break
+                    end
+                end
+                if not live then
+                    -- all down: stomp then wait / stop
+                    if StompOnKill and (MySlot == 1 or MySlot == StompBotSlot) then
+                        for _, p in ipairs(TargetList) do
+                            pcall(function() doStomp(p) end)
+                            task.wait(0.08)
+                        end
+                    end
+                    if not isAuto then
+                        stopAll()
+                        break
+                    end
+                    task.wait(0.4)
+                else
+                    TargetPlayer = live
+                    local my = getRoot(LocalPlayer.Character)
+                    local ctrl = getController()
+                    local cr = getRoot(getChar(ctrl))
+                    -- 1) teleport to controller
+                    if my and cr then
+                        my.CFrame = cr.CFrame * CFrame.new(0, 2, 2)
+                        my.AssemblyLinearVelocity = Vector3.zero
+                    end
+                    task.wait(0.08)
+                    -- 2) wait until forcefield off
+                    local waited = 0
+                    while getChar(live) and hasForceField(getChar(live)) and waited < 5 do
+                        task.wait(0.1)
+                        waited = waited + 0.1
+                        if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then break end
+                    end
+                    if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then break end
+                    -- 3) teleport to target and shoot until KO
+                    local t0 = tick()
+                    while getChar(live) and not isKO(getChar(live)) and tick() - t0 < 8 do
+                        if hasForceField(getChar(live)) then
+                            task.wait(0.1)
+                        else
+                            local tr = getRoot(getChar(live))
+                            my = getRoot(LocalPlayer.Character)
+                            if my and tr then
+                                my.CFrame = tr.CFrame * CFrame.new(0, 2, 3)
+                                my.AssemblyLinearVelocity = Vector3.zero
+                                my.CanCollide = false
+                            end
+                            equipSelectedGuns()
+                            shootTarget(live)
+                        end
+                        task.wait(0.05)
+                        if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then break end
+                    end
+                    -- 4) stomp
+                    if StompOnKill and (MySlot == 1 or MySlot == StompBotSlot) then
+                        pcall(function() doStomp(live) end)
+                    end
+                    -- 5) teleport back to controller
+                    my = getRoot(LocalPlayer.Character)
+                    cr = getRoot(getChar(getController()))
+                    if my and cr then
+                        my.CFrame = cr.CFrame * CFrame.new(0, 2, 2)
+                        my.AssemblyLinearVelocity = Vector3.zero
+                    end
+                    task.wait(0.12)
+                end
+            end
+        end)
+        return
+    end
+
+    startGlue(KillMethod == "knifekill" and "knife" or "gun", TargetPlayer)
+    local stompIdx = 1
+
+    ActionConn = RunService.Heartbeat:Connect(function()
+        if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then return end
+        refreshChar()
+        -- find next living target
+        local live = nil
+        for _, p in ipairs(TargetList) do
+            if p and not isKO(getChar(p)) and getChar(p) then
+                live = p
+                break
+            end
+        end
+        if live then
+            TargetPlayer = live
+            killStep(live)
+        else
+            -- all down -> stomp all (slot 1)
+            if StompOnKill and (MySlot == 1 or MySlot == StompBotSlot) then
+                for _, p in ipairs(TargetList) do
+                    pcall(function() doStomp(p) end)
+                    task.wait(0.1)
+                end
+            end
+            if isAuto then
+                -- wait for respawn then continue
+                task.wait(0.5)
+            else
+                stopAll()
+                local ctrl = getController()
+                if ctrl then
+                    CurrentAction = "follow"
+                    startFollow(ctrl)
+                end
+            end
+        end
+    end)
+end
+
+-------------------------------------------------------------
+-- Follow / Formations
+-------------------------------------------------------------
+function startFollow(target)
+    stopAll()
+    target = target or getController()
+    if not target then return end
+    CurrentAction = "follow"
+    TargetPlayer = target
+    -- HC style: snap CFrame then continuous CFrame+PhysicsRep glue
+    startGlue("follow", target)
+end
+
+local function startFormation(kind, targetName)
+    local target = findPlayer(targetName) or getController()
+    if not target then return end
+    stopAll()
+    CurrentAction = "formation"
+    FormationType = kind
+    FormationTarget = target
+    TargetPlayer = target
+    startGlue("formation", target)
+end
+
+local function tpToController()
+    local ctrl = getController()
+    local tr = getRoot(getChar(ctrl))
+    local my = getRoot(LocalPlayer.Character)
+    if tr and my then
+        my.CFrame = tr.CFrame * CFrame.new(0, 2, 3)
+    end
+end
+
+local function safeSpot()
+    local my = getRoot(LocalPlayer.Character)
+    if my then
+        my.CFrame = CFrame.new(322.43, 34.99, -604.27)
+    end
+end
+
+-------------------------------------------------------------
+-- Always-on: AntiStomp, AutoBlock, AutoArmor, AutoReload
+-------------------------------------------------------------
+-- AntiStomp (upgraded): on KO force dead + hard reset so others cannot stomp
+local _antiStompBusy = false
+local function forceAntiStomp()
+    if _antiStompBusy then return end
+    _antiStompBusy = true
+    local char = LocalPlayer.Character
+    local be = char and char:FindFirstChild("BodyEffects")
+    local hum = char and getHum(char)
+    pcall(function()
+        if be then
+            local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
+            local dead = be:FindFirstChild("Dead")
+            local sdeath = be:FindFirstChild("SDeath")
+            if ko then ko.Value = true end
+            if dead then dead.Value = true end
+            if sdeath then sdeath.Value = false end
+        end
+        if hum then
+            hum.Health = 0
+            pcall(function() hum:ChangeState(Enum.HumanoidStateType.Dead) end)
+        end
+        if char then pcall(function() char:BreakJoints() end) end
+    end)
+    pcall(function()
+        if replicatesignal and LocalPlayer.Kill then replicatesignal(LocalPlayer.Kill) end
+    end)
+    task.defer(function()
+        task.wait(0.35)
+        if AutoBuyGuns then pcall(ensureGuns) end
+        _antiStompBusy = false
+    end)
+end
+
+RunService.Heartbeat:Connect(function()
+    if not AntiStomp then return end
+    local char = LocalPlayer.Character
+    if not char then return end
+    local be = char:FindFirstChild("BodyEffects")
+    local hum = getHum(char)
+    if not be or not hum then return end
+    local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
+    if (ko and ko.Value == true) or hum.Health <= 0 then
+        forceAntiStomp()
+    end
+end)
+
+-- AutoBlock (upgraded): block when anyone nearby is attacking with a non-food tool
+local BLOCK_DIST = 18
+local FOOD_TOOLS = {
+    ["[Popcorn]"]=true,["[HotDog]"]=true,["[Hamburger]"]=true,["[Chicken]"]=true,
+    ["[Pizza]"]=true,["[Taco]"]=true,["[Donut]"]=true,["[Cranberry]"]=true,
+    ["[Starblox Latte]"]=true,["[BrownBag]"]=true,["[Weights]"]=true,["[HeavyWeights]"]=true,
+}
+RunService.Heartbeat:Connect(function()
+    if not AutoBlock then return end
+    local me = refreshMainEvent()
+    local char = LocalPlayer.Character
+    local my = getRoot(char)
+    local be = char and char:FindFirstChild("BodyEffects")
+    if not me or not my then return end
+    local found = false
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and plr.Character then
+            local ur = getRoot(plr.Character)
+            if ur and (ur.Position - my.Position).Magnitude <= BLOCK_DIST then
+                local vbe = plr.Character:FindFirstChild("BodyEffects")
+                local attacking = vbe and vbe:FindFirstChild("Attacking")
+                local tool = plr.Character:FindFirstChildOfClass("Tool")
+                local toolName = tool and tool.Name or ""
+                if attacking and attacking.Value == true and not FOOD_TOOLS[toolName] then
+                    found = true
+                    pcall(function() me:FireServer("Block", true) end)
+                    pcall(function() me:FireServer("Block", LocalPlayer.Name) end)
+                    break
+                end
+            end
+        end
+    end
+    if not found and be then
+        local blk = be:FindFirstChild("Block")
+        if blk then pcall(function() blk:Destroy() end) end
+    end
+end)
+
+-- Auto Armor
+local _armorBusy = false
+task.spawn(function()
+    while true do
+        task.wait(0.5)
+        if AutoArmor and not _armorBusy then
+            local char = LocalPlayer.Character
+            local be = char and char:FindFirstChild("BodyEffects")
+            local armor = be and be:FindFirstChild("Armor")
+            -- skip while killing / bringing so we don't leave the fight forever
+            if armor and armor.Value <= ArmorBuyPercent
+                and CurrentAction ~= "kill" and CurrentAction ~= "autokill" and CurrentAction ~= "bring" then
+                _armorBusy = true
+                pcall(buyArmor)
+                _armorBusy = false
+            end
+        end
+    end
+end)
+
+-- Auto stomp nearby KO (optional toggle) - only slot 1
+RunService.Heartbeat:Connect(function()
+    if not AutoStompEnabled then return end
+    if MySlot ~= 1 and MySlot ~= StompBotSlot then return end
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and not isWhitelisted(p) then
+            local c = getChar(p)
+            if c and isKO(c) and not isGrabbed(p) then
+                local my = getRoot(LocalPlayer.Character)
+                local ur = getRoot(c)
+                if my and ur and (my.Position - ur.Position).Magnitude < 40 then
+                    doStomp(p)
+                    break
+                end
+            end
+        end
+    end
+end)
+
+-- Spinbot
+RunService.Heartbeat:Connect(function()
+    if not SpinbotEnabled then return end
+    local r = getRoot(LocalPlayer.Character)
+    if r then
+        r.CFrame = r.CFrame * CFrame.Angles(0, math.rad(SpinbotSpeed or 25), 0)
+    end
+end)
+
+-- Hold gun/knife
+RunService.Heartbeat:Connect(function()
+    if not HoldMode then return end
+    if HoldMode == "knife" then equipKnife()
+    else equipSelectedGuns() end
+end)
+
+-------------------------------------------------------------
+-- Dance / Say
+-------------------------------------------------------------
+local function stopDance()
+    if DanceTrack then pcall(function() DanceTrack:Stop() end) DanceTrack = nil end
+    CurrentDance = nil
+end
+
+local function playDance(name)
+    stopDance()
+    local id = DANCES[name] or DANCES[name:lower()]
+    if not id then
+        -- random
+        for k, v in pairs(DANCES) do id = v break end
+    end
+    if not id then return end
+    local hum = getHum(LocalPlayer.Character)
+    if not hum then return end
+    pcall(function()
+        local a = Instance.new("Animation")
+        a.AnimationId = id
+        DanceTrack = hum:LoadAnimation(a)
+        DanceTrack.Looped = true
+        DanceTrack:Play()
+        CurrentDance = name
+    end)
+end
+
+local function botSay(msg)
+    pcall(function()
+        local tcs = game:GetService("TextChatService")
+        local ch = tcs and tcs.TextChannels and tcs.TextChannels:FindFirstChild("RBXGeneral")
+        if ch and ch.SendAsync then ch:SendAsync(tostring(msg)) return end
+    end)
+    pcall(function()
+        local ev = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+        if ev and ev:FindFirstChild("SayMessageRequest") then
+            ev.SayMessageRequest:FireServer(tostring(msg), "All")
+        end
+    end)
+end
+
+-------------------------------------------------------------
+-- Bring
+-------------------------------------------------------------
+local function startBring(name)
+    local target = findPlayer(name)
+    if not target then return end
+    if MySlot ~= 1 then return end
+    stopAll()
+    CurrentAction = "bring"
+    TargetPlayer = target
+    KillMethod = KillMethod or "orbitkill"
+    task.spawn(function()
+        local t0 = tick()
+        -- CFrame kill only (no glue)
+        while tick() - t0 < 12 and getChar(target) and not isKO(getChar(target)) do
+            if hasForceField(getChar(target)) then
+                task.wait(0.1)
+            else
+                local tr = getRoot(getChar(target))
+                local my = getRoot(LocalPlayer.Character)
+                if my and tr then
+                    my.CFrame = tr.CFrame * CFrame.new(0, 2, 3)
+                    my.AssemblyLinearVelocity = Vector3.zero
+                    my.CanCollide = false
+                end
+                equipSelectedGuns()
+                shootTarget(target)
+            end
+            task.wait(0.05)
+            if CurrentAction ~= "bring" then return end
+        end
+        task.wait(0.25)
+        -- CFrame onto body, grab, CFrame to controller, drop
+        local tr = getRoot(getChar(target))
+        local my = getRoot(LocalPlayer.Character)
+        if tr and my then
+            my.CFrame = tr.CFrame * CFrame.new(0, 1.2, 0)
+            my.AssemblyLinearVelocity = Vector3.zero
+            local me = refreshMainEvent()
+            if me then pcall(function() me:FireServer("Grabbing", true) end) end
+            task.wait(0.45)
+            local ctrl = getController()
+            local cr = getRoot(getChar(ctrl))
+            if cr and my.Parent then
+                my.CFrame = cr.CFrame * CFrame.new(0, 2, 0)
+                my.AssemblyLinearVelocity = Vector3.zero
+            end
+            task.wait(0.25)
+            if me then pcall(function() me:FireServer("Grabbing", false) end) end
+        end
+        stopAll()
+        startFollow(getController())
+    end)
+end
+
+-------------------------------------------------------------
+-- Commands
+-------------------------------------------------------------
+local KNOWN_CMDS = {
+    kill=true, k=true, autokill=true, ak=true, a=true,
+    orbitkill=true, skykill=true, standkill=true, knifekill=true, stkill=true, spamtteleportkill=true, stk=true,
+    gun=true, knife=true, stop=true, idle=true, stomp=true,
+    summon=true, follow=true, come=true, teleport=true, tp=true, ["return"]=true,
+    around=true, back=true, bline=true, line=true, orbit=true,
+    s=true, safe=true, ownerpos=true, powner=true, unownerpos=true,
+    rifle=true, db=true, rev=true, silencer=true, lmg=true, flintlock=true, guns=true,
+    autostomp=true, spinbot=true, spin=true, hold=true, ghold=true, khold=true, unhold=true,
+    dance=true, reset=true, r=true, leave=true, l=true, slot=true, rows=true, perrow=true, load=true,
+    transfer=true, reclaim=true, revert=true, returnowner=true,
+    whitelist=true, wl=true, unwhitelist=true, unwl=true,
+    addowner=true, removeowner=true, bot=true, unbot=true,
+    bring=true, b=true, say=true, help=true, cmds=true,
+}
+
+local function parseArgs(msg)
+    msg = tostring(msg or ""):gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
+    if msg == "" then return nil end
+    local body = nil
+    local c1 = msg:sub(1, 1)
+    if c1 == "!" or c1 == "." then
+        body = msg:sub(2)
+    else
+        local lower = msg:lower()
+        local a, b = lower:find("nameless%.hvh%s*|%s*!")
+        if a == 1 then
+            body = msg:sub(b + 1)
+        else
+            -- no prefix: "k user" / "teleport" / "ak name"
+            local first = lower:match("^(%S+)")
+            if first and KNOWN_CMDS[first] then
+                body = msg
+            end
+        end
+    end
+    if not body then return nil end
+    body = body:match("^%s*(.-)%s*$") or body
+    local args = {}
+    for w in body:gmatch("%S+") do args[#args + 1] = w end
+    return args
+end
+
+local function onChat(player, message)
+    if not isOwner(player) then return end
+    local args = parseArgs(message)
+    if not args or not args[1] then return end
+    local cmd = args[1]:lower()
+    local a2 = args[2]
+    local a3 = args[3]
+
+    local function collectTargets(startIdx)
+        local list = {}
+        for i = startIdx or 2, #args do
+            for part in tostring(args[i]):gmatch("[^,]+") do
+                local p = findPlayer(part)
+                if p then list[#list + 1] = p end
+            end
+        end
+        return list
+    end
+
+    -- KILL
+    if cmd == "kill" or cmd == "k" then
+        local t = collectTargets(2)
+        if #t > 0 then startKill(t, false, KillMethod) end
+    elseif cmd == "autokill" or cmd == "ak" or cmd == "a" then
+        local t = collectTargets(2)
+        if #t > 0 then startKill(t, true, KillMethod) end
+    elseif cmd == "orbitkill" then
+        KillMethod = "orbitkill"
+        local t = collectTargets(2)
+        if #t > 0 then startKill(t, true, "orbitkill") end
+    elseif cmd == "skykill" then
+        KillMethod = "skykill"
+        local t = collectTargets(2)
+        if #t > 0 then startKill(t, true, "skykill") end
+    elseif cmd == "standkill" then
+        KillMethod = "standkill"
+        local t = collectTargets(2)
+        if #t > 0 then startKill(t, true, "standkill") end
+    elseif cmd == "knifekill" then
+        KillMethod = "knifekill"
+        local t = collectTargets(2)
+        if #t > 0 then startKill(t, false, "knifekill") end
+    elseif cmd == "stkill" or cmd == "spamtteleportkill" or cmd == "spamtpreleportkill" or cmd == "stk" then
+        KillMethod = "stkill"
+        local t = collectTargets(2)
+        if #t > 0 then startKill(t, true, "stkill") end
+    elseif cmd == "gun" then
+        UseKnife = false
+        equipSelectedGuns()
+    elseif cmd == "knife" then
+        UseKnife = true
+        equipKnife()
+    elseif cmd == "stop" or cmd == "idle" then
+        stopAll()
+    elseif cmd == "stomp" then
+        if a2 == "off" then StompOnKill = false
+        elseif a2 == "on" then StompOnKill = true
+        else StompOnKill = not StompOnKill end
+
+    -- FORMATIONS / TELEPORT (no glue - CFrame only)
+    elseif cmd == "teleport" or cmd == "tp" or cmd == "summon" or cmd == "follow" or cmd == "come" then
+        -- !teleport = TP + hold position on controller (CFrame), not glue
+        startFollow(getController())
+    elseif cmd == "return" then
+        startFollow(getController())
+    elseif cmd == "around" then startFormation("around", a2)
+    elseif cmd == "back" then startFormation("back", a2)
+    elseif cmd == "bline" then startFormation("bline", a2)
+    elseif cmd == "line" then startFormation("line", a2)
+    elseif cmd == "orbit" and not a2 then startFormation("orbit", nil)
+    elseif cmd == "orbit" and a2 then startFormation("orbit", a2)
+    elseif cmd == "s" then tpToController()
+    elseif cmd == "safe" then safeSpot()
+    elseif cmd == "ownerpos" or cmd == "powner" then
+        CurrentAction = "ownerpos"
+        FollowConn = RunService.Heartbeat:Connect(function()
+            if CurrentAction ~= "ownerpos" then return end
+            local tr = getRoot(getChar(getController()))
+            local my = getRoot(LocalPlayer.Character)
+            if tr and my then my.CFrame = tr.CFrame end
+        end)
+    elseif cmd == "unownerpos" then stopAll()
+
+    -- GUNS
+    elseif cmd == "rifle" or cmd == "db" or cmd == "rev" or cmd == "silencer"
+        or cmd == "lmg" or cmd == "aug" or cmd == "flintlock" then
+        -- multi select: !rifle !db keeps both if we append
+        local key = cmd
+        if cmd == "rev" then key = "rev" end
+        local found = false
+        for _, g in ipairs(SelectedGuns) do if g == key then found = true break end end
+        if not found then SelectedGuns[#SelectedGuns + 1] = key end
+        -- if only setting one primary, user can !gun first - for simplicity set as list
+        ensureGuns()
+        equipSelectedGuns()
+    elseif cmd == "guns" and a2 then
+        -- !guns rifle,db,lmg
+        SelectedGuns = {}
+        for part in tostring(a2):gmatch("[^,]+") do
+            part = part:lower():match("^%s*(.-)%s*$")
+            if GUN_MAP[part] then SelectedGuns[#SelectedGuns + 1] = part end
+        end
+        if #SelectedGuns == 0 then SelectedGuns = { "rifle" } end
+        ensureGuns()
+        equipSelectedGuns()
+
+    -- TOGGLES
+    elseif cmd == "autostomp" then
+        if a2 == "off" then AutoStompEnabled = false
+        elseif a2 == "on" then AutoStompEnabled = true
+        else AutoStompEnabled = not AutoStompEnabled end
+    elseif cmd == "spinbot" or cmd == "spin" then
+        if a2 and tonumber(a2) then SpinbotSpeed = tonumber(a2) SpinbotEnabled = true
+        else SpinbotEnabled = not SpinbotEnabled end
+    elseif cmd == "hold" or cmd == "ghold" then HoldMode = "gun" equipSelectedGuns()
+    elseif cmd == "khold" then HoldMode = "knife" equipKnife()
+    elseif cmd == "unhold" then HoldMode = nil
+    elseif cmd == "dance" then
+        if a2 == "off" then stopDance()
+        else playDance(a2 or "aura") end
+    elseif cmd == "reset" or cmd == "r" then
+        pcall(function()
+            local h = getHum(LocalPlayer.Character)
+            if h then h.Health = 0 end
+        end)
+    elseif cmd == "leave" or cmd == "l" then
+        pcall(function() game:Shutdown() end)
+        pcall(function() LocalPlayer:Kick("Stand left") end)
+    elseif cmd == "slot" and a2 and tonumber(a2) then
+        MySlot = math.clamp(math.floor(tonumber(a2)), 1, MaxBots)
+    elseif cmd == "rows" and a2 and tonumber(a2) then
+        FormationRows = math.max(1, math.floor(tonumber(a2)))
+    elseif cmd == "perrow" and a2 and tonumber(a2) then
+        FormationPerRow = math.max(1, math.floor(tonumber(a2)))
+    elseif cmd == "load" then
+        -- no GUI by design
+        botSay("Nameless DH stand: chat only (no GUI)")
+
+    -- OWNERSHIP
+    elseif cmd == "transfer" and a2 then
+        local p = findPlayer(a2)
+        if p then ControllerName = p.Name end
+    elseif cmd == "reclaim" or cmd == "revert" or cmd == "returnowner" then
+        if player.Name:lower() == OriginalControllerName:lower() then
+            ControllerName = OriginalControllerName
+            ExtraOwners = {}
+        end
+    elseif cmd == "whitelist" or cmd == "wl" then
+        if a2 then
+            local p = findPlayer(a2)
+            Whitelist[(p and p.Name or a2):lower()] = true
+        end
+    elseif cmd == "unwhitelist" or cmd == "unwl" then
+        if a2 then
+            local p = findPlayer(a2)
+            Whitelist[(p and p.Name or a2):lower()] = nil
+        end
+    elseif cmd == "addowner" and a2 then
+        local p = findPlayer(a2)
+        if p then ExtraOwners[#ExtraOwners + 1] = p.Name end
+    elseif cmd == "removeowner" and a2 then
+        local n = a2:lower()
+        local nn = {}
+        for _, e in ipairs(ExtraOwners) do
+            if e:lower() ~= n then nn[#nn + 1] = e end
+        end
+        ExtraOwners = nn
+    elseif cmd == "bot" or cmd == "unbot" then
+        -- reserved
+    elseif cmd == "bring" or cmd == "b" then
+        if a2 then startBring(a2) end
+    elseif cmd == "say" then
+        local text = table.concat(args, " ", 2)
+        if text ~= "" then botSay(text) end
+    elseif cmd == "help" or cmd == "cmds" then
+        botSay("Nameless DH: !summon !ak !skykill !orbitkill !standkill !knifekill !stop !dance")
+    end
+end
+
+-- Chat connections
 for _, p in ipairs(Players:GetPlayers()) do
     p.Chatted:Connect(function(msg) onChat(p, msg) end)
 end
@@ -603,31 +1613,33 @@ Players.PlayerAdded:Connect(function(p)
     p.Chatted:Connect(function(msg) onChat(p, msg) end)
 end)
 
--- TextChatService support
-pcall(function()
-    local TCS = game:GetService("TextChatService")
-    local ch = TCS:FindFirstChild("TextChannels")
-    local function hook(channel)
-        if not channel or not channel.MessageReceived then return end
-        channel.MessageReceived:Connect(function(msg)
-            local src = msg.TextSource
-            local plr = src and Players:GetPlayerByUserId(src.UserId)
-            if plr and msg.Text then onChat(plr, msg.Text) end
-        end)
-    end
-    if ch then
-        for _, c in ipairs(ch:GetChildren()) do hook(c) end
-        ch.ChildAdded:Connect(hook)
-    end
+LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    refreshChar()
+    if AutoBuyGuns then task.defer(ensureGuns) end
+    if CurrentDance then task.defer(function() playDance(CurrentDance) end) end
 end)
 
-pcall(function()
-    game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
-        Text = "Stand loaded successfully! Controller: " .. tostring(ControllerName) .. " | Slot " .. tostring(MySlot),
-        Color = Color3.fromRGB(120, 200, 255),
-        Font = Enum.Font.SourceSansBold,
-        TextSize = 16,
-    })
+refreshChar()
+pcall(function() workspace.FallenPartsDestroyHeight = -0 / 0 end)
+
+task.defer(function()
+    task.wait(0.8)
+    pcall(function()
+        local tcs = game:GetService("TextChatService")
+        local ch = tcs and tcs.TextChannels and (tcs.TextChannels:FindFirstChild("RBXGeneral") or tcs.TextChannels:FindFirstChild("RBXSystem"))
+        if ch and ch.SendAsync then
+            ch:SendAsync("executed!")
+            return
+        end
+    end)
+    pcall(function()
+        local ev = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
+        if ev and ev:FindFirstChild("SayMessageRequest") then
+            ev.SayMessageRequest:FireServer("executed!", "All")
+        end
+    end)
 end)
 
-print("[NAMELESS DH STAND] ready | slot", MySlot, "| controller", ControllerName)
+print("[NAMELESS DH] Stand loaded | controller=" .. ControllerName .. " | slot=" .. tostring(MySlot))
+print("Prefix: ! or . | chat only | no GUI | CFrame only")
