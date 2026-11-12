@@ -244,7 +244,7 @@ ForceHitFireRate = RapidFireEnabled and RapidFireRate or NormalFireRate
 getgenv().FH_Index = getgenv().FH_Index or 0
 BotEspEnabled = true
 AntiLagEnabled = true
-OptMode = true
+OptMode = false
 OptCullRange = 50
 OptConn = nil
 VisualStripEnabled = false
@@ -2463,15 +2463,16 @@ end
 
 function F.ApplyTinyHitbox(char)
     if not char then return end
+    -- ONLY knife/tool hitboxes (do NOT massless body parts - that freezes bots for others)
     for _, part in ipairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
-            part.CanCollide = false
-            part.CanTouch = false
-            part.Massless = true
-            if part.Name == "HITBOX_PART" or part.Name:lower():find("hitbox") then
-                part.Size = Vector3.new(0.001, 0.001, 0.001)
+            local n = part.Name:lower()
+            if n == "hitbox_part" or n:find("hitbox") then
+                part.Size = Vector3.new(0.05, 0.05, 0.05)
                 part.Transparency = 1
-                part.CanQuery = false
+                part.CanCollide = false
+                part.CanTouch = false
+                part.Massless = true
             end
         end
     end
@@ -2479,27 +2480,20 @@ function F.ApplyTinyHitbox(char)
     if knife then
         for _, d in ipairs(knife:GetDescendants()) do
             if d:IsA("BasePart") and d.Name:upper():find("HITBOX") then
-                d.Size = Vector3.new(0.001, 0.001, 0.001)
+                d.Size = Vector3.new(0.05, 0.05, 0.05)
                 d.CanCollide = false
                 d.CanTouch = false
-                d.CanQuery = true
+                d.Massless = true
             end
         end
     end
 end
 function F.ApplyStandNoHit()
-    F.ApplyTinyHitbox(LocalPlayer.Character)
-    -- also shrink whitelist + controller characters (client-side) so bots don't clip/hit them
-    local plrs = game:GetService("Players")
-    for _, plr in ipairs(plrs:GetPlayers()) do
-        if plr ~= LocalPlayer and F.isWhitelisted and F.isWhitelisted(plr) then
-            pcall(F.ApplyTinyHitbox, plr.Character)
-        end
-    end
+    pcall(F.ApplyTinyHitbox, LocalPlayer.Character)
 end
 task.spawn(function()
     while true do
-        task.wait(0.5)
+        task.wait(2)
         pcall(F.ApplyStandNoHit)
     end
 end)
@@ -3036,6 +3030,10 @@ end
 function F.StopAll()
     if CurrentAction == "bring" or not StompOnKill then
         StompOnKill = true
+    end
+    if getgenv()._NamelessFollowMove then
+        pcall(function() getgenv()._NamelessFollowMove:Disconnect() end)
+        getgenv()._NamelessFollowMove = nil
     end
     CurrentAction = "idle"
     TargetPlayer, TargetList = nil, {}
@@ -5375,20 +5373,17 @@ F.StartFollow = function()
     if FrozenByPrivilege then return end
     local ctrl = F.GetController()
     if not ctrl then
-        -- retry briefly (controller delayed stream)
         task.spawn(function()
-            for _ = 1, 30 do
-                task.wait(0.1)
+            for _ = 1, 40 do
+                task.wait(0.15)
                 ctrl = F.GetController()
-                if ctrl and ctrl.Character then break end
+                if ctrl then break end
             end
-            if not ctrl or not F.CanSummon then return end
-            if not F.CanSummon() then return end
-            F.StartFollow()
+            if ctrl then F.StartFollow() end
         end)
         return
     end
-    if not F.CanSummon() then return end
+    if ctrl == LocalPlayer then return end
     local keepA, keepT = PendingAutokill, SavedKillTargets
     F.StopAll()
     PendingAutokill, SavedKillTargets = keepA, keepT
@@ -5396,14 +5391,63 @@ F.StartFollow = function()
     CFrameFollowEnabled = false
     GlueMode = "follow"
     GlueTargetPlayer = ctrl
-    -- CFrame into slot first
+    ProtectOwnerEnabled = false
+    if ProtectOwnerConn then pcall(function() ProtectOwnerConn:Disconnect() end) ProtectOwnerConn = nil end
+    -- stop opt culling while following
+    if OptMode then pcall(function() F.SetOptMode(false) end) end
+    -- clear physics freezes
+    pcall(function()
+        local char = LocalPlayer.Character
+        local r = char and char:FindFirstChild("HumanoidRootPart")
+        local hum = char and char:FindFirstChildOfClass("Humanoid")
+        if r then
+            r.Anchored = false
+            r.CanCollide = false
+        end
+        if hum then
+            hum.PlatformStand = false
+            hum.Sit = false
+            hum.WalkSpeed = math.max(hum.WalkSpeed, 16)
+            hum.JumpPower = math.max(hum.JumpPower, 50)
+        end
+    end)
+    -- initial CFrame
     pcall(function()
         local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not r then return end
-        r.Anchored = false
         local dest = F.GetSummonWorldCF and F.GetSummonWorldCF()
         if not dest then
             local tr = ctrl.Character and (ctrl.Character:FindFirstChild("HumanoidRootPart") or ctrl.Character:FindFirstChild("UpperTorso"))
+            if tr and r then
+                local slot = tonumber(MySlot) or 1
+                local col = (slot - 1) % 3
+                local row = math.floor((slot - 1) / 3)
+                dest = tr.CFrame * CFrame.new((col - 1) * (FollowSpacing or 3), (HeightPerRow or 3) * row + 3, (FollowBack or 4) + row * (FollowBack or 4))
+            end
+        end
+        if r and dest then
+            r.CFrame = dest
+            r.AssemblyLinearVelocity = Vector3.zero
+        end
+    end)
+    -- keep existing glue system
+    pcall(function() F.StartGlue("follow", ctrl) end)
+    -- independent mover so bots always move even if glue dest fails
+    if getgenv()._NamelessFollowMove then
+        pcall(function() getgenv()._NamelessFollowMove:Disconnect() end)
+        getgenv()._NamelessFollowMove = nil
+    end
+    getgenv()._NamelessFollowMove = RunService.Heartbeat:Connect(function()
+        if CurrentAction ~= "follow" then return end
+        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not r then return end
+        r.Anchored = false
+        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = false hum.Sit = false end
+        local dest = nil
+        pcall(function() dest = F.GetSummonWorldCF() end)
+        if not dest then
+            local c = F.GetController()
+            local tr = c and c.Character and (c.Character:FindFirstChild("HumanoidRootPart") or c.Character:FindFirstChild("UpperTorso"))
             if tr then
                 local slot = tonumber(MySlot) or 1
                 local col = (slot - 1) % 3
@@ -5417,9 +5461,14 @@ F.StartFollow = function()
             r.AssemblyAngularVelocity = Vector3.zero
             r.CanCollide = false
         end
+        -- re-assert glue active
+        if not getgenv().glue_active then
+            pcall(function()
+                local c = F.GetController()
+                if c and F.StartGlue then F.StartGlue("follow", c) end
+            end)
+        end
     end)
-    -- then glue (PhysicsRep + CFrame loop)
-    F.StartGlue("follow", ctrl)
     task.defer(function()
         pcall(function()
             if F.stopFlyAnims then F.stopFlyAnims() end
@@ -7001,9 +7050,7 @@ task.spawn(function()
     if F.IsStandClient() then
         pcall(F.CreateBlackScreen)
         pcall(F.SyncBotWhitelist)
-        if LiteMode or OptMode then
-            pcall(function() F.SetOptMode(true) end)
-        end
+        -- OptMode stays off unless user enables (!opt on) — was freezing movement
         if AntiLagEnabled then
             pcall(F.CreateBlackScreen)
             pcall(function() F.SetNoRender(true) end)
