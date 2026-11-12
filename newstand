@@ -8,16 +8,16 @@ end
 local ControllerName = "verceyy"
 local OriginalControllerName = ControllerName
 local BotListOrdered = {
-    "Witkni3416", 
-    "Radianch3292", 
-    "Frosb4622", 
-    "Skybla1919", 
-    "Gracban5470", 
-    "Zeavi2067", 
-    "Warneed6752", 
-    "Drokspan7917", 
-    "Kipsh6295", 
-    "Kiptwist5311", 
+    "Witkni3416",
+    "Radianch3292",
+    "Frosb4622",
+    "Skybla1919",
+    "Gracban5470",
+    "Zeavi2067",
+    "Warneed6752",
+    "Drokspan7917",
+    "Kipsh6295",
+    "Kiptwist5311",
 }
 local MaxBots = 10
 local PREFIX = "NAMELESS.HVH | !"
@@ -32,6 +32,20 @@ local function GENV()
 end
 local GEN = GENV()
 GEN.NAMELESS_BOOT = true
+GEN.get_root_part = GEN.get_root_part or function()
+    local lp = game:GetService("Players").LocalPlayer
+    local char = lp and lp.Character
+    if not char then return nil end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum and hum.RootPart then return hum.RootPart end
+    return char:FindFirstChild("HumanoidRootPart")
+end
+if type(getgenv) == "function" then
+    pcall(function()
+        local g = getgenv()
+        g.get_root_part = g.get_root_part or GEN.get_root_part
+    end)
+end
 pcall(function()
     MenuKey = MenuKey or Enum.KeyCode.LeftShift
 end)
@@ -53,9 +67,16 @@ task.spawn(function()
 end)
 local function isNamelessPlayer(plr)
     if not plr then return false end
-    if getgenv().NAMELESS_USERS[plr.Name] then return true end
+    local ok, users = pcall(function()
+        local g = getgenv()
+        return g and g.NAMELESS_USERS
+    end)
+    if ok and type(users) == "table" and users[plr.Name] then return true end
     local c = plr.Character
-    if c and c:GetAttribute("NamelessUser") then return true end
+    if c then
+        local ok2, attr = pcall(function() return c:GetAttribute("NamelessUser") end)
+        if ok2 and attr then return true end
+    end
     return false
 end
 pcall(function()
@@ -492,7 +513,7 @@ function F.SetKillMethod(m)
     if (CurrentAction == "kill" or CurrentAction == "autokill") and KillPhase == "attack" then
         pcall(function() F.StartKillAttackLoop() end)
     end
-return m
+    return m
 end
 pcall(function() F.SetKillMethod(KillMethod or "orbit") end)
 AutoStompEnabled = false
@@ -513,7 +534,7 @@ local GlueTargetPlayer, GlueMode, CustomGlueCF = nil, "follow", nil
 local AntiStompProcessing, koConn = false, nil
 local PendingAutokill, SavedKillTargets = nil, nil
 local KillPhase, StompDoneForCycle = "attack", false
-    StompOnKill = true
+StompOnKill = true
 WaitFFUntil = nil
 local BotGui, FOVCircle = nil, nil
 local GuiWindow, MenuOpen = nil, false
@@ -2423,8 +2444,7 @@ function F.UnequipAllTools()
     end
 end
 
-function F.ApplyStandNoHit()
-    local char = LocalPlayer.Character
+function F.ApplyTinyHitbox(char)
     if not char then return end
     for _, part in ipairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
@@ -2432,30 +2452,31 @@ function F.ApplyStandNoHit()
             part.CanTouch = false
             part.Massless = true
             if part.Name == "HITBOX_PART" or part.Name:lower():find("hitbox") then
-                part.Size = Vector3.new(0.05, 0.05, 0.05)
+                part.Size = Vector3.new(0.001, 0.001, 0.001)
                 part.Transparency = 1
                 part.CanQuery = false
-            end
-            if part.Name == "HumanoidRootPart" or part.Name == "UpperTorso" or part.Name == "LowerTorso" or part.Name == "Head" or part.Name == "Torso" then
-                if part.Size.Magnitude > 1 then
-                    -- keep visual; disable collision only
-                    part.CanCollide = false
-                    part.CanTouch = false
-                end
             end
         end
     end
     local knife = char:FindFirstChild("[Knife]") or char:FindFirstChild("Knife")
     if knife then
         for _, d in ipairs(knife:GetDescendants()) do
-            if d:IsA("BasePart") then
-                if d.Name:upper():find("HITBOX") then
-                    d.Size = Vector3.new(0.05, 0.05, 0.05)
-                    d.CanCollide = false
-                    d.CanTouch = false
-                    d.CanQuery = true
-                end
+            if d:IsA("BasePart") and d.Name:upper():find("HITBOX") then
+                d.Size = Vector3.new(0.001, 0.001, 0.001)
+                d.CanCollide = false
+                d.CanTouch = false
+                d.CanQuery = true
             end
+        end
+    end
+end
+function F.ApplyStandNoHit()
+    F.ApplyTinyHitbox(LocalPlayer.Character)
+    -- also shrink whitelist + controller characters (client-side) so bots don't clip/hit them
+    local plrs = game:GetService("Players")
+    for _, plr in ipairs(plrs:GetPlayers()) do
+        if plr ~= LocalPlayer and F.isWhitelisted and F.isWhitelisted(plr) then
+            pcall(F.ApplyTinyHitbox, plr.Character)
         end
     end
 end
@@ -3683,18 +3704,25 @@ function F.OrbitKillStep(target)
     local tChar = target.Character
     if not tChar then return true end
     local tRoot = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
-    local r = getgenv().get_root_part()
+    local r = nil
+    pcall(function()
+        local gr = getgenv().get_root_part
+        if type(gr) == "function" then r = gr() end
+    end)
+    if not r and LocalPlayer.Character then
+        r = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    end
     if not tRoot or not r then return false end
-    if F.isKnocked(tChar) then return true end
+    if F.isKnocked and F.isKnocked(tChar) then return true end
     local hum = tChar:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return true end
     if tChar:FindFirstChildOfClass("ForceField") then return false end
     local off
     if UseGun then
-        off = F.GetGunSquareOffset(tRoot, MySlot)
+        off = F.GetGunSquareOffset and F.GetGunSquareOffset(tRoot, MySlot) or Vector3.new(0, 3, 0)
     else
         -- knife: inside target like powner
-        off = F.GetInsideOffset(tRoot, MySlot)
+        off = (F.GetInsideOffset and F.GetInsideOffset(tRoot, MySlot)) or Vector3.new(0, 0.5, 0)
     end
     local dest = CFrame.lookAt(tRoot.Position + off, tRoot.Position)
     F.SetPhysicsRepRootPart(r, tRoot)
@@ -4938,7 +4966,6 @@ pcall(function()
     end)
 end)
 function F.CreateNamelessGui()
-    return
     if not (F.IsControllerClient and F.IsControllerClient()) then return end
     F.DestroyBotGui()
     local Players = game:GetService("Players")
@@ -5190,7 +5217,6 @@ function F.CreateNamelessGui()
     end)
 end
 function F.ToggleLoadGui()
-    return
     if MenuOpen and BotGui then
         F.DestroyBotGui()
         MenuOpen = false
