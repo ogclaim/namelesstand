@@ -1671,8 +1671,8 @@ getgenv().get_root_part = function()
     local char = LocalPlayer.Character
     if not char then return nil end
     local hum = char:FindFirstChildOfClass("Humanoid")
-    if not hum or hum.Health <= 0 then return nil end
-    return hum.RootPart or char:FindFirstChild("HumanoidRootPart")
+    if hum and hum.RootPart then return hum.RootPart end
+    return char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso") or char:FindFirstChild("Torso")
 end
 getgenv().reset_velocity = function()
     local r = getgenv().get_root_part()
@@ -1887,64 +1887,81 @@ function F.GetKnifeSurfaceCF(tRoot)
     return tRoot.CFrame * CFrame.new(off)
 end
 getgenv().unc_connection = function()
-    if getgenv().connection_loop then getgenv().connection_loop:Disconnect() getgenv().connection_loop = nil end
-    local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    if hrp then hrp.CanCollide = false end
+    if getgenv().connection_loop then
+        pcall(function() getgenv().connection_loop:Disconnect() end)
+        getgenv().connection_loop = nil
+    end
     getgenv().connection_loop = RunService.Heartbeat:Connect(function()
         if not getgenv().glue_active then
-            if getgenv().connection_loop then getgenv().connection_loop:Disconnect() getgenv().connection_loop = nil end
-            getgenv().reset_velocity()
+            if getgenv().connection_loop then
+                pcall(function() getgenv().connection_loop:Disconnect() end)
+                getgenv().connection_loop = nil
+            end
+            pcall(function() getgenv().reset_velocity() end)
             local a = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-            if a then if not NoclipEnabled then a.CanCollide = true end F.SetPhysicsRepRootPart(a, a) end
+            if a then
+                a.Anchored = false
+                if not NoclipEnabled then a.CanCollide = true end
+                pcall(function() F.SetPhysicsRepRootPart(a, a) end)
+            end
             return
         end
-        local selfRoot = getgenv().get_root_part()
-        local targetRoot = F.resolveTargetRoot()
+        local selfRoot = nil
+        pcall(function()
+            if getgenv().get_root_part then selfRoot = getgenv().get_root_part() end
+        end)
+        if not selfRoot and LocalPlayer.Character then
+            selfRoot = LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        end
         if not selfRoot then return end
-        if CurrentAction == "kill" or CurrentAction == "autokill" then
-            if targetRoot then
-                F.SetPhysicsRepRootPart(selfRoot, targetRoot)
-                selfRoot.CanCollide = false
-            end
-            F.ForceLocalVisibility()
-            return
+        selfRoot.Anchored = false
+        selfRoot.CanCollide = false
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            hum.PlatformStand = false
+            hum.Sit = false
         end
-        local dest
-        if GlueMode == "follow" then dest = F.GetSummonWorldCF()
-        elseif GlueMode == "formation" then dest = F.GetFormationCF()
-        elseif GlueMode == "gun" and targetRoot then dest = F.GetGunOrbitCF(targetRoot)
-        elseif GlueMode == "knife" and targetRoot then
-            dest = F.GetKnifeSurfaceCF(targetRoot)
-            local KR = getgenv().KnifeRage
-            if KR and KR.Enabled then
-                local H = KR.Interval or 0.12
-                if math.floor(tick()/H)%2==0 then
-                    dest = CFrame.new(targetRoot.Position + Vector3.new(math.random()<0.5 and 900000 or -900000, 900000, math.random()<0.5 and 900000 or -900000))
-                end
+        local targetRoot = nil
+        pcall(function() targetRoot = F.resolveTargetRoot() end)
+        local dest = nil
+        if GlueMode == "follow" or CurrentAction == "follow" then
+            pcall(function() dest = F.GetSummonWorldCF() end)
+            if not dest and targetRoot then
+                local slot = tonumber(MySlot) or 1
+                local col = (slot - 1) % 3
+                local row = math.floor((slot - 1) / 3)
+                local x = (col - 1) * (FollowSpacing or 3)
+                local z = (FollowBack or 4) + row * (FollowBack or 4)
+                local y = (HeightPerRow or 3) * row + (FollowHeight or 3)
+                dest = targetRoot.CFrame * CFrame.new(x, y, z)
             end
+        elseif GlueMode == "formation" then
+            pcall(function() dest = F.GetFormationCF() end)
+        elseif GlueMode == "gun" and targetRoot then
+            pcall(function() dest = F.GetGunOrbitCF(targetRoot) end)
+        elseif GlueMode == "knife" and targetRoot then
+            pcall(function() dest = F.GetKnifeSurfaceCF(targetRoot) end)
         elseif GlueMode == "stomp" and targetRoot then
             dest = CFrame.new(targetRoot.Position + Vector3.new(0, StompHeight or 1.2, 0))
-        elseif GlueMode == "custom" then dest = CustomGlueCF
-        elseif targetRoot then dest = targetRoot.CFrame * getgenv().get_position_offset()
+        elseif GlueMode == "custom" then
+            dest = CustomGlueCF
+        elseif targetRoot then
+            dest = targetRoot.CFrame * (getgenv().get_position_offset and getgenv().get_position_offset() or CFrame.new(0, 0, 3))
         end
-        local isKill = (CurrentAction == "kill" or CurrentAction == "autokill")
-        local isFollow = (CurrentAction == "follow" or CurrentAction == "formation" or GlueMode == "follow")
-        local useCFrameOnly = (isKill and CFrameKillEnabled) or (isFollow and CFrameFollowEnabled)
-        if targetRoot and not useCFrameOnly then
-            F.SetPhysicsRepRootPart(selfRoot, targetRoot)
-            selfRoot.CanCollide = false
-        elseif targetRoot and useCFrameOnly then
-            F.SetPhysicsRepRootPart(selfRoot, targetRoot)
-            selfRoot.CanCollide = false
-        else
-            F.SetPhysicsRepRootPart(selfRoot, selfRoot)
+        -- classic glue: PhysicsRep to target + local CFrame to dest
+        if targetRoot then
+            pcall(function() F.SetPhysicsRepRootPart(selfRoot, targetRoot) end)
         end
         if dest then
+            selfRoot.CFrame = dest
             selfRoot.AssemblyLinearVelocity = Vector3.zero
             selfRoot.AssemblyAngularVelocity = Vector3.zero
-            selfRoot.CFrame = dest
+        elseif targetRoot then
+            -- fallback stick
+            selfRoot.CFrame = targetRoot.CFrame * CFrame.new(0, 3, 3)
+            selfRoot.AssemblyLinearVelocity = Vector3.zero
         end
-        F.ForceLocalVisibility()
+        pcall(function() if F.ForceLocalVisibility then F.ForceLocalVisibility() end end)
     end)
 end
 function F.StartGlue(mode, targetPlayer)
@@ -5356,15 +5373,30 @@ for _, p in ipairs(Players:GetPlayers()) do
 end
 F.StartFollow = function()
     if FrozenByPrivilege then return end
-    if not F.CanSummon() then return end
     local ctrl = F.GetController()
-    if not ctrl then return end
+    if not ctrl then
+        -- retry briefly (controller delayed stream)
+        task.spawn(function()
+            for _ = 1, 30 do
+                task.wait(0.1)
+                ctrl = F.GetController()
+                if ctrl and ctrl.Character then break end
+            end
+            if not ctrl or not F.CanSummon then return end
+            if not F.CanSummon() then return end
+            F.StartFollow()
+        end)
+        return
+    end
+    if not F.CanSummon() then return end
     local keepA, keepT = PendingAutokill, SavedKillTargets
     F.StopAll()
     PendingAutokill, SavedKillTargets = keepA, keepT
     CurrentAction = "follow"
     CFrameFollowEnabled = false
-    -- 1) CFrame into formation slots first
+    GlueMode = "follow"
+    GlueTargetPlayer = ctrl
+    -- CFrame into slot first
     pcall(function()
         local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
         if not r then return end
@@ -5376,10 +5408,7 @@ F.StartFollow = function()
                 local slot = tonumber(MySlot) or 1
                 local col = (slot - 1) % 3
                 local row = math.floor((slot - 1) / 3)
-                local x = (col - 1) * (FollowSpacing or 3)
-                local z = (FollowBack or 4) + row * (FollowBack or 4)
-                local y = (HeightPerRow or 3) * row + 6
-                dest = tr.CFrame * CFrame.new(x, y, z)
+                dest = tr.CFrame * CFrame.new((col - 1) * (FollowSpacing or 3), (HeightPerRow or 3) * row + 3, (FollowBack or 4) + row * (FollowBack or 4))
             end
         end
         if dest then
@@ -5389,9 +5418,7 @@ F.StartFollow = function()
             r.CanCollide = false
         end
     end)
-    -- 2) then enable glue (PhysicsRep + CFrame loop) so they stick with 0 delay
-    GlueMode = "follow"
-    GlueTargetPlayer = ctrl
+    -- then glue (PhysicsRep + CFrame loop)
     F.StartGlue("follow", ctrl)
     task.defer(function()
         pcall(function()
@@ -6164,27 +6191,36 @@ function F.StartBring(targets)
 end
 function F.ParsePrefix(msg)
     local lower = (msg or ""):lower():gsub("%s+", " "):match("^%s*(.-)%s*$") or ""
-    local a, b = lower:find("nameless%.hvh%s*|%s*!")
-    if a == 1 then
-        return lower:sub(b + 1):match("^%s*(.-)%s*$")
+    if lower == "" then return nil end
+    -- full branded prefixes
+    local patterns = {
+        "^nameless%.hvh%s*|%s*!",
+        "^nameless%.hvh%s*|%s*",
+        "^nameless%.hvh%s*!",
+        "^nameless%s*|%s*!",
+        "^nameless:%s*!",
+        "^nameless:",
+    }
+    for _, pat in ipairs(patterns) do
+        local a, b = lower:find(pat)
+        if a == 1 then
+            local rest = lower:sub(b + 1):match("^%s*(.-)%s*$") or ""
+            if rest:sub(1, 1) == "!" then rest = rest:sub(2):match("^%s*(.-)%s*$") or "" end
+            if rest ~= "" then return rest end
+        end
     end
-    if lower:sub(1, 14) == "nameless.hvh|!" then
-        return lower:sub(15):match("^%s*(.-)%s*$")
-    end
-    if lower:sub(1, 15) == "nameless.hvh |!" then
-        return lower:sub(16):match("^%s*(.-)%s*$")
-    end
-    if lower:sub(1, 11) == "nameless:!" or lower:sub(1, 10) == "nameless:!" then
-        return lower:sub(11):match("^%s*(.-)%s*$") or lower:sub(12):match("^%s*(.-)%s*$")
-    end
-    if lower:sub(1, 9) == "nameless:" then
-        local rest = lower:sub(10)
-        if rest:sub(1,1) == "!" then rest = rest:sub(2) end
-        return rest:match("^%s*(.-)%s*$")
-    end
-    if lower:sub(1,1) == "!" then
+    if lower:sub(1, 1) == "!" then
         return lower:sub(2):match("^%s*(.-)%s*$")
     end
+    -- bare commands from owner (no prefix): summon, stop, etc.
+    local bare = {
+        summon = true, follow = true, come = true, stop = true, idle = true,
+        kill = true, k = true, autokill = true, ak = true, bring = true,
+        ["return"] = true,
+        gun = true, knife = true, reset = true, r = true,
+    }
+    local first = lower:match("^(%S+)")
+    if first and bare[first] then return lower end
     return nil
 end
 F.OnChatted = function(player, message)
@@ -6765,11 +6801,45 @@ if not KillAuraEnabled then F.StartKillAura() end
         for i = #ExtraOwners, 1, -1 do if ExtraOwners[i]:lower() == args[2] then table.remove(ExtraOwners, i) end end
     end
 end
-for _, p in ipairs(Players:GetPlayers()) do
+local function bindPlayerChat(p)
     p.Chatted:Connect(function(m) F.OnChatted(p, m) end)
 end
-Players.PlayerAdded:Connect(function(p)
-    p.Chatted:Connect(function(m) F.OnChatted(p, m) end)
+for _, p in ipairs(Players:GetPlayers()) do
+    bindPlayerChat(p)
+end
+Players.PlayerAdded:Connect(bindPlayerChat)
+-- TextChatService (new chat) so commands still reach bots
+pcall(function()
+    local TCS = game:GetService("TextChatService")
+    if not TCS then return end
+    if TCS.MessageReceived then
+        TCS.MessageReceived:Connect(function(msg)
+            local ok, text = pcall(function() return msg.Text end)
+            local ok2, src = pcall(function() return msg.TextSource end)
+            if not ok or not text then return end
+            local plr = nil
+            if ok2 and src then
+                plr = Players:GetPlayerByUserId(src.UserId)
+            end
+            if plr then F.OnChatted(plr, text) end
+        end)
+    end
+    local ch = TCS:FindFirstChild("TextChannels")
+    if ch then
+        local function hookChannel(channel)
+            if not channel or not channel.MessageReceived then return end
+            channel.MessageReceived:Connect(function(msg)
+                local text = msg.Text
+                local src = msg.TextSource
+                local plr = src and Players:GetPlayerByUserId(src.UserId)
+                if plr and text then F.OnChatted(plr, text) end
+            end)
+        end
+        for _, channel in ipairs(ch:GetChildren()) do
+            hookChannel(channel)
+        end
+        ch.ChildAdded:Connect(hookChannel)
+    end
 end)
 Players.PlayerRemoving:Connect(function(p)
     if TargetPlayer == p and (CurrentAction == "kill" or CurrentAction == "autokill" or CurrentAction == "bring") then
