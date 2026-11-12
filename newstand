@@ -2468,7 +2468,7 @@ function F.ApplyTinyHitbox(char)
         if part:IsA("BasePart") then
             local n = part.Name:lower()
             if n == "hitbox_part" or n:find("hitbox") then
-                part.Size = Vector3.new(0.05, 0.05, 0.05)
+                part.Size = Vector3.new(0.001, 0.001, 0.001)
                 part.Transparency = 1
                 part.CanCollide = false
                 part.CanTouch = false
@@ -2480,7 +2480,7 @@ function F.ApplyTinyHitbox(char)
     if knife then
         for _, d in ipairs(knife:GetDescendants()) do
             if d:IsA("BasePart") and d.Name:upper():find("HITBOX") then
-                d.Size = Vector3.new(0.05, 0.05, 0.05)
+                d.Size = Vector3.new(0.001, 0.001, 0.001)
                 d.CanCollide = false
                 d.CanTouch = false
                 d.Massless = true
@@ -2865,8 +2865,15 @@ function F.StartKillAura()
     ka.WallCheck = true
     ka.KnockedCheck = true
     KillAuraEnabled = true
+    -- remember formation so knife KA can return after kill
+    local savedFormType, savedFormTarget = nil, nil
+    if CurrentAction == "formation" then
+        savedFormType = FormationType
+        savedFormTarget = FormationTarget
+    end
     local lastShot = 0
     local sticky = nil
+    local wasInCombat = false
     KillAuraConnection = RunService.Heartbeat:Connect(function()
         ka = getgenv().KillAura
         if not ka or not ka.Enabled then
@@ -2884,7 +2891,6 @@ function F.StartKillAura()
         end
         local range = ka.Range or KillAuraRange or 80
         local delay = ka.Delay or KillAuraDelay or 0.06
-
         local function validTarget(plr)
             if not plr or plr == LocalPlayer then return false end
             if F.isWhitelisted and F.isWhitelisted(plr) then return false end
@@ -2902,11 +2908,7 @@ function F.StartKillAura()
             if (r.Position - hrp.Position).Magnitude > range then return false end
             return true
         end
-
-        -- sticky target until dead / invalid, then swap
-        if sticky and not validTarget(sticky) then
-            sticky = nil
-        end
+        if sticky and not validTarget(sticky) then sticky = nil end
         if not sticky then
             local best, bestD = nil, range + 0.01
             for _, plr in ipairs(Players:GetPlayers()) do
@@ -2920,29 +2922,32 @@ function F.StartKillAura()
             sticky = best
         end
         ka.CurrentTarget = sticky
-        if not sticky then return end
-
+        if not sticky then
+            -- no targets: return to formation if we left it
+            if wasInCombat and savedFormType and F.StartFormation then
+                wasInCombat = false
+                pcall(function() F.StartFormation(savedFormType, savedFormTarget and savedFormTarget.Name) end)
+            end
+            return
+        end
+        wasInCombat = true
         local tChar = sticky.Character
         local tRoot = tChar and (tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso"))
         if not tRoot then sticky = nil return end
-
         if UseGun then
             if F.EquipSelectedGun then F.EquipSelectedGun() end
-            -- gun killaura: still avoid hitting WL/controller via validTarget
             if tick() - lastShot >= delay then
-                if F.FireForceHit and F.FireForceHit(sticky) then
-                    lastShot = tick()
-                end
+                if F.FireForceHit and F.FireForceHit(sticky) then lastShot = tick() end
             end
         else
-            -- knife killaura: orbitkill knife method (inside target), swap on death
-            local off = F.GetInsideOffset and F.GetInsideOffset(tRoot, MySlot) or Vector3.new(0, 0.5, 0)
+            -- knife KA: leave formation, stick to target, kill
+            local off = (F.GetInsideOffset and F.GetInsideOffset(tRoot, MySlot)) or Vector3.new(0, 0.5, 0)
             local dest = CFrame.lookAt(tRoot.Position + off, tRoot.Position)
             pcall(function()
-                F.SetPhysicsRepRootPart(hrp, tRoot)
                 hrp.CanCollide = false
                 hrp.AssemblyLinearVelocity = Vector3.zero
                 hrp.CFrame = dest
+                if F.SetPhysicsRepRootPart then F.SetPhysicsRepRootPart(hrp, tRoot) end
             end)
             pcall(function()
                 if F.UnequipAllTools then F.UnequipAllTools() end
@@ -3524,8 +3529,8 @@ function F.FastKillTriggerBot(target)
     if tick() - FastKillLastTrigger < FastKillTriggerRate then return end
     FastKillLastTrigger = tick()
     local method = F.GetKillMethod and F.GetKillMethod() or KillMethod
-    if method == "tween" or KnifeTweenEnabled then
-        UseGun = false
+    local wantKnife = (not UseGun) or method == "tween" or KnifeTweenEnabled or method == "spamvoid"
+    if wantKnife then
         local char = LocalPlayer.Character
         local knife = char and (char:FindFirstChild("[Knife]") or char:FindFirstChild("Knife"))
         if not knife then
@@ -3534,15 +3539,15 @@ function F.FastKillTriggerBot(target)
             if knife then pcall(function() knife.Parent = char end) end
         end
         if knife then
-            F.applyKnifeHitbox()
+            pcall(function() if F.applyKnifeHitbox then F.applyKnifeHitbox() end end)
             pcall(function() knife:Activate() end)
         end
         return
     end
-    local tool = F.EquipBestWeapon()
+    local tool = (F.EquipSelectedGun and F.EquipSelectedGun()) or (F.EquipBestWeapon and F.EquipBestWeapon())
     if not tool then return end
     if tool.Name:lower():find("knife") then
-        F.applyKnifeHitbox()
+        pcall(function() if F.applyKnifeHitbox then F.applyKnifeHitbox() end end)
         pcall(function() tool:Activate() end)
     else
         F.FireForceHit(target)
