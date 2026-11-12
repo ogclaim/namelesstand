@@ -681,27 +681,9 @@ function F.CanSummon()
     return true
 end
 function F.SayKillChat()
-    return -- trashtalk disabled
-    if not AutoChatEnabled then return end
-    if tick() - LastKillChat < 1.2 then return end
-    LastKillChat = tick()
-    local phrase = KillChatPhrases[math.random(1, #KillChatPhrases)]
-    pcall(function()
-        local TCS = TextChatService
-        local channels = TCS:FindFirstChild("TextChannels")
-        local ch = channels and (channels:FindFirstChild("RBXGeneral") or channels:FindFirstChild("RBXSystem"))
-        if ch and ch.SendAsync then
-            ch:SendAsync(phrase)
-            return
-        end
-    end)
-    pcall(function()
-        local ev = ReplicatedStorage:FindFirstChild("DefaultChatSystemChatEvents")
-        if ev and ev:FindFirstChild("SayMessageRequest") then
-            ev.SayMessageRequest:FireServer(phrase, "All")
-        end
-    end)
+    return
 end
+
 function F.CFrameMoveTo(pos, speed)
     local r = getgenv().get_root_part()
     if not r then return false end
@@ -2204,22 +2186,11 @@ function F.loadFlyAnims()
     end
 end
 function F.updateFlyAnim()
-    -- fly/float anims disabled
-    pcall(function() if F.stopFlyAnims then F.stopFlyAnims() end end)
-    return
-    if CurrentAction ~= "follow" and CurrentAction ~= "formation" then
-        return
-    end
-    if not DancePersistent or not LastDanceId then
-        local auraId = (DanceIds and (DanceIds["aura"] or DanceIds["headless_aura"])) or "rbxassetid://98893149829644"
-        DancePersistent = true
-        LastDanceId = auraId
-        CurrentDance = "aura"
-    end
-    if F.EnsureDancePlaying then
-        F.EnsureDancePlaying()
-    end
+    pcall(function()
+        if F.stopFlyAnims then F.stopFlyAnims() end
+    end)
 end
+
 function F.SetNoRender(on)
     NoRenderEnabled = on and true or false
     pcall(function()
