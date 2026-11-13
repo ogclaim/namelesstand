@@ -1191,7 +1191,6 @@ function F.SafeEquipOne(tool)
     return tool
 end
 function F.EquipSelectedGun()
-    if not UseGun then return nil end
     local tool = nil
     if SelectedGunKey and F.FindGunByKey then
         tool = F.FindGunByKey(SelectedGunKey)
@@ -1927,6 +1926,26 @@ function F.GetFormationCF()
         local pos = origin + Vector3.new(0, h, 0)
         return CFrame.new(pos, pos + look)
     end
+    if ft == "skyline" then
+        -- single horizontal line 13 studs in the air (like summon, no second row)
+        local total = math.max(1, tonumber(MaxBots) or 12)
+        local spaceSky = FormationSpacing or 3.5
+        local x = (i - (total - 1) * 0.5) * spaceSky
+        local pos = origin + right * x + Vector3.new(0, 13, 0) - look * 0.5
+        return CFrame.new(pos, pos + look)
+    end
+    if ft == "summon" then
+        -- equal single line, no wrapping to another row
+        local total = 0
+        for _, name in ipairs(BotListOrdered or {}) do
+            if type(name) == "string" and name ~= "" then total = total + 1 end
+        end
+        if total < 1 then total = math.max(1, tonumber(MaxBots) or 12) end
+        local spaceSum = FormationSpacing or 3.5
+        local x = (i - (total - 1) * 0.5) * spaceSum
+        local pos = origin + right * x + Vector3.new(0, FollowHeight or 0, 0) - look * (FollowBack or 4)
+        return CFrame.new(pos, pos + look)
+    end
     if ft == "around" then
         local dist, baseH = 5, 5
         local dirs = {
@@ -2022,7 +2041,12 @@ getgenv().unc_connection = function()
         local targetRoot = nil
         pcall(function() targetRoot = F.resolveTargetRoot() end)
         local dest = nil
-        if GlueMode == "follow" or CurrentAction == "follow" then
+        -- kill methods own position via CustomGlueCF (set by F.GlueTo / void steps)
+        if (CurrentAction == "kill" or CurrentAction == "autokill" or CurrentAction == "bring") and CustomGlueCF then
+            dest = CustomGlueCF
+        elseif GlueMode == "custom" and CustomGlueCF then
+            dest = CustomGlueCF
+        elseif GlueMode == "follow" or CurrentAction == "follow" then
             pcall(function() dest = F.GetSummonWorldCF() end)
             if not dest and targetRoot then
                 local slot = tonumber(MySlot) or 1
@@ -2033,7 +2057,7 @@ getgenv().unc_connection = function()
                 local y = (HeightPerRow or 3) * row + (FollowHeight or 3)
                 dest = targetRoot.CFrame * CFrame.new(x, y, z)
             end
-        elseif GlueMode == "formation" then
+        elseif GlueMode == "formation" or CurrentAction == "formation" then
             pcall(function() dest = F.GetFormationCF() end)
         elseif GlueMode == "gun" and targetRoot then
             pcall(function() dest = F.GetGunOrbitCF(targetRoot) end)
@@ -2041,8 +2065,6 @@ getgenv().unc_connection = function()
             pcall(function() dest = F.GetKnifeSurfaceCF(targetRoot) end)
         elseif GlueMode == "stomp" and targetRoot then
             dest = CFrame.new(targetRoot.Position + Vector3.new(0, StompHeight or 1.2, 0))
-        elseif GlueMode == "custom" then
-            dest = CustomGlueCF
         elseif targetRoot then
             dest = targetRoot.CFrame * (getgenv().get_position_offset and getgenv().get_position_offset() or CFrame.new(0, 0, 3))
         end
@@ -2863,24 +2885,40 @@ end
 
 function F.SafeKnifeActivate()
     local char = LocalPlayer.Character
-    local hrp = char and char:FindFirstChild("HumanoidRootPart")
-    if not hrp then return false end
-    local closest, closestD = nil, 10
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and plr.Character then
-            local r = plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character:FindFirstChild("UpperTorso")
-            if r then
-                local d = (r.Position - hrp.Position).Magnitude
-                if d < closestD then closestD, closest = d, plr end
+    if not char then return false end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    -- during kill always allow; otherwise skip friendlies nearby
+    local inKill = (CurrentAction == "kill" or CurrentAction == "autokill" or CurrentAction == "bring")
+    if not inKill and hrp then
+        local closest, closestD = nil, 12
+        for _, plr in ipairs(Players:GetPlayers()) do
+            if plr ~= LocalPlayer and plr.Character then
+                local r = plr.Character:FindFirstChild("HumanoidRootPart") or plr.Character:FindFirstChild("UpperTorso")
+                if r then
+                    local d = (r.Position - hrp.Position).Magnitude
+                    if d < closestD then closestD, closest = d, plr end
+                end
             end
         end
-    end
-    if closest and F.IsFriendlyStand(closest) then
-        return false
+        if closest and F.IsFriendlyStand and F.IsFriendlyStand(closest) then
+            return false
+        end
     end
     local tool = char:FindFirstChildOfClass("Tool")
-    if tool and tool.Name:lower():find("knife") then
+    if not tool or not tostring(tool.Name):lower():find("knife") then
+        if F.EnsureKnifeEquipped then tool = F.EnsureKnifeEquipped() end
+        if not tool and F.EquipKnifeOnly then tool = F.EquipKnifeOnly() end
+        tool = char:FindFirstChildOfClass("Tool")
+    end
+    if tool and tostring(tool.Name):lower():find("knife") then
         pcall(function() tool:Activate() end)
+        -- extra punch remote attempts used by some DH forks
+        pcall(function()
+            if MainEvent then
+                MainEvent:FireServer("Punch", "Left")
+                MainEvent:FireServer("Punch", "Right")
+            end
+        end)
         return true
     end
     return false
@@ -3216,13 +3254,17 @@ function F.FireForceHit(target)
     if ControllerName and target.Name:lower() == tostring(ControllerName):lower() then return false end
     local _ctrl = F.GetController and F.GetController()
     if _ctrl and target == _ctrl then return false end
-    if ForceHitCmdTarget and ForceHitCmdTarget.Parent then
-        if target ~= ForceHitCmdTarget and target.Name ~= ForceHitCmdTarget.Name then
-            return false
+    -- during kill/autokill always allow TargetPlayer; otherwise honor ForceHitCmdTarget
+    if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then
+        if ForceHitCmdTarget and ForceHitCmdTarget.Parent then
+            if target ~= ForceHitCmdTarget and target.Name ~= ForceHitCmdTarget.Name then
+                return false
+            end
         end
     end
     local now = tick()
-    local rate = ForceHitFireRate or 0.12
+    local rate = ForceHitFireRate or 0.06
+    if (CurrentAction == "kill" or CurrentAction == "autokill") then rate = math.min(rate, 0.05) end
     if rate > 0 and now - (_lastFHFire or 0) < rate then return false end
     local tChar = target.Character
     if not tChar then return false end
@@ -4347,12 +4389,19 @@ end
 function F.GlueTo(r, tRoot, worldPos)
     if not r or not tRoot then return end
     r.CanCollide = false
+    r.Anchored = false
     r.AssemblyLinearVelocity = Vector3.zero
     r.AssemblyAngularVelocity = Vector3.zero
+    local look = tRoot.Position
+    local cf = CFrame.lookAt(worldPos, look)
+    -- drive classic glue so connection_loop does not overwrite with knife/gun orbit CF
+    GlueMode = "custom"
+    CustomGlueCF = cf
+    getgenv().glue_active = true
     pcall(function()
         if F.SetPhysicsRepRootPart then F.SetPhysicsRepRootPart(r, tRoot) end
     end)
-    r.CFrame = CFrame.lookAt(worldPos, tRoot.Position)
+    r.CFrame = cf
 end
 
 function F.EnsureKnifeEquipped()
@@ -4372,18 +4421,14 @@ function F.EnsureKnifeEquipped()
             end
         end
     end
-    -- reequip pulse
+    -- reequip pulse (no yield — safe on Heartbeat)
     pcall(function()
         local hum = char:FindFirstChildOfClass("Humanoid")
-        if hum then
-            hum:UnequipTools()
-            task.wait()
-            if bag then
-                for _, tool in ipairs(bag:GetChildren()) do
-                    if tool:IsA("Tool") and tostring(tool.Name):lower():find("knife") then
-                        hum:EquipTool(tool)
-                        break
-                    end
+        if hum and bag then
+            for _, tool in ipairs(bag:GetChildren()) do
+                if tool:IsA("Tool") and tostring(tool.Name):lower():find("knife") then
+                    hum:EquipTool(tool)
+                    break
                 end
             end
         end
@@ -4417,11 +4462,17 @@ function F.VoidSpamStep(r, surfaceCF)
     if not r then return end
     pcall(function() workspace.FallenPartsDestroyHeight = -50000 end)
     local base = surfaceCF or r.CFrame
-    local depth = SpamVoidDepth or 400
-    local voidY = math.min(base.Position.Y - depth, (VoidY or -480))
+    local depth = SpamVoidDepth or 500
+    local voidY = math.min(base.Position.Y - depth, (VoidY or -500))
     r.CanCollide = false
+    r.Anchored = false
     r.AssemblyLinearVelocity = Vector3.zero
-    r.CFrame = CFrame.new(base.Position.X, voidY, base.Position.Z)
+    r.AssemblyAngularVelocity = Vector3.zero
+    local cf = CFrame.new(base.Position.X, voidY, base.Position.Z)
+    GlueMode = "custom"
+    CustomGlueCF = cf
+    getgenv().glue_active = true
+    r.CFrame = cf
 end
 
 -- !kk / !knifekill
@@ -4440,6 +4491,7 @@ function F.KnifeKillStep(target)
     local off = F.GetKillSlotOffset(MySlot, MaxBots, "sphere")
     F.GlueTo(r, tRoot, tRoot.Position + off)
     F.KnifeInsideTarget(target)
+    if F.SafeKnifeActivate then F.SafeKnifeActivate() end
     return false
 end
 
@@ -4455,23 +4507,29 @@ function F.KnifeSpamKillStep(target)
     local hum = tChar:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return true end
     local now = tick()
-    getgenv()._KSK_Phase = getgenv()._KSK_Phase or "surface"
-    getgenv()._KSK_Until = getgenv()._KSK_Until or 0
-    local off = F.GetKillSlotOffset(MySlot, MaxBots, "sphere")
+    if getgenv()._KSK_Phase ~= "surface" and getgenv()._KSK_Phase ~= "void" then
+        getgenv()._KSK_Phase = "surface"
+        getgenv()._KSK_Until = now
+    end
+    local off = F.GetKillSlotOffset(MySlot or 1, MaxBots or 12, "sphere")
     local surfacePos = tRoot.Position + off
+    local inT = SpamVoidInTime or 0.10
+    local outT = SpamVoidOutTime or 0.10
     if getgenv()._KSK_Phase == "surface" then
         F.GlueTo(r, tRoot, surfacePos)
         F.KnifeInsideTarget(target)
+        if F.SafeKnifeActivate then F.SafeKnifeActivate() end
         if now >= (getgenv()._KSK_Until or 0) then
             getgenv()._KSK_Phase = "void"
-            getgenv()._KSK_Until = now + (SpamVoidOutTime or 0.12)
+            getgenv()._KSK_Until = now + outT
             getgenv()._KSK_Surf = CFrame.new(surfacePos)
         end
     else
-        F.VoidSpamStep(r, getgenv()._KSK_Surf)
+        -- void phase
+        F.VoidSpamStep(r, getgenv()._KSK_Surf or CFrame.new(surfacePos))
         if now >= (getgenv()._KSK_Until or 0) then
             getgenv()._KSK_Phase = "surface"
-            getgenv()._KSK_Until = now + (SpamVoidInTime or 0.12)
+            getgenv()._KSK_Until = now + inT
         end
     end
     return false
@@ -4529,9 +4587,11 @@ function F.GunKillStep(target)
     if not hum or hum.Health <= 0 then return true end
     local off = F.GetKillSlotOffset(MySlot, MaxBots, "square_above")
     F.GlueTo(r, tRoot, tRoot.Position + off)
-    if F.EquipSelectedGun then F.EquipSelectedGun() end
+    local gun = F.EquipSelectedGun and F.EquipSelectedGun()
+    if not gun then gun = F.EquipBestWeapon and F.EquipBestWeapon() end
     if F.ApplyToolPosToEquipped then F.ApplyToolPosToEquipped(target) end
     if F.FireForceHit then F.FireForceHit(target) end
+    if gun then pcall(function() gun:Activate() end) end
     return false
 end
 
@@ -4548,25 +4608,31 @@ function F.GunSpamKillStep(target)
     local hum = tChar:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return true end
     local now = tick()
-    getgenv()._GSK_Phase = getgenv()._GSK_Phase or "surface"
-    getgenv()._GSK_Until = getgenv()._GSK_Until or 0
-    local off = F.GetKillSlotOffset(MySlot, MaxBots, "square_above")
+    if getgenv()._GSK_Phase ~= "surface" and getgenv()._GSK_Phase ~= "void" then
+        getgenv()._GSK_Phase = "surface"
+        getgenv()._GSK_Until = now
+    end
+    local off = F.GetKillSlotOffset(MySlot or 1, MaxBots or 12, "square_above")
     local surfacePos = tRoot.Position + off
+    local inT = SpamVoidInTime or 0.10
+    local outT = SpamVoidOutTime or 0.10
     if getgenv()._GSK_Phase == "surface" then
         F.GlueTo(r, tRoot, surfacePos)
-        if F.EquipSelectedGun then F.EquipSelectedGun() end
+        local gun = F.EquipSelectedGun and F.EquipSelectedGun()
+        if not gun then gun = F.EquipBestWeapon and F.EquipBestWeapon() end
         if F.ApplyToolPosToEquipped then F.ApplyToolPosToEquipped(target) end
         if F.FireForceHit then F.FireForceHit(target) end
+        if gun then pcall(function() gun:Activate() end) end
         if now >= (getgenv()._GSK_Until or 0) then
             getgenv()._GSK_Phase = "void"
-            getgenv()._GSK_Until = now + (SpamVoidOutTime or 0.12)
+            getgenv()._GSK_Until = now + outT
             getgenv()._GSK_Surf = CFrame.new(surfacePos)
         end
     else
-        F.VoidSpamStep(r, getgenv()._GSK_Surf)
+        F.VoidSpamStep(r, getgenv()._GSK_Surf or CFrame.new(surfacePos))
         if now >= (getgenv()._GSK_Until or 0) then
             getgenv()._GSK_Phase = "surface"
-            getgenv()._GSK_Until = now + (SpamVoidInTime or 0.12)
+            getgenv()._GSK_Until = now + inT
         end
     end
     return false
@@ -4651,9 +4717,11 @@ function F.GunOrbitStep(target)
     if not hum or hum.Health <= 0 then return true end
     local off = F.GetKillSlotOffset(MySlot, MaxBots, "orbit_high")
     F.GlueTo(r, tRoot, tRoot.Position + off)
-    if F.EquipSelectedGun then F.EquipSelectedGun() end
+    local gun = F.EquipSelectedGun and F.EquipSelectedGun()
+    if not gun then gun = F.EquipBestWeapon and F.EquipBestWeapon() end
     if F.ApplyToolPosToEquipped then F.ApplyToolPosToEquipped(target) end
     if F.FireForceHit then F.FireForceHit(target) end
+    if gun then pcall(function() gun:Activate() end) end
     return false
 end
 
@@ -4663,7 +4731,13 @@ function F.StartKillAttackLoop()
     getgenv()._GTK_Start = nil
     getgenv()._GTK_HoldUntil = 0
     getgenv()._KSK_Phase = "surface"
+    getgenv()._KSK_Until = 0
     getgenv()._GSK_Phase = "surface"
+    getgenv()._GSK_Until = 0
+    CustomGlueCF = nil
+    GlueMode = "custom"
+    getgenv().glue_active = true
+    if getgenv().unc_connection then pcall(getgenv().unc_connection) end
     F.StartKillVisualSpoof()
     KillAttackConn = RunService.Heartbeat:Connect(function()
         if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then return end
@@ -4812,22 +4886,26 @@ end
 function F.DestroyBlackScreen()
     if BlackScreenGui then pcall(function() BlackScreenGui:Destroy() end) BlackScreenGui = nil end
 end
-function F.Notify(text)
+function F.Notify(text, forceChat)
+    local msg = tostring(text or "")
     pcall(function()
         game:GetService("StarterGui"):SetCore("SendNotification", {
             Title = "NAMELESS",
-            Text = tostring(text),
-            Duration = 5,
+            Text = msg,
+            Duration = 4,
         })
     end)
-    pcall(function()
-        game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
-            Text = "[NAMELESS] " .. tostring(text),
-            Color = Color3.fromRGB(120, 220, 160),
-            Font = Enum.Font.SourceSansBold,
-            TextSize = 16,
-        })
-    end)
+    -- only push to chat for important messages (e.g. gun not found)
+    if forceChat or msg:lower():find("gun not") then
+        pcall(function()
+            game:GetService("StarterGui"):SetCore("ChatMakeSystemMessage", {
+                Text = "[NAMELESS] " .. msg,
+                Color = Color3.fromRGB(120, 220, 160),
+                Font = Enum.Font.SourceSansBold,
+                TextSize = 16,
+            })
+        end)
+    end
 end
 BotEspFolder = nil
 local BotEspConns = {}
@@ -6312,27 +6390,33 @@ F.StartKill = function(targets, isAuto)
     KillPhase, StompDoneForCycle = "attack", false
     FastKillPhase, FastKillFrontCF, FastKillTweening = "behind", nil, false
     FastKillTweenFrom = nil
+    ForceHitCmdTarget = TargetPlayer
+    ForceHitKeybindTarget = TargetPlayer
+    getgenv().AutostompTarget = TargetPlayer
+    -- sync UseGun from method
+    do
+        local m = F.GetKillMethod and F.GetKillMethod() or "kk"
+        UseGun = (m == "gk" or m == "gsk" or m == "gtk" or m == "go")
+    end
     if isAuto then PendingAutokill, SavedKillTargets = true, targets else PendingAutokill, SavedKillTargets = nil, nil end
     if UseGun then
-        pcall(function() if F.EquipSelectedGun then F.EquipSelectedGun() end end)
+        local gun = nil
+        pcall(function() gun = F.EquipSelectedGun and F.EquipSelectedGun() end)
+        if not gun then
+            pcall(function() gun = F.EquipBestWeapon and F.EquipBestWeapon() end)
+        end
+        if not gun and F.Notify then
+            F.Notify("gun not found")
+        end
     else
         pcall(function()
             if F.UnequipAllTools then F.UnequipAllTools() end
-            local char = LocalPlayer.Character
-            local bag = LocalPlayer:FindFirstChild("Backpack")
-            for _, parent in ipairs({ char, bag }) do
-                if parent then
-                    for _, tool in ipairs(parent:GetChildren()) do
-                        if tool:IsA("Tool") and tool.Name:lower():find("knife") then
-                            tool.Parent = char
-                            break
-                        end
-                    end
-                end
-            end
+            if F.EnsureKnifeEquipped then F.EnsureKnifeEquipped()
+            elseif F.EquipKnifeOnly then F.EquipKnifeOnly() end
         end)
     end
-    F.StartGlue(UseGun and "gun" or "knife", TargetPlayer)
+    CustomGlueCF = nil
+    F.StartGlue("custom", TargetPlayer)
     do
         local tr = TargetPlayer and TargetPlayer.Character and (
             TargetPlayer.Character:FindFirstChild("HumanoidRootPart")
@@ -6351,7 +6435,11 @@ F.StartKill = function(targets, isAuto)
     end
     F.StartCameraLock(TargetPlayer)
     F.StopSlotSpam()
-    if UseGun then F.EquipBestWeapon() end
+    if UseGun then
+        local g = nil
+        pcall(function() g = F.EquipSelectedGun and F.EquipSelectedGun() end)
+        if not g then pcall(function() g = F.EquipBestWeapon and F.EquipBestWeapon() end) end
+    end
     F.StartKillAttackLoop()
     task.spawn(function()
         while CurrentAction == "kill" or CurrentAction == "autokill" do
@@ -6390,7 +6478,7 @@ F.StartKill = function(targets, isAuto)
                     TargetPlayer = nxt
                     t = nxt
                     KillPhase = "attack"
-                    F.StartGlue(UseGun and "gun" or "knife", t)
+                    F.StartGlue("custom", t)
                     F.StartCameraLock(t)
                     F.StartKillAttackLoop()
                 end
@@ -6500,7 +6588,7 @@ F.StartKill = function(targets, isAuto)
                     FastKillPhase, FastKillFrontCF, FastKillTweening, FastKillTweenFrom = "behind", nil, false, nil
                     FastKillLastStep = 0
                     SpamVoidPhase = "surface"
-                    F.StartGlue(UseGun and "gun" or "knife", t)
+                    F.StartGlue("custom", t)
                     F.StartCameraLock(t)
                     F.StopSlotSpam()
                     CurrentAction = "autokill"
@@ -7155,7 +7243,11 @@ if cmd == "stop" or cmd == "idle" then
             pcall(function() if F.DestroyBlackScreen then F.DestroyBlackScreen() end end)
             pcall(function() if F.SetNoRender then F.SetNoRender(false) end end)
         end
-    elseif cmd == "summon" or cmd == "follow" or cmd == "come" then
+    elseif cmd == "summon" then
+        PendingAutokill, SavedKillTargets = nil, nil
+        if F.StopProtectOwner then F.StopProtectOwner() end
+        F.StartFormation("summon", args[2])
+    elseif cmd == "follow" or cmd == "come" then
         PendingAutokill, SavedKillTargets = nil, nil
         if F.StopProtectOwner then F.StopProtectOwner() end
         F.StartFollow()
@@ -7259,6 +7351,8 @@ if cmd == "stop" or cmd == "idle" then
     elseif cmd == "rline" then F.StartFormation("rline", args[2])
     elseif cmd == "lline" then F.StartFormation("lline", args[2])
     elseif cmd == "circle" then F.StartFormation("circle", args[2])
+    elseif cmd == "skyline" then F.StartFormation("skyline", args[2])
+    elseif cmd == "stackon" or cmd == "pole" or cmd == "stack" then F.StartFormation("stackon", args[2])
     elseif cmd == "dance" then
         if args[2] == "off" or args[2] == "stop" then
             pcall(function() if F.StartDefaultEmote then F.StartDefaultEmote() end end)
