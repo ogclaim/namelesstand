@@ -197,7 +197,7 @@ local VAULT_EMOTES = {
     ["penguini"] = "rbxassetid://86612834365351",
     ["human_tornado"] = "rbxassetid://94566164803307",
 }
-getgenv().SIZE_X, getgenv().SIZE_Y, getgenv().SIZE_Z = 50, 50, 50
+getgenv().SIZE_X, getgenv().SIZE_Y, getgenv().SIZE_Z = 30, 30, 30
 getgenv().KnifeHitboxEnabled = true
 getgenv().CharHitboxTiny = true
 getgenv().glue_active = false
@@ -510,39 +510,23 @@ ShowBotsTab = false
 KillMethodPaint = {}
 function F.GetKillMethod()
     local m = getgenv().NamelessKillMethod or KillMethod or "korbit"
-    if m == "spamvoid" or m == "knifespamkill" then m = "ksk" end
-    if m == "orbit" or m == "orbitkill" then m = "korbit" end
-    if m == "tween" or m == "fastkill" or m == "uzikill" or m == "skill" then m = "korbit" end
-    return m
+    m = tostring(m or ""):lower()
+    if m == "gorbit" or m == "gunorbit" or m == "gun" then
+        return "gorbit"
+    end
+    -- all other methods map to classic knife orbit
+    return "korbit"
 end
 function F.SetKillMethod(m)
     m = tostring(m or ""):lower()
-    if m == "spamvoid" or m == "ksk" or m == "knifespamkill" then
-        m = "ksk"
-    elseif m == "gorbit" or m == "gunorbit" then
+    if m == "gorbit" or m == "gunorbit" or m == "gun" then
         m = "gorbit"
-    elseif m == "korbit" or m == "knifeorbit" or m == "orbit" or m == "orbitkill" then
-        m = "korbit"
-    elseif m == "kstand" or m == "stand" or m == "standkill" then
-        m = "kstand"
     else
         m = "korbit"
     end
     KillMethod = m
     getgenv().NamelessKillMethod = m
     FastKillEnabled = false
-    if m == "tween" then
-        FastKillPhase = "behind"
-        FastKillFrontCF = nil
-        FastKillTweening = false
-        FastKillTweenFrom = nil
-        FastKillTweenStart = 0
-    elseif m == "spamvoid" then
-        SpamVoidPhase = "surface"
-        SpamVoidUntil = 0
-        SpamVoidSurfaceCF = nil
-        SpamVoidHitDone = false
-    end
     for name, paint in pairs(KillMethodPaint) do
         pcall(paint)
     end
@@ -551,7 +535,7 @@ function F.SetKillMethod(m)
     end
     return m
 end
-pcall(function() F.SetKillMethod(KillMethod or "orbit") end)
+pcall(function() F.SetKillMethod("korbit") end)
 AutoStompEnabled = false
 GodmodeEnabled = false
 Test1Enabled = false
@@ -2619,7 +2603,7 @@ end
 
 getgenv().KnifeHitboxEnabled = true
 getgenv().CharHitboxTiny = true
-if getgenv().SIZE_X == nil then getgenv().SIZE_X, getgenv().SIZE_Y, getgenv().SIZE_Z = 21, 21, 21 end
+getgenv().SIZE_X, getgenv().SIZE_Y, getgenv().SIZE_Z = 30, 30, 30
 
 -- Safe minimum sizes (NOT 0 - size 0 freezes/bugs characters)
 local CHAR_HB_HRP = Vector3.new(0.4, 0.4, 0.4)
@@ -2688,22 +2672,170 @@ function F.ApplyCharHitboxTiny()
     end
 end
 
-function F.ApplyKnifeToolHitbox(char)
+function F.ApplyKnifeToolHitbox(char, target)
     char = char or LocalPlayer.Character
     if not char then return end
+    if getgenv().KnifeHitboxEnabled == false then return end
     local knife = char:FindFirstChild("[Knife]") or char:FindFirstChild("Knife")
+    if not knife then
+        for _, t in ipairs(char:GetChildren()) do
+            if t:IsA("Tool") and tostring(t.Name):lower():find("knife") then
+                knife = t
+                break
+            end
+        end
+    end
     if not knife then return end
     local handle = knife:FindFirstChild("Handle")
-    local hitbox = handle and (handle:FindFirstChild("HITBOX_PART") or handle:FindFirstChild("Hitbox") or handle)
+    if not handle or not handle:IsA("BasePart") then return end
+    local hitbox = handle:FindFirstChild("HITBOX_PART") or handle:FindFirstChild("Hitbox") or handle
     if not hitbox or not hitbox:IsA("BasePart") then return end
-    -- tool expander always on
-    hitbox.Size = Vector3.new(getgenv().SIZE_X or 50, getgenv().SIZE_Y or 50, getgenv().SIZE_Z or 50)
-    hitbox.Transparency = 0.99
-    hitbox.Massless = true
-    hitbox.CanCollide = false
-    hitbox.CastShadow = false
-    hitbox.CanTouch = true
 
+    local sx = tonumber(getgenv().SIZE_X) or 30
+    local sy = tonumber(getgenv().SIZE_Y) or 30
+    local sz = tonumber(getgenv().SIZE_Z) or 30
+    -- same idea as Tool Grip + Hitbox Editor: resize Handle / hitbox part
+    pcall(function()
+        handle.Size = Vector3.new(sx, sy, sz)
+        handle.Massless = true
+        handle.CanCollide = false
+        handle.Transparency = 0.99
+        handle.CanTouch = true
+    end)
+    if hitbox ~= handle then
+        hitbox.Size = Vector3.new(sx, sy, sz)
+        hitbox.Transparency = 0.99
+        hitbox.Massless = true
+        hitbox.CanCollide = false
+        hitbox.CastShadow = false
+        hitbox.CanTouch = true
+    end
+
+    -- during kill: push hitbox onto target
+    local t = target or TargetPlayer
+    if not t and getgenv().KillAura and getgenv().KillAura.CurrentTarget then
+        t = getgenv().KillAura.CurrentTarget
+    end
+    local tChar = t and t.Character
+    local tPart = tChar and (
+        tChar:FindFirstChild("HumanoidRootPart")
+        or tChar:FindFirstChild("UpperTorso")
+        or tChar:FindFirstChild("Head")
+    )
+    if tPart and (CurrentAction == "kill" or CurrentAction == "autokill" or CurrentAction == "bring") then
+        pcall(function()
+            handle.CFrame = tPart.CFrame
+            hitbox.CFrame = tPart.CFrame
+            handle.AssemblyLinearVelocity = Vector3.zero
+            hitbox.AssemblyLinearVelocity = Vector3.zero
+        end)
+    end
+end
+
+-- Tool Grip offsets (same style as Tool Grip + Hitbox Editor: tool.Grip = CFrame)
+-- DB: 0,0,14 | SG/TSG: 0,0,-14 | Rev/Silencer/Uzi: 0,10,0
+-- Knife korbit: grip + handle forced on target
+if getgenv().ToolPosEnabled == nil then getgenv().ToolPosEnabled = true end
+getgenv().ToolPos = getgenv().ToolPos or {
+    DoubleBarrel = {0, 0, 14, 0, 0, 0},
+    Shotgun = {0, 0, -14, 0, 0, 0},
+    TacticalShotgun = {0, 0, -14, 0, 0, 0},
+    Revolver = {0, 10, 0, 0, 0, 0},
+    Silencer = {0, 10, 0, 0, 0, 0},
+    Uzi = {0, 10, 0, 0, 0, 0},
+    SMG = {0, 10, 0, 0, 0, 0},
+    Knife = {0, 0, 0, 0, 0, 0},
+}
+
+function F.GetToolGripValues(tool)
+    local def = {0, 0, 0, 0, 0, 0}
+    if not tool then return def end
+    local n = string.lower(tostring(tool.Name or ""))
+    local tp = getgenv().ToolPos or {}
+    local v
+    if n:find("double") or n:find("%[double") or n:find("db") then
+        v = tp.DoubleBarrel
+    elseif n:find("tactical") or n:find("tsg") then
+        v = tp.TacticalShotgun
+    elseif n:find("shotgun") then
+        v = tp.Shotgun
+    elseif n:find("revolver") or n:find("rev") then
+        v = tp.Revolver
+    elseif n:find("silencer") then
+        v = tp.Silencer
+    elseif n:find("uzi") then
+        v = tp.Uzi
+    elseif n:find("smg") then
+        v = tp.SMG
+    elseif n:find("knife") then
+        v = tp.Knife
+    end
+    if type(v) == "table" then
+        return {
+            tonumber(v[1]) or 0, tonumber(v[2]) or 0, tonumber(v[3]) or 0,
+            tonumber(v[4]) or 0, tonumber(v[5]) or 0, tonumber(v[6]) or 0,
+        }
+    elseif typeof(v) == "Vector3" then
+        return {v.X, v.Y, v.Z, 0, 0, 0}
+    end
+    return def
+end
+
+function F.ApplyToolGrip(tool)
+    if getgenv().ToolPosEnabled == false then return end
+    if not tool or not tool:IsA("Tool") then return end
+    local vals = F.GetToolGripValues(tool)
+    local px, py, pz = vals[1], vals[2], vals[3]
+    local rx, ry, rz = math.rad(vals[4]), math.rad(vals[5]), math.rad(vals[6])
+    pcall(function()
+        tool.Grip = CFrame.new(px, py, pz) * CFrame.Angles(rx, ry, rz)
+    end)
+end
+
+function F.ApplyToolPos(tool, target)
+    if not tool or not tool:IsA("Tool") then return end
+    local name = string.lower(tostring(tool.Name or ""))
+    local isKnife = name:find("knife") ~= nil
+
+    -- Knife during kill/bring: put grip at zero and move handle onto target (inside)
+    if isKnife and (CurrentAction == "kill" or CurrentAction == "autokill" or CurrentAction == "bring") then
+        pcall(function()
+            tool.Grip = CFrame.new(0, 0, 0)
+        end)
+        local handle = tool:FindFirstChild("Handle")
+        local t = target or TargetPlayer
+        local tChar = t and t.Character
+        local tPart = tChar and (
+            tChar:FindFirstChild("HumanoidRootPart")
+            or tChar:FindFirstChild("UpperTorso")
+            or tChar:FindFirstChild("Head")
+        )
+        if handle and handle:IsA("BasePart") and tPart then
+            pcall(function()
+                handle.CFrame = tPart.CFrame
+                handle.AssemblyLinearVelocity = Vector3.zero
+                handle.AssemblyAngularVelocity = Vector3.zero
+                local hb = handle:FindFirstChild("HITBOX_PART") or handle:FindFirstChild("Hitbox")
+                if hb and hb:IsA("BasePart") then
+                    hb.CFrame = tPart.CFrame
+                    hb.AssemblyLinearVelocity = Vector3.zero
+                end
+            end)
+        end
+        return
+    end
+
+    -- Guns / default: set Tool.Grip exactly like the Grip editor
+    F.ApplyToolGrip(tool)
+end
+
+function F.ApplyToolPosToEquipped(target)
+    local char = LocalPlayer.Character
+    if not char then return end
+    local tool = char:FindFirstChildOfClass("Tool")
+    if tool then
+        F.ApplyToolPos(tool, target)
+    end
 end
 
 function F.SafeKnifeActivate()
@@ -2828,8 +2960,13 @@ function F.BindGodmode(char)
 end
 
 function F.ApplyStandNoHit()
-    F.ApplyKnifeToolHitbox(LocalPlayer.Character)
+    if getgenv().KnifeHitboxEnabled ~= false then
+        F.ApplyKnifeToolHitbox(LocalPlayer.Character, TargetPlayer)
+    end
     F.ApplyCharHitboxTiny()
+    if F.ApplyToolPosToEquipped then
+        F.ApplyToolPosToEquipped(TargetPlayer)
+    end
 end
 
 task.spawn(function()
@@ -4120,34 +4257,61 @@ end
 function F.OrbitKillStep(target)
     if not target then return true end
     if F.isWhitelisted and F.isWhitelisted(target) then return true end
+    if F.IsFriendlyStand and F.IsFriendlyStand(target) then return true end
     if ControllerName and target.Name:lower() == tostring(ControllerName):lower() then return true end
     local tChar = target.Character
     if not tChar then return true end
     local tRoot = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
-    local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local tHead = tChar:FindFirstChild("Head") or tRoot
+    local char = LocalPlayer.Character
+    local r = char and char:FindFirstChild("HumanoidRootPart")
     if not tRoot or not r then return false end
     if F.isKnocked and F.isKnocked(tChar) then return true end
     local hum = tChar:FindFirstChildOfClass("Humanoid")
     if not hum or hum.Health <= 0 then return true end
     if tChar:FindFirstChildOfClass("ForceField") then return false end
+
+    -- classic ring: each bot on its own angle around the target
     local slot = math.max(1, math.floor(tonumber(MySlot) or 1))
-    local total = math.max(1, tonumber(MaxBots) or 10)
-    local ang = ((slot - 1) / total) * math.pi * 2 + tick() * (UseGun and 2.0 or 2.8)
-    local dist = UseGun and 5.5 or 2.0
-    local y = UseGun and 1.8 or 0.5
+    local total = math.max(1, tonumber(MaxBots) or 12)
+    local spin = tick() * (UseGun and 1.6 or 2.4)
+    local ang = ((slot - 1) / total) * (math.pi * 2) + spin
+    local dist = UseGun and 6.0 or 2.4
+    local y = UseGun and 1.5 or 0.35
     local off = Vector3.new(math.cos(ang) * dist, y, math.sin(ang) * dist)
+
     r.CanCollide = false
     r.CFrame = CFrame.lookAt(tRoot.Position + off, tRoot.Position)
     r.AssemblyLinearVelocity = Vector3.zero
+    r.AssemblyAngularVelocity = Vector3.zero
     pcall(function()
         if F.SetPhysicsRepRootPart then F.SetPhysicsRepRootPart(r, tRoot) end
     end)
+
     if UseGun then
         if F.EquipSelectedGun then F.EquipSelectedGun() end
+        pcall(function()
+            if F.ApplyToolPosToEquipped then F.ApplyToolPosToEquipped(target) end
+        end)
         if F.FireForceHit then F.FireForceHit(target) end
     else
         if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-        if F.SafeKnifeActivate then F.SafeKnifeActivate() end
+        pcall(function()
+            if F.ApplyKnifeToolHitbox then
+                F.ApplyKnifeToolHitbox(char, target)
+            end
+            if F.ApplyToolPosToEquipped then
+                F.ApplyToolPosToEquipped(target)
+            end
+        end)
+        if F.SafeKnifeActivate then
+            F.SafeKnifeActivate()
+        else
+            local tool = char and char:FindFirstChildOfClass("Tool")
+            if tool and tostring(tool.Name):lower():find("knife") then
+                pcall(function() tool:Activate() end)
+            end
+        end
     end
     return false
 end
@@ -4381,7 +4545,7 @@ function F.StartKillAttackLoop()
             return
         end
         local tChar = t.Character
-        if not tChar or F.isKnocked(tChar) then
+        if not tChar or (F.isKnocked and F.isKnocked(tChar)) then
             return
         end
         local hum = tChar:FindFirstChildOfClass("Humanoid")
@@ -4391,34 +4555,15 @@ function F.StartKillAttackLoop()
         if tChar:FindFirstChildOfClass("ForceField") then
             return
         end
-        local m = F.GetKillMethod()
+        local m = F.GetKillMethod and F.GetKillMethod() or "korbit"
         if m == "gorbit" then
             UseGun = true
-            if F.EquipSelectedGun then
-                F.EquipSelectedGun()
-            end
+            if F.EquipSelectedGun then F.EquipSelectedGun() end
             F.OrbitKillStep(t)
-        elseif m == "ksk" or m == "spamvoid" then
-            UseGun = false
-            if F.EquipKnifeOnly then
-                F.EquipKnifeOnly()
-            end
-            F.SpamVoidKillStep(t)
-        elseif m == "kstand" then
-            UseGun = false
-            if F.EquipKnifeOnly then
-                F.EquipKnifeOnly()
-            end
-            if F.KStandKillStep then
-                F.KStandKillStep(t)
-            else
-                F.OrbitKillStep(t)
-            end
         else
+            -- classic knife orbit only
             UseGun = false
-            if F.EquipKnifeOnly then
-                F.EquipKnifeOnly()
-            end
+            if F.EquipKnifeOnly then F.EquipKnifeOnly() end
             F.OrbitKillStep(t)
         end
         if UseGun and tick() - LastReload > 1.8 then
@@ -6631,6 +6776,21 @@ F.OnChatted = function(player, message)
     if cmd == "slot" and args[2] then
         local n = tonumber(args[2])
         if n and n >= 1 and (F.IsOwner(player) or player == LocalPlayer or fromGui) then MySlot = math.floor(n) end
+    elseif cmd == "khitbox" or cmd == "knifehitbox" or cmd == "khit" then
+        if args[2] == "off" or args[2] == "0" or args[2] == "false" then
+            getgenv().KnifeHitboxEnabled = false
+        else
+            getgenv().KnifeHitboxEnabled = true
+            getgenv().SIZE_X = tonumber(getgenv().SIZE_X) or 30
+            getgenv().SIZE_Y = tonumber(getgenv().SIZE_Y) or 30
+            getgenv().SIZE_Z = tonumber(getgenv().SIZE_Z) or 30
+            pcall(function()
+                if F.ApplyKnifeToolHitbox then
+                    F.ApplyKnifeToolHitbox(LocalPlayer.Character, TargetPlayer)
+                end
+            end)
+        end
+        return
     elseif cmd == "size" or cmd == "muscle" or cmd == "musclesize" then
         local n = tonumber(args[2])
         if n ~= nil then
