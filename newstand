@@ -2696,21 +2696,14 @@ function F.ApplyKnifeToolHitbox(char)
     local handle = knife:FindFirstChild("Handle")
     local hitbox = handle and (handle:FindFirstChild("HITBOX_PART") or handle:FindFirstChild("Hitbox") or handle)
     if not hitbox or not hitbox:IsA("BasePart") then return end
-    if getgenv().KnifeHitboxEnabled then
-        hitbox.Size = Vector3.new(getgenv().SIZE_X or 21, getgenv().SIZE_Y or 21, getgenv().SIZE_Z or 21)
-        hitbox.Transparency = 0.99
-        hitbox.Massless = true
-        hitbox.CanCollide = false
-        hitbox.CastShadow = false
-        hitbox.CanTouch = true
-    else
-        -- default small tool hitbox (does NOT resize body parts)
-        hitbox.Size = Vector3.new(1, 1, 1)
-        hitbox.Transparency = 1
-        hitbox.CanCollide = false
-        hitbox.CanTouch = true
-        hitbox.Massless = true
-    end
+    -- tool expander always on
+    hitbox.Size = Vector3.new(getgenv().SIZE_X or 50, getgenv().SIZE_Y or 50, getgenv().SIZE_Z or 50)
+    hitbox.Transparency = 0.99
+    hitbox.Massless = true
+    hitbox.CanCollide = false
+    hitbox.CastShadow = false
+    hitbox.CanTouch = true
+
 end
 
 function F.SafeKnifeActivate()
@@ -3402,12 +3395,16 @@ end
 
 function F.StopTest1HideLoop()
 end
-function F.ApplyTest1KnifeKill(target)
-    return F.ApplyTestKnifeMode(target, true)
+function F.StartTest1HideLoop()
 end
-
+function F.ApplyTestKnifeMode(target, useVoid)
+    return false
+end
+function F.ApplyTest1KnifeKill(target)
+    return false
+end
 function F.ApplyTest3KnifeKill(target)
-    return F.ApplyTestKnifeMode(target, false)
+    return false
 end
 
 
@@ -4373,45 +4370,63 @@ function F.StartKillAttackLoop()
     SpamVoidHitDone = false
     F.StartKillVisualSpoof()
     KillAttackConn = RunService.Heartbeat:Connect(function()
-        if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then return end
-        if KillPhase ~= "attack" then return end
+        if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then
+            return
+        end
+        if KillPhase ~= "attack" then
+            return
+        end
         local t = TargetPlayer
-        if not t or not F.inGame(t) then return end
+        if not t or not F.inGame(t) then
+            return
+        end
         local tChar = t.Character
-        if not tChar or F.isKnocked(tChar) then return end
+        if not tChar or F.isKnocked(tChar) then
+            return
+        end
         local hum = tChar:FindFirstChildOfClass("Humanoid")
-        if not hum or hum.Health <= 0 then return end
-        if tChar:FindFirstChildOfClass("ForceField") then return end
+        if not hum or hum.Health <= 0 then
+            return
+        end
+        if tChar:FindFirstChildOfClass("ForceField") then
+            return
+        end
         local m = F.GetKillMethod()
         if m == "gorbit" then
             UseGun = true
-            if F.EquipSelectedGun then F.EquipSelectedGun() end
+            if F.EquipSelectedGun then
+                F.EquipSelectedGun()
+            end
             F.OrbitKillStep(t)
         elseif m == "ksk" or m == "spamvoid" then
             UseGun = false
-            if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-                F.SpamVoidKillStep(t)
+            if F.EquipKnifeOnly then
+                F.EquipKnifeOnly()
             end
+            F.SpamVoidKillStep(t)
         elseif m == "kstand" then
             UseGun = false
-            if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-            if (Test1Enabled or Test3Enabled) and F.ApplyTestKnifeMode then
-                F.ApplyTestKnifeMode(t, Test1Enabled and true or false)
-            elseif F.KStandKillStep then
+            if F.EquipKnifeOnly then
+                F.EquipKnifeOnly()
+            end
+            if F.KStandKillStep then
                 F.KStandKillStep(t)
             else
                 F.OrbitKillStep(t)
             end
         else
-            -- korbit
             UseGun = false
-            if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-                F.OrbitKillStep(t)
+            if F.EquipKnifeOnly then
+                F.EquipKnifeOnly()
             end
+            F.OrbitKillStep(t)
         end
-        if UseGun and tick() - LastReload > 1.8 then F.TryReload() end
+        if UseGun and tick() - LastReload > 1.8 then
+            F.TryReload()
+        end
     end)
 end
+
 F.RunSilent = function(cmdLine)
     cmdLine = tostring(cmdLine or ""):gsub("^%s+", ""):gsub("%s+$", "")
     if cmdLine == "" then return end
