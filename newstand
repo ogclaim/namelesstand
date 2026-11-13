@@ -30,13 +30,11 @@ local BotListOrdered = {
     "Frosb4622",
     "Skybla1919",
     "Gracban5470",
-    "Zeavi2067",
-    "Warneed6752",
-    "Drokspan7917",
     "Kipsh6295",
+    "Warneed6752",
     "Kiptwist5311",
 }
-local MaxBots = 10
+local MaxBots = 8
 local PREFIX = "NAMELESS.HVH | !"
 local function GENV()
     local ok, g = pcall(function()
@@ -2829,6 +2827,14 @@ end
 function F.ApplyToolGrip(tool)
     if getgenv().ToolPosEnabled == false then return end
     if not tool or not tool:IsA("Tool") then return end
+    -- save original grip once so !return can restore
+    getgenv()._OriginalGrips = getgenv()._OriginalGrips or {}
+    local key = tostring(tool.Name)
+    if getgenv()._OriginalGrips[key] == nil then
+        pcall(function()
+            getgenv()._OriginalGrips[key] = tool.Grip
+        end)
+    end
     local vals = F.GetToolGripValues(tool)
     local px, py, pz = vals[1], vals[2], vals[3]
     local rx, ry, rz = math.rad(vals[4]), math.rad(vals[5]), math.rad(vals[6])
@@ -2837,15 +2843,29 @@ function F.ApplyToolGrip(tool)
     end)
 end
 
+function F.ReturnToolGrip(tool)
+    tool = tool or (LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool"))
+    if not tool or not tool:IsA("Tool") then return false end
+    local key = tostring(tool.Name)
+    local orig = getgenv()._OriginalGrips and getgenv()._OriginalGrips[key]
+    if orig then
+        pcall(function() tool.Grip = orig end)
+        return true
+    end
+    -- fallback identity grip
+    pcall(function() tool.Grip = CFrame.new() end)
+    return true
+end
+
 function F.ApplyToolPos(tool, target)
     if not tool or not tool:IsA("Tool") then return end
     local name = string.lower(tostring(tool.Name or ""))
     local isKnife = name:find("knife") ~= nil
 
-    -- Knife during kill/bring: put grip at zero and move handle onto target (inside)
+    -- Knife during kill/bring: grip upside-down + handle on target body
     if isKnife and (CurrentAction == "kill" or CurrentAction == "autokill" or CurrentAction == "bring") then
         pcall(function()
-            tool.Grip = CFrame.new(0, 0, 0)
+            tool.Grip = CFrame.new(0, 0, 0) * CFrame.Angles(math.rad(180), 0, 0)
         end)
         local handle = tool:FindFirstChild("Handle")
         local t = target or TargetPlayer
@@ -2870,7 +2890,7 @@ function F.ApplyToolPos(tool, target)
         return
     end
 
-    -- Guns / default: set Tool.Grip exactly like the Grip editor
+    -- Guns: ONLY Tool.Grip (never move Handle CFrame — keeps stable aim pose)
     F.ApplyToolGrip(tool)
 end
 
@@ -3627,6 +3647,7 @@ function F.StopAll()
     RapidFireEnabled = false
     if F.StopOrbit3CombatLoop then F.StopOrbit3CombatLoop() end
     if F.StopKillAttackLoop then F.StopKillAttackLoop() end
+    if F.StopKillPositionLock then F.StopKillPositionLock() end
     if F.StopKillVisualSpoof then F.StopKillVisualSpoof() end
     F.StopGlue()
     F.StopCameraLock()
@@ -4388,20 +4409,85 @@ end
 
 function F.GlueTo(r, tRoot, worldPos)
     if not r or not tRoot then return end
+    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function()
+            hum.PlatformStand = false
+            hum.Sit = false
+            hum.AutoRotate = false
+            hum.WalkSpeed = 0
+            hum.JumpPower = 0
+            hum.JumpHeight = 0
+        end)
+    end
     r.CanCollide = false
     r.Anchored = false
     r.AssemblyLinearVelocity = Vector3.zero
     r.AssemblyAngularVelocity = Vector3.zero
+    pcall(function()
+        r.Velocity = Vector3.zero
+        r.RotVelocity = Vector3.zero
+    end)
     local look = tRoot.Position
     local cf = CFrame.lookAt(worldPos, look)
-    -- drive classic glue so connection_loop does not overwrite with knife/gun orbit CF
     GlueMode = "custom"
     CustomGlueCF = cf
     getgenv().glue_active = true
+    getgenv()._KillLockCF = cf
+    getgenv()._KillLockTarget = tRoot
     pcall(function()
         if F.SetPhysicsRepRootPart then F.SetPhysicsRepRootPart(r, tRoot) end
     end)
+    -- write CFrame twice (Heartbeat + immediate) so physics can't pull us away
     r.CFrame = cf
+    pcall(function()
+        r.CFrame = cf
+        r.AssemblyLinearVelocity = Vector3.zero
+    end)
+end
+
+-- hard lock on RenderStepped so position sticks even if Heartbeat loses the race
+function F.StartKillPositionLock()
+    if getgenv()._KillPosLockConn then
+        pcall(function() getgenv()._KillPosLockConn:Disconnect() end)
+        getgenv()._KillPosLockConn = nil
+    end
+    getgenv()._KillPosLockConn = RunService.RenderStepped:Connect(function()
+        if CurrentAction ~= "kill" and CurrentAction ~= "autokill" and CurrentAction ~= "bring" then
+            return
+        end
+        local cf = CustomGlueCF or getgenv()._KillLockCF
+        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if not r or not cf then return end
+        r.CanCollide = false
+        r.CFrame = cf
+        r.AssemblyLinearVelocity = Vector3.zero
+        r.AssemblyAngularVelocity = Vector3.zero
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then
+            pcall(function()
+                hum.Sit = false
+                hum.PlatformStand = false
+                hum.AutoRotate = false
+            end)
+        end
+    end)
+end
+
+function F.StopKillPositionLock()
+    if getgenv()._KillPosLockConn then
+        pcall(function() getgenv()._KillPosLockConn:Disconnect() end)
+        getgenv()._KillPosLockConn = nil
+    end
+    getgenv()._KillLockCF = nil
+    local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function()
+            hum.AutoRotate = true
+            hum.WalkSpeed = 16
+            hum.JumpPower = 50
+        end)
+    end
 end
 
 function F.EnsureKnifeEquipped()
@@ -4725,8 +4811,18 @@ function F.GunOrbitStep(target)
     return false
 end
 
+function F.StopKillAttackLoop()
+    if KillAttackConn then
+        pcall(function() KillAttackConn:Disconnect() end)
+        KillAttackConn = nil
+    end
+    if F.StopKillPositionLock then
+        pcall(F.StopKillPositionLock)
+    end
+end
+
 function F.StartKillAttackLoop()
-    F.StopKillAttackLoop()
+    if F.StopKillAttackLoop then F.StopKillAttackLoop() end
     getgenv()._KTK_Start = nil
     getgenv()._GTK_Start = nil
     getgenv()._GTK_HoldUntil = 0
@@ -4738,17 +4834,22 @@ function F.StartKillAttackLoop()
     GlueMode = "custom"
     getgenv().glue_active = true
     if getgenv().unc_connection then pcall(getgenv().unc_connection) end
+    if F.StartKillPositionLock then F.StartKillPositionLock() end
     F.StartKillVisualSpoof()
     KillAttackConn = RunService.Heartbeat:Connect(function()
         if CurrentAction ~= "kill" and CurrentAction ~= "autokill" then return end
         if KillPhase ~= "attack" then return end
         local t = TargetPlayer
-        if not t or not F.inGame(t) then return end
+        if not t or not t.Parent then return end
         local tChar = t.Character
-        if not tChar or (F.isKnocked and F.isKnocked(tChar)) then return end
+        if not tChar then return end
+        if F.isKnocked and F.isKnocked(tChar) then return end
         local hum = tChar:FindFirstChildOfClass("Humanoid")
         if not hum or hum.Health <= 0 then return end
         if tChar:FindFirstChildOfClass("ForceField") then return end
+        -- keep glue alive
+        getgenv().glue_active = true
+        GlueMode = "custom"
         local m = F.GetKillMethod and F.GetKillMethod() or "kk"
         if m == "ksk" then
             F.KnifeSpamKillStep(t)
@@ -6962,6 +7063,17 @@ F.OnChatted = function(player, message)
     elseif cmd == "guninside" then
         getgenv().GunFaceMode = "inside"
         return
+    elseif cmd == "return" or cmd == "toolreturn" or cmd == "treturn" or cmd == "gripreturn" then
+        -- restore original tool grip (before custom tool pos)
+        getgenv().GunFaceMode = "front"
+        getgenv().ToolPosEnabled = false
+        pcall(function()
+            if F.ReturnToolGrip then F.ReturnToolGrip() end
+        end)
+        task.delay(0.05, function()
+            getgenv().ToolPosEnabled = true
+        end)
+        return
     elseif cmd == "khitbox" or cmd == "knifehitbox" or cmd == "khit" then
         if args[2] == "off" or args[2] == "0" or args[2] == "false" then
             getgenv().KnifeHitboxEnabled = false
@@ -7051,12 +7163,12 @@ return
         FrozenByPrivilege = false
 return
     end
-    if cmd == "return" or cmd == "reclaim" or cmd == "revert" then
+    if cmd == "reclaim" or cmd == "revert" then
         if not F.IsOriginalController(player) then return end
         ControllerName = OriginalControllerName or player.Name
         ExtraOwners = {}
         FrozenByPrivilege = false
-return
+        return
     end
     if F.IsPrivileged(player) then
         if cmd == "freeze" then F.StopAll() FrozenByPrivilege = true local r=getgenv().get_root_part() if r then r.Anchored=true end return end
