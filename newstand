@@ -2618,7 +2618,85 @@ function F.IsFriendlyStand(plr)
 end
 
 if getgenv().KnifeHitboxEnabled == nil then getgenv().KnifeHitboxEnabled = false end
+if getgenv().CharHitboxTiny == nil then getgenv().CharHitboxTiny = false end
 if getgenv().SIZE_X == nil then getgenv().SIZE_X, getgenv().SIZE_Y, getgenv().SIZE_Z = 21, 21, 21 end
+
+-- Safe minimum sizes (NOT 0 - size 0 freezes/bugs characters)
+local CHAR_HB_HRP = Vector3.new(0.4, 0.4, 0.4)
+local CHAR_HB_LIMB = Vector3.new(0.15, 0.15, 0.15)
+local CHAR_HB_HEAD = Vector3.new(0.2, 0.2, 0.2)
+
+function F.StoreOrigPartSize(part)
+    if not part or not part:IsA("BasePart") then return end
+    if part:GetAttribute("NH_OrigSizeX") == nil then
+        local s = part.Size
+        part:SetAttribute("NH_OrigSizeX", s.X)
+        part:SetAttribute("NH_OrigSizeY", s.Y)
+        part:SetAttribute("NH_OrigSizeZ", s.Z)
+    end
+end
+
+function F.RestoreOrigPartSize(part)
+    if not part or not part:IsA("BasePart") then return end
+    local x = part:GetAttribute("NH_OrigSizeX")
+    if type(x) == "number" then
+        pcall(function()
+            part.Size = Vector3.new(
+                part:GetAttribute("NH_OrigSizeX"),
+                part:GetAttribute("NH_OrigSizeY"),
+                part:GetAttribute("NH_OrigSizeZ")
+            )
+        end)
+    end
+end
+
+function F.ApplyCharHitboxTinyToChar(char, on)
+    if not char then return end
+    for _, part in ipairs(char:GetDescendants()) do
+        if part:IsA("BasePart") then
+            local n = string.lower(part.Name)
+            -- skip accessories / tools
+            if part:FindFirstAncestorOfClass("Tool") or part:FindFirstAncestorOfClass("Accessory") then
+                -- only touch body
+            else
+                F.StoreOrigPartSize(part)
+                pcall(function()
+                    if on then
+                        if n == "humanoidrootpart" then
+                            part.Size = CHAR_HB_HRP
+                        elseif n == "head" then
+                            part.Size = CHAR_HB_HEAD
+                        else
+                            part.Size = CHAR_HB_LIMB
+                        end
+                        part.CanCollide = false
+                        part.CanTouch = false
+                        part.CanQuery = false
+                        -- do NOT set Massless (freezes bots)
+                    else
+                        F.RestoreOrigPartSize(part)
+                        if n == "humanoidrootpart" then
+                            part.CanTouch = true
+                            part.CanQuery = true
+                        end
+                    end
+                end)
+            end
+        end
+    end
+end
+
+function F.ApplyCharHitboxTiny()
+    local on = getgenv().CharHitboxTiny == true
+    -- self (bot)
+    F.ApplyCharHitboxTinyToChar(LocalPlayer.Character, on)
+    -- friendly others on this client (whitelist / controller / stands)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and F.IsFriendlyStand and F.IsFriendlyStand(plr) then
+            F.ApplyCharHitboxTinyToChar(plr.Character, on)
+        end
+    end
+end
 
 function F.ApplyKnifeToolHitbox(char)
     char = char or LocalPlayer.Character
@@ -2768,6 +2846,9 @@ end
 
 function F.ApplyStandNoHit()
     F.ApplyKnifeToolHitbox(LocalPlayer.Character)
+    if getgenv().CharHitboxTiny then
+        F.ApplyCharHitboxTiny()
+    end
     if GodmodeEnabled then
         F.ApplyGodmode(LocalPlayer.Character)
     end
@@ -5954,62 +6035,25 @@ F.StartFollow = function()
             hum.JumpPower = math.max(hum.JumpPower, 50)
         end
     end)
-    -- initial CFrame
-    pcall(function()
-        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        local dest = F.GetSummonWorldCF and F.GetSummonWorldCF()
-        if not dest then
-            local tr = ctrl.Character and (ctrl.Character:FindFirstChild("HumanoidRootPart") or ctrl.Character:FindFirstChild("UpperTorso"))
-            if tr and r then
-                local slot = tonumber(MySlot) or 1
-                local col = (slot - 1) % 3
-                local row = math.floor((slot - 1) / 3)
-                dest = tr.CFrame * CFrame.new((col - 1) * (FollowSpacing or 3), (HeightPerRow or 3) * row + 3, (FollowBack or 4) + row * (FollowBack or 4))
-            end
-        end
-        if r and dest then
-            r.CFrame = dest
-            r.AssemblyLinearVelocity = Vector3.zero
-        end
-    end)
-    -- keep existing glue system
-    pcall(function() F.StartGlue("follow", ctrl) end)
-    -- independent mover so bots always move even if glue dest fails
+    -- summon: GLUE only (no continuous CFrame follow mover)
     if getgenv()._NamelessFollowMove then
         pcall(function() getgenv()._NamelessFollowMove:Disconnect() end)
         getgenv()._NamelessFollowMove = nil
     end
+    pcall(function() F.StartGlue("follow", ctrl) end)
+    -- keep glue alive if it drops
     getgenv()._NamelessFollowMove = RunService.Heartbeat:Connect(function()
         if CurrentAction ~= "follow" then return end
         local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-        if not r then return end
-        r.Anchored = false
-        local hum = LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
-        if hum then hum.PlatformStand = false hum.Sit = false end
-        local dest = nil
-        pcall(function() dest = F.GetSummonWorldCF() end)
-        if not dest then
-            local c = F.GetController()
-            local tr = c and c.Character and (c.Character:FindFirstChild("HumanoidRootPart") or c.Character:FindFirstChild("UpperTorso"))
-            if tr then
-                local slot = tonumber(MySlot) or 1
-                local col = (slot - 1) % 3
-                local row = math.floor((slot - 1) / 3)
-                dest = tr.CFrame * CFrame.new((col - 1) * (FollowSpacing or 3), (HeightPerRow or 3) * row + 3, (FollowBack or 4) + row * (FollowBack or 4))
-            end
-        end
-        if dest then
-            r.CFrame = dest
-            r.AssemblyLinearVelocity = Vector3.zero
-            r.AssemblyAngularVelocity = Vector3.zero
+        if r then
+            r.Anchored = false
             r.CanCollide = false
         end
-        -- re-assert glue active
+        local hum = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Humanoid")
+        if hum then hum.PlatformStand = false hum.Sit = false end
         if not getgenv().glue_active then
-            pcall(function()
-                local c = F.GetController()
-                if c and F.StartGlue then F.StartGlue("follow", c) end
-            end)
+            local c = F.GetController and F.GetController()
+            if c and F.StartGlue then pcall(function() F.StartGlue("follow", c) end) end
         end
     end)
     -- no fly idle / float / aura animation on summon
@@ -6581,82 +6625,119 @@ function F.StartBring(targets)
                 pcall(function() MainEvent:FireServer("Grabbing", false) end)
             end
         end
-        -- KILL phase
+        -- 1) KILL phase: HEADSit on target head + attack
         local killDeadline = tick() + 25
         while alive() and tick() < killDeadline and not knocked() do
             equip()
+            local c = TargetPlayer and TargetPlayer.Character
+            local head = c and c:FindFirstChild("Head")
             local tr = tRoot()
             local r = root()
-            if tr and r then
-                local dest
+            if r and (head or tr) then
+                local sitPos = (head and head.Position or tr.Position) + Vector3.new(0, 1.1, 0)
+                local look = (head and head.Position or tr.Position)
+                pcall(function()
+                    r.CanCollide = false
+                    r.AssemblyLinearVelocity = Vector3.zero
+                    r.CFrame = CFrame.lookAt(sitPos, look)
+                end)
                 if UseGun then
-                    local off = (F.GetInsideOffset and F.GetInsideOffset(tr, MySlot)) or Vector3.new(0, 0.3, 0)
-                    dest = CFrame.lookAt(tr.Position + off, tr.Position)
-                    r.CFrame = dest
                     if F.FireForceHit then F.FireForceHit(TargetPlayer) end
                 else
-                    local off = (F.GetInsideOffset and F.GetInsideOffset(tr, slot)) or Vector3.new(0, 0.5, 0)
-                    r.CFrame = CFrame.lookAt(tr.Position + off, tr.Position)
-                    if F.FastKillTriggerBot then F.FastKillTriggerBot(TargetPlayer) end
+                    if F.FastKillTriggerBot then F.FastKillTriggerBot(TargetPlayer)
+                    elseif F.SafeKnifeActivate then F.SafeKnifeActivate()
+                    end
                 end
-                r.AssemblyLinearVelocity = Vector3.zero
             end
             task.wait(0.05)
         end
         if not alive() then return end
-        -- non-slot-1 stop after kill assist
+        -- non-slot-1 assist only
         if slot > 1 then
             CurrentAction = "idle"
             TargetPlayer = nil
             if F.StartFollow then task.defer(F.StartFollow) end
             return
         end
-        -- GRAB phase: stand on body, G once, wait
-        local grabDeadline = tick() + 12
+        -- 2) CFRAME onto body (wait until body mostly still)
+        local settleDeadline = tick() + 6
+        local stillStart = nil
+        while alive() and tick() < settleDeadline do
+            local tr = tRoot()
+            local r = root()
+            if not tr or not r then break end
+            pcall(function()
+                r.CanCollide = false
+                r.AssemblyLinearVelocity = Vector3.zero
+                r.CFrame = CFrame.new(tr.Position + Vector3.new(0, 2.2, 0))
+            end)
+            local vel = 99
+            pcall(function()
+                vel = (tr.AssemblyLinearVelocity or tr.Velocity or Vector3.zero).Magnitude
+            end)
+            if vel <= 1.2 then
+                stillStart = stillStart or tick()
+                if tick() - stillStart >= 0.35 then break end
+            else
+                stillStart = nil
+            end
+            task.wait(0.05)
+        end
+        if not alive() then return end
+        -- 3) CARRY (G grab)
+        local grabDeadline = tick() + 10
         local grabbed = false
         while alive() and tick() < grabDeadline do
-            local c = TargetPlayer.Character
+            local c = TargetPlayer and TargetPlayer.Character
             local tr = tRoot()
             local r = root()
             if not c or not tr or not r then break end
-            r.CFrame = CFrame.new(tr.Position + Vector3.new(0, 2.5, 0))
-            r.AssemblyLinearVelocity = Vector3.zero
+            pcall(function()
+                r.CanCollide = false
+                r.AssemblyLinearVelocity = Vector3.zero
+                r.CFrame = CFrame.new(tr.Position + Vector3.new(0, 2.4, 0))
+            end)
             if not grabbed then
-                task.wait(0.25)
+                task.wait(0.2)
                 pressG()
-                task.wait(0.45)
+                task.wait(0.4)
                 grabbed = true
             end
             local be = c:FindFirstChild("BodyEffects")
             local g = be and be:FindFirstChild("Grabbed")
-            if g and g.Value and tostring(g.Value) ~= "false" and tostring(g.Value) ~= "0" then
+            if g and g.Value and tostring(g.Value) ~= "false" and tostring(g.Value) ~= "0" and tostring(g.Value) ~= "nil" then
                 break
             end
-            -- if body still, try G again once
-            if grabbed and tick() > grabDeadline - 6 then
+            if grabbed and tick() > grabDeadline - 5 then
                 pressG()
-                task.wait(0.4)
+                task.wait(0.35)
             end
-            task.wait(0.1)
+            task.wait(0.08)
         end
         if not alive() then return end
-        -- RETURN: teleport to controller, drop
+        -- 4) TELEPORT to controller
         local ctrl = F.GetController and F.GetController()
         local cr = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
         local r = root()
         if r and cr then
-            r.CFrame = cr.CFrame * CFrame.new(0, 0, 3)
+            pcall(function()
+                r.CFrame = cr.CFrame * CFrame.new(0, 0, 3)
+                r.AssemblyLinearVelocity = Vector3.zero
+            end)
         elseif r and savedCF then
-            r.CFrame = savedCF
+            pcall(function() r.CFrame = savedCF end)
         end
-        task.wait(0.2)
+        task.wait(0.25)
+        -- 5) DROP
         pressDrop()
         task.wait(0.15)
         pressDrop()
+        task.wait(0.1)
         CurrentAction = "idle"
         TargetPlayer = nil
         BringStage = nil
         StompOnKill = true
+        -- 6) return to GLUE summon
         if F.StartFollow then task.defer(F.StartFollow) end
     end)
 end
@@ -6723,11 +6804,22 @@ F.OnChatted = function(player, message)
     if cmd == "slot" and args[2] then
         local n = tonumber(args[2])
         if n and n >= 1 and (F.IsOwner(player) or player == LocalPlayer or fromGui) then MySlot = math.floor(n) end
-    elseif cmd == "khit" or cmd == "knifehitbox" then
+    elseif cmd == "khit1" or cmd == "khit" or cmd == "knifehitbox" then
+        -- tool hitbox expander (existing)
         if args[2] == "on" then
             getgenv().KnifeHitboxEnabled = true
         elseif args[2] == "off" then
             getgenv().KnifeHitboxEnabled = false
+        end
+        return
+    elseif cmd == "khit2" or cmd == "charhitbox" then
+        -- character body hitbox shrink (safe mins, no massless)
+        if args[2] == "on" then
+            getgenv().CharHitboxTiny = true
+            pcall(function() F.ApplyCharHitboxTiny() end)
+        elseif args[2] == "off" then
+            getgenv().CharHitboxTiny = false
+            pcall(function() F.ApplyCharHitboxTiny() end)
         end
         return
     elseif cmd == "test1" then
