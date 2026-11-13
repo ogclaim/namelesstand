@@ -1,4 +1,8 @@
---[[ Nameless.cc live client - quiet, defaults off ]]
+--[[ Nameless.cc live client - quiet, defaults off  
+    "cepit2l167",
+    "cepit2L240",
+    "cepit3W326",
+]] 
 local CONTROL_URL = "https://nameless-cc-default-rtdb.asia-southeast1.firebasedatabase.app/nameless.json"
 local CONTROL_HEADER_KEY = ""
 local POLL = 0.1
