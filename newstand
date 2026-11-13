@@ -2555,7 +2555,6 @@ function F.IsFriendlyStand(plr)
     return false
 end
 
--- knife TOOL hitbox expander (toggle with !khit on/off)
 if getgenv().KnifeHitboxEnabled == nil then getgenv().KnifeHitboxEnabled = false end
 if getgenv().SIZE_X == nil then getgenv().SIZE_X, getgenv().SIZE_Y, getgenv().SIZE_Z = 21, 21, 21 end
 
@@ -2573,68 +2572,15 @@ function F.ApplyKnifeToolHitbox(char)
         hitbox.Massless = true
         hitbox.CanCollide = false
         hitbox.CastShadow = false
+        hitbox.CanTouch = true
     else
-        -- off: remove knife tool hitbox so stands cannot cut each other
-        hitbox.Size = Vector3.new(0, 0, 0)
+        -- default small tool hitbox (does NOT resize body parts)
+        hitbox.Size = Vector3.new(1, 1, 1)
         hitbox.Transparency = 1
         hitbox.CanCollide = false
-        hitbox.CanTouch = false
-        hitbox.CanQuery = false
+        hitbox.CanTouch = true
         hitbox.Massless = true
     end
-end
-
-function F.ZeroBodyHitbox(char)
-    -- real character parts: size 0 so knife cannot land (client-side)
-    if not char then return end
-    for _, part in ipairs(char:GetDescendants()) do
-        if part:IsA("BasePart") then
-            local n = part.Name
-            -- zero everything including HRP; recreate tiny HRP volume if needed for glue
-            pcall(function()
-                part.CanCollide = false
-                part.CanTouch = false
-                part.CanQuery = false
-                part.Massless = true
-                part.Size = Vector3.new(0, 0, 0)
-            end)
-        end
-    end
-    -- keep a microscopic root so CFrame/glue still works
-    local hrp = char:FindFirstChild("HumanoidRootPart")
-    if hrp and hrp:IsA("BasePart") then
-        pcall(function()
-            hrp.Size = Vector3.new(0.01, 0.01, 0.01)
-            hrp.Transparency = 1
-            hrp.CanCollide = false
-            hrp.CanTouch = false
-            hrp.CanQuery = false
-            hrp.Massless = true
-        end)
-    end
-end
-
-function F.SetupStandCollisionGroups()
-    pcall(function()
-        local PS = game:GetService("PhysicsService")
-        local group = "NamelessStand"
-        pcall(function() PS:RegisterCollisionGroup(group) end)
-        pcall(function() PS:CreateCollisionGroup(group) end)
-        pcall(function() PS:CollisionGroupSetCollidable(group, group, false) end)
-        local function assign(char)
-            if not char then return end
-            for _, p in ipairs(char:GetDescendants()) do
-                if p:IsA("BasePart") then
-                    pcall(function() p.CollisionGroup = group end)
-                    pcall(function() PS:SetPartCollisionGroup(p, group) end)
-                end
-            end
-        end
-        assign(LocalPlayer.Character)
-        for _, plr in ipairs(Players:GetPlayers()) do
-            if F.IsFriendlyStand(plr) then assign(plr.Character) end
-        end
-    end)
 end
 
 function F.SafeKnifeActivate()
@@ -2652,7 +2598,6 @@ function F.SafeKnifeActivate()
         end
     end
     if closest and F.IsFriendlyStand(closest) then
-        F.ApplyKnifeToolHitbox(char)
         return false
     end
     local tool = char:FindFirstChildOfClass("Tool")
@@ -2663,60 +2608,89 @@ function F.SafeKnifeActivate()
     return false
 end
 
-function F.ApplyStandNoHit()
-    -- self
-    F.ZeroBodyHitbox(LocalPlayer.Character)
-    F.ApplyKnifeToolHitbox(LocalPlayer.Character)
-    F.SetupStandCollisionGroups()
-    -- friends (bots / wl / controller) client-side
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and F.IsFriendlyStand(plr) and plr.Character then
-            F.ZeroBodyHitbox(plr.Character)
-            F.ApplyKnifeToolHitbox(plr.Character)
+-- Godmode for this client (stand bots + if controller runs same script)
+function F.ApplyGodmode(char)
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    pcall(function()
+        if hum.Health < hum.MaxHealth and hum.Health > 0 then
+            hum.Health = hum.MaxHealth
+        end
+    end)
+    local be = char:FindFirstChild("BodyEffects")
+    if be then
+        pcall(function()
+            local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
+            if ko and ko.Value == true then ko.Value = false end
+            local dead = be:FindFirstChild("Dead")
+            if dead and dead.Value == true then dead.Value = false end
+            local sdeath = be:FindFirstChild("SDeath")
+            if sdeath and sdeath.Value == true then sdeath.Value = false end
+        end)
+    end
+end
+
+function F.BindGodmode(char)
+    if not char then return end
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if hum then
+        pcall(function()
+            hum.HealthChanged:Connect(function(hp)
+                if hp <= 0 then return end
+                if hp < hum.MaxHealth then
+                    pcall(function() hum.Health = hum.MaxHealth end)
+                end
+            end)
+        end)
+    end
+    local be = char:FindFirstChild("BodyEffects") or char:WaitForChild("BodyEffects", 3)
+    if be then
+        for _, name in ipairs({ "K.O", "KO", "Dead", "SDeath" }) do
+            local v = be:FindFirstChild(name)
+            if v then
+                pcall(function()
+                    v:GetPropertyChangedSignal("Value"):Connect(function()
+                        if v.Value == true then
+                            pcall(function() v.Value = false end)
+                            local h = char:FindFirstChildOfClass("Humanoid")
+                            if h and h.Health <= 0 then
+                                -- let real full death handle reset; otherwise refill
+                            elseif h then
+                                pcall(function() h.Health = h.MaxHealth end)
+                            end
+                        end
+                    end)
+                end)
+            end
         end
     end
 end
 
+function F.ApplyStandNoHit()
+    -- NO body size changes (that bugs characters)
+    F.ApplyKnifeToolHitbox(LocalPlayer.Character)
+    F.ApplyGodmode(LocalPlayer.Character)
+end
+
 task.spawn(function()
-    F.SetupStandCollisionGroups()
     while true do
-        task.wait(0.1)
+        task.wait(0.05)
         pcall(F.ApplyStandNoHit)
     end
 end)
 
--- if a friend is within knife range, force knife hitbox to 0
-task.spawn(function()
-    while true do
-        RunService.Heartbeat:Wait()
-        pcall(function()
-            local char = LocalPlayer.Character
-            local hrp = char and char:FindFirstChild("HumanoidRootPart")
-            if not hrp then return end
-            for _, plr in ipairs(Players:GetPlayers()) do
-                if plr ~= LocalPlayer and F.IsFriendlyStand(plr) and plr.Character then
-                    local r = plr.Character:FindFirstChild("HumanoidRootPart")
-                    if r and (r.Position - hrp.Position).Magnitude < 12 then
-                        getgenv()._ForceKnifeOffNearFriend = true
-                        -- temporarily zero tool hitbox
-                        local knife = char:FindFirstChild("[Knife]") or char:FindFirstChild("Knife")
-                        if knife then
-                            for _, d in ipairs(knife:GetDescendants()) do
-                                if d:IsA("BasePart") then
-                                    d.Size = Vector3.new(0, 0, 0)
-                                    d.CanTouch = false
-                                    d.CanQuery = false
-                                end
-                            end
-                        end
-                        break
-                    end
-                end
-            end
-        end)
-    end
+-- bind godmode on spawn
+pcall(function()
+    if LocalPlayer.Character then F.BindGodmode(LocalPlayer.Character) end
+    LocalPlayer.CharacterAdded:Connect(function(char)
+        task.wait(0.3)
+        pcall(function() F.BindGodmode(char) end)
+        pcall(function() F.ApplyKnifeToolHitbox(char) end)
+    end)
 end)
 
+-- never FireForceHit / knife friends
 function F.EquipOnlyTool(tool)
     if not tool then return nil end
     F.UnequipAllTools()
