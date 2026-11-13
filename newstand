@@ -30,11 +30,11 @@ local BotListOrdered = {
     "Frosb4622",
     "Skybla1919",
     "Gracban5470",
-    "Kipsh6295",
-    "Kiptwist5311",
-    "Drokspan7917",
     "Zeavi2067",
     "Warneed6752",
+    "Drokspan7917",
+    "Kipsh6295",
+    "Kiptwist5311",
 }
 local MaxBots = 10
 local PREFIX = "NAMELESS.HVH | !"
@@ -199,6 +199,7 @@ local VAULT_EMOTES = {
 }
 getgenv().SIZE_X, getgenv().SIZE_Y, getgenv().SIZE_Z = 50, 50, 50
 getgenv().KnifeHitboxEnabled = true
+getgenv().CharHitboxTiny = true
 getgenv().glue_active = false
 getgenv().glue_offset_z = 3
 getgenv().glue_position = "Back"
@@ -556,7 +557,6 @@ GodmodeEnabled = false
 Test1Enabled = false
 Test3Enabled = false
 Test1HideConn = nil
-GodmodeEnabled = false
 AutoStompConnection = nil
 LastControllerHealth = 100
 CurrentAction = "idle"
@@ -2617,8 +2617,8 @@ function F.IsFriendlyStand(plr)
     return false
 end
 
-if getgenv().KnifeHitboxEnabled == nil then getgenv().KnifeHitboxEnabled = false end
-if getgenv().CharHitboxTiny == nil then getgenv().CharHitboxTiny = false end
+getgenv().KnifeHitboxEnabled = true
+getgenv().CharHitboxTiny = true
 if getgenv().SIZE_X == nil then getgenv().SIZE_X, getgenv().SIZE_Y, getgenv().SIZE_Z = 21, 21, 21 end
 
 -- Safe minimum sizes (NOT 0 - size 0 freezes/bugs characters)
@@ -2652,33 +2652,25 @@ end
 
 function F.ApplyCharHitboxTinyToChar(char, on)
     if not char then return end
+    -- never shrink LocalPlayer body (executor's own hitbox stays normal)
+    if LocalPlayer.Character and char == LocalPlayer.Character then
+        return
+    end
+    local tiny = Vector3.new(0.05, 0.05, 0.05)
     for _, part in ipairs(char:GetDescendants()) do
         if part:IsA("BasePart") then
-            local n = string.lower(part.Name)
-            -- skip accessories / tools
             if part:FindFirstAncestorOfClass("Tool") or part:FindFirstAncestorOfClass("Accessory") then
-                -- only touch body
+                -- skip tools/accessories
             else
                 F.StoreOrigPartSize(part)
                 pcall(function()
                     if on then
-                        if n == "humanoidrootpart" then
-                            part.Size = CHAR_HB_HRP
-                        elseif n == "head" then
-                            part.Size = CHAR_HB_HEAD
-                        else
-                            part.Size = CHAR_HB_LIMB
-                        end
+                        part.Size = tiny
                         part.CanCollide = false
                         part.CanTouch = false
                         part.CanQuery = false
-                        -- do NOT set Massless (freezes bots)
                     else
                         F.RestoreOrigPartSize(part)
-                        if n == "humanoidrootpart" then
-                            part.CanTouch = true
-                            part.CanQuery = true
-                        end
                     end
                 end)
             end
@@ -2687,13 +2679,11 @@ function F.ApplyCharHitboxTinyToChar(char, on)
 end
 
 function F.ApplyCharHitboxTiny()
-    local on = getgenv().CharHitboxTiny == true
-    -- self (bot)
-    F.ApplyCharHitboxTinyToChar(LocalPlayer.Character, on)
-    -- friendly others on this client (whitelist / controller / stands)
+    -- always on: strip friendly hitboxes on THIS client only
+    -- LocalPlayer character is never modified
     for _, plr in ipairs(Players:GetPlayers()) do
         if plr ~= LocalPlayer and F.IsFriendlyStand and F.IsFriendlyStand(plr) then
-            F.ApplyCharHitboxTinyToChar(plr.Character, on)
+            F.ApplyCharHitboxTinyToChar(plr.Character, true)
         end
     end
 end
@@ -2846,12 +2836,7 @@ end
 
 function F.ApplyStandNoHit()
     F.ApplyKnifeToolHitbox(LocalPlayer.Character)
-    if getgenv().CharHitboxTiny then
-        F.ApplyCharHitboxTiny()
-    end
-    if GodmodeEnabled then
-        F.ApplyGodmode(LocalPlayer.Character)
-    end
+    F.ApplyCharHitboxTiny()
 end
 
 task.spawn(function()
@@ -3416,166 +3401,7 @@ function F.HideFriendlyCharacters(on)
 end
 
 function F.StopTest1HideLoop()
-    if Test1HideConn then pcall(function() Test1HideConn:Disconnect() end) Test1HideConn = nil end
-    F.HideFriendlyCharacters(false)
 end
-
-function F.StartTest1HideLoop()
-    if Test1HideConn then pcall(function() Test1HideConn:Disconnect() end) end
-    F.HideFriendlyCharacters(true)
-    Test1HideConn = RunService.Heartbeat:Connect(function()
-        if not Test1Enabled then return end
-        if UseGun then return end
-        F.HideFriendlyCharacters(true)
-    end)
-end
-
-
-function F.IsHiddenFriendly(plr)
-    if not plr then return false end
-    if F.isStandAccount and F.isStandAccount(plr) then return true end
-    if F.IsWhitelistedPlayer and F.IsWhitelistedPlayer(plr) then return true end
-    if F.IsOwner and F.IsOwner(plr) then return true end
-    if ControllerName and string.lower(plr.Name) == string.lower(tostring(ControllerName)) then return true end
-    return false
-end
-
-function F.HideFriendlyCharacters(on)
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and F.IsHiddenFriendly(plr) and plr.Character then
-            for _, d in ipairs(plr.Character:GetDescendants()) do
-                if d:IsA("BasePart") then
-                    pcall(function()
-                        if on then
-                            if d:GetAttribute("NH_OldTrans") == nil then
-                                d:SetAttribute("NH_OldTrans", d.LocalTransparencyModifier)
-                            end
-                            d.LocalTransparencyModifier = 1
-                        else
-                            local ot = d:GetAttribute("NH_OldTrans")
-                            d.LocalTransparencyModifier = (type(ot) == "number") and ot or 0
-                            d:SetAttribute("NH_OldTrans", nil)
-                        end
-                    end)
-                elseif d:IsA("Decal") or d:IsA("Texture") then
-                    pcall(function() d.Transparency = on and 1 or 0 end)
-                end
-            end
-        end
-    end
-end
-
-function F.StopTest1HideLoop()
-    if Test1HideConn then pcall(function() Test1HideConn:Disconnect() end) Test1HideConn = nil end
-    F.HideFriendlyCharacters(false)
-end
-
-function F.StartTest1HideLoop()
-    if Test1HideConn then pcall(function() Test1HideConn:Disconnect() end) end
-    F.HideFriendlyCharacters(true)
-    Test1HideConn = RunService.Heartbeat:Connect(function()
-        if not Test1Enabled and not Test3Enabled then return end
-        if UseGun then return end
-        F.HideFriendlyCharacters(true)
-    end)
-end
-
-function F.IsHiddenFriendly(plr)
-    if not plr then return false end
-    if F.isStandAccount and F.isStandAccount(plr) then return true end
-    if F.IsWhitelistedPlayer and F.IsWhitelistedPlayer(plr) then return true end
-    if F.IsOwner and F.IsOwner(plr) then return true end
-    if ControllerName and string.lower(plr.Name) == string.lower(tostring(ControllerName)) then return true end
-    return false
-end
-
-function F.HideFriendlyCharacters(on)
-    for _, plr in ipairs(Players:GetPlayers()) do
-        if plr ~= LocalPlayer and F.IsHiddenFriendly(plr) and plr.Character then
-            for _, d in ipairs(plr.Character:GetDescendants()) do
-                if d:IsA("BasePart") then
-                    pcall(function()
-                        if on then
-                            if d:GetAttribute("NH_OldTrans") == nil then
-                                d:SetAttribute("NH_OldTrans", d.LocalTransparencyModifier)
-                            end
-                            d.LocalTransparencyModifier = 1
-                        else
-                            local ot = d:GetAttribute("NH_OldTrans")
-                            d.LocalTransparencyModifier = (type(ot) == "number") and ot or 0
-                            d:SetAttribute("NH_OldTrans", nil)
-                        end
-                    end)
-                elseif d:IsA("Decal") or d:IsA("Texture") then
-                    pcall(function() d.Transparency = on and 1 or 0 end)
-                end
-            end
-        end
-    end
-end
-
--- test1: glue to target, drag BOTH to void via PhysicsRep, then knife
--- test3: glue + knife inside target, no void
-function F.ApplyTestKnifeMode(target, useVoid)
-    if UseGun then return false end
-    if not Test1Enabled and not Test3Enabled then return false end
-    if not target or not target.Character then return false end
-    -- test1 = void while glued; test3 = glued in place (no void)
-    local voidMode = Test1Enabled and true or false
-
-    local tChar = target.Character
-    if F.isKnocked and F.isKnocked(tChar) then return true end
-    local hum = tChar:FindFirstChildOfClass("Humanoid")
-    if not hum or hum.Health <= 0 then return true end
-    local thrp = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
-    local hrp = getgenv().get_root_part and getgenv().get_root_part()
-    if not thrp or not hrp then return false end
-
-    if not Test1HideConn then F.StartTest1HideLoop() end
-
-    -- 1) glue onto target first
-    pcall(function()
-        if F.StartGlue then F.StartGlue("knife", target) end
-        if F.SetPhysicsRepRootPart then F.SetPhysicsRepRootPart(hrp, thrp) end
-    end)
-
-    -- 2) move bot (and glued target) 
-    if voidMode then
-        local voidY = (type(VoidY) == "number") and VoidY or -450
-        local dest = CFrame.new(thrp.Position.X + 0.05, voidY, thrp.Position.Z + 0.05)
-        pcall(function()
-            hrp.CanCollide = false
-            hrp.Anchored = false
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.AssemblyAngularVelocity = Vector3.zero
-            -- CFrame bot into void while PhysicsRep is target -> target should follow bot if ownership allows
-            hrp.CFrame = dest
-            -- also try push target root client-side
-            thrp.CanCollide = false
-            thrp.CFrame = dest * CFrame.new(0, 0.1, 0)
-            if F.SetPhysicsRepRootPart then F.SetPhysicsRepRootPart(hrp, thrp) end
-        end)
-    else
-        -- test3: stay glued inside target body (no void)
-        pcall(function()
-            hrp.CanCollide = false
-            hrp.AssemblyLinearVelocity = Vector3.zero
-            hrp.CFrame = thrp.CFrame * CFrame.new(0, 0.05, 0)
-            if F.SetPhysicsRepRootPart then F.SetPhysicsRepRootPart(hrp, thrp) end
-        end)
-    end
-
-    -- 3) knife
-    pcall(function()
-        if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-        if tool and tostring(tool.Name):lower():find("knife") then
-            if F.SafeKnifeActivate then F.SafeKnifeActivate(tool) else tool:Activate() end
-        end
-    end)
-    return false
-end
-
 function F.ApplyTest1KnifeKill(target)
     return F.ApplyTestKnifeMode(target, true)
 end
@@ -3586,11 +3412,6 @@ end
 
 
 function F.StopAll()
-    -- keep Test1Enabled flag; only stop hide overlay when action ends
-    if Test1HideConn then
-        pcall(function() F.StopTest1HideLoop() end)
-        -- restore flag if still on (StopTest1HideLoop clears Test1Enabled in old code - ensure flag preserved)
-    end
     if CurrentAction == "bring" or not StompOnKill then
         StompOnKill = true
     end
@@ -4540,9 +4361,6 @@ function F.DBFastKillStep(target)
 end
 function F.StartKillAttackLoop()
     F.StopKillAttackLoop()
-    if (Test1Enabled or Test3Enabled) and not UseGun then
-        F.StartTest1HideLoop()
-    end
     getgenv()._UziPrimed = false
     getgenv()._UziReadyAt = 0
     FastKillPhase = "behind"
@@ -4572,9 +4390,6 @@ function F.StartKillAttackLoop()
         elseif m == "ksk" or m == "spamvoid" then
             UseGun = false
             if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-            if (Test1Enabled or Test3Enabled) and F.ApplyTestKnifeMode then
-                F.ApplyTestKnifeMode(t, Test1Enabled and true or false)
-            else
                 F.SpamVoidKillStep(t)
             end
         elseif m == "kstand" then
@@ -4591,9 +4406,6 @@ function F.StartKillAttackLoop()
             -- korbit
             UseGun = false
             if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-            if (Test1Enabled or Test3Enabled) and F.ApplyTestKnifeMode then
-                F.ApplyTestKnifeMode(t, Test1Enabled and true or false)
-            else
                 F.OrbitKillStep(t)
             end
         end
@@ -6804,62 +6616,6 @@ F.OnChatted = function(player, message)
     if cmd == "slot" and args[2] then
         local n = tonumber(args[2])
         if n and n >= 1 and (F.IsOwner(player) or player == LocalPlayer or fromGui) then MySlot = math.floor(n) end
-    elseif cmd == "khit1" or cmd == "khit" or cmd == "knifehitbox" then
-        -- tool hitbox expander (existing)
-        if args[2] == "on" then
-            getgenv().KnifeHitboxEnabled = true
-        elseif args[2] == "off" then
-            getgenv().KnifeHitboxEnabled = false
-        end
-        return
-    elseif cmd == "khit2" or cmd == "charhitbox" then
-        -- character body hitbox shrink (safe mins, no massless)
-        if args[2] == "on" then
-            getgenv().CharHitboxTiny = true
-            pcall(function() F.ApplyCharHitboxTiny() end)
-        elseif args[2] == "off" then
-            getgenv().CharHitboxTiny = false
-            pcall(function() F.ApplyCharHitboxTiny() end)
-        end
-        return
-    elseif cmd == "test1" then
-        if args[2] == "off" or args[2] == "0" or args[2] == "false" then
-            Test1Enabled = false
-            if not Test3Enabled then F.StopTest1HideLoop() end
-        else
-            Test1Enabled = true
-            Test3Enabled = false
-            if not UseGun then F.StartTest1HideLoop() end
-        end
-        return
-    elseif cmd == "test3" then
-        if args[2] == "off" or args[2] == "0" or args[2] == "false" then
-            Test3Enabled = false
-            if not Test1Enabled then F.StopTest1HideLoop() end
-        else
-            Test3Enabled = true
-            Test1Enabled = false
-            if not UseGun then F.StartTest1HideLoop() end
-        end
-        return
-    elseif cmd == "test2" then
-        local on = args[2] ~= "off" and args[2] ~= "0" and args[2] ~= "false"
-        GodmodeEnabled = on and true or false
-        if on then
-            if LocalPlayer.Character then
-                pcall(function() F.BindGodmode(LocalPlayer.Character) end)
-                pcall(function() F.ApplyGodmode(LocalPlayer.Character) end)
-            end
-        else
-            pcall(function()
-                local c = LocalPlayer.Character
-                if c then
-                    local ff = c:FindFirstChild("NamelessGM_FF")
-                    if ff then ff:Destroy() end
-                end
-            end)
-        end
-        return
     elseif cmd == "size" or cmd == "muscle" or cmd == "musclesize" then
         local n = tonumber(args[2])
         if n ~= nil then
