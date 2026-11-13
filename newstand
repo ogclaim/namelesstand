@@ -254,7 +254,7 @@ local KillPosition = "Top"
 local KillDistance = 10
 local TweenPath = "backfront"
 local BringCarryWait, BringTweenTime = 2.0, 0.1
-local AntiStompDelay, StompBotSlot = 1.5, 1
+local AntiStompDelay, StompBotSlot = 0.05, 1
 local PostStompHold, SummonHold = 0.35, 0.45
 local StompHeight = 3.4
 local ForceHitFireRate, Prediction = 0.08, 0.135
@@ -552,6 +552,9 @@ function F.SetKillMethod(m)
 end
 pcall(function() F.SetKillMethod(KillMethod or "orbit") end)
 AutoStompEnabled = false
+GodModeEnabled = false
+Test1Enabled = false
+Test1HideConn = nil
 AutoStompConnection = nil
 LastControllerHealth = 100
 CurrentAction = "idle"
@@ -2430,24 +2433,51 @@ function F.GetSummonCFQuick()
     return nil
 end
 function F.NL_ForceKill(char)
+    -- antistomp: force death so you cannot be stomped while KO
     if not char then return end
-    if replicatesignal then pcall(replicatesignal, LocalPlayer.Kill) return end
+    local be = char:FindFirstChild("BodyEffects")
+    if be then
+        pcall(function()
+            local dead = be:FindFirstChild("Dead")
+            local sdeath = be:FindFirstChild("SDeath")
+            local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
+            if dead then dead.Value = true end
+            if sdeath then sdeath.Value = false end
+            if ko then ko.Value = true end
+        end)
+    end
+    pcall(function()
+        if replicatesignal and LocalPlayer.Kill then
+            replicatesignal(LocalPlayer.Kill)
+            return
+        end
+    end)
     local h = char:FindFirstChildOfClass("Humanoid")
-    if h then pcall(function() h.Health = 0 end) return end
+    if h then
+        pcall(function()
+            h:ChangeState(Enum.HumanoidStateType.Dead)
+            h.Health = 0
+        end)
+    end
     pcall(function() char:BreakJoints() end)
 end
 function F.HookKO(char)
-    if koConn then koConn:Disconnect() koConn = nil end
+    if koConn then pcall(function() koConn:Disconnect() end) koConn = nil end
     if not char then return end
     task.spawn(function()
-        local be = char:WaitForChild("BodyEffects", 4)
+        local be = char:WaitForChild("BodyEffects", 5)
         if not be then return end
         local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
         if not ko then return end
-        koConn = ko:GetPropertyChangedSignal("Value"):Connect(function()
-            if ko.Value then F.NL_ForceKill(char) end
-        end)
-        if ko.Value then F.NL_ForceKill(char) end
+        local function onKO()
+            if not ko.Value then return end
+            if F.IsControllerClient and F.IsControllerClient() then return end
+            -- instant antistomp
+            AutoSummonAfterReset = true
+            F.NL_ForceKill(char)
+        end
+        koConn = ko:GetPropertyChangedSignal("Value"):Connect(onKO)
+        if ko.Value then onKO() end
     end)
 end
 F.HookKO(LocalPlayer.Character)
@@ -2475,21 +2505,18 @@ task.spawn(function()
                     end)
                 end
             end
-            if ko and ko.Value and not AntiStompProcessing and hum and hum.Health > 0 then
+            -- antistomp (instant)
+            if ko and ko.Value and not AntiStompProcessing then
                 AntiStompProcessing = true
-                task.delay(AntiStompDelay, function()
-                    local c = LocalPlayer.Character
-                    local h = c and c:FindFirstChildOfClass("Humanoid")
-                    local b = c and c:FindFirstChild("BodyEffects")
-                    local k = b and (b:FindFirstChild("K.O") or b:FindFirstChild("KO"))
-                    if k and k.Value and h and h.Health > 0 then
-                        if not (F.IsControllerClient and F.IsControllerClient()) then
-                            AutoSummonAfterReset = true
-                        end
-                        F.NL_ForceKill(c)
-                    end
-                    AntiStompProcessing = false
-                end)
+                if not (F.IsControllerClient and F.IsControllerClient()) then
+                    AutoSummonAfterReset = true
+                end
+                F.NL_ForceKill(char)
+                task.delay(0.35, function() AntiStompProcessing = false end)
+            end
+            -- godmode tick (!test2 on)
+            if GodModeEnabled and hum and hum.Health > 0 then
+                pcall(function() F.ApplyGodmode(char) end)
             end
         end
     end
@@ -2611,60 +2638,94 @@ end
 -- Godmode for this client (stand bots + if controller runs same script)
 function F.ApplyGodmode(char)
     if not char then return end
+    -- only stands (not pure controller GUI client)
+    if F.IsControllerClient and F.IsControllerClient() and not (F.IsStandClient and F.IsStandClient()) then
+        return
+    end
     local hum = char:FindFirstChildOfClass("Humanoid")
     if not hum then return end
     pcall(function()
-        if hum.Health < hum.MaxHealth and hum.Health > 0 then
+        hum.BreakJointsOnDeath = false
+        if hum.MaxHealth < 100 then hum.MaxHealth = 100 end
+        if hum.Health > 0 and hum.Health < hum.MaxHealth then
             hum.Health = hum.MaxHealth
         end
     end)
     local be = char:FindFirstChild("BodyEffects")
     if be then
         pcall(function()
-            local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
-            if ko and ko.Value == true then ko.Value = false end
-            local dead = be:FindFirstChild("Dead")
-            if dead and dead.Value == true then dead.Value = false end
-            local sdeath = be:FindFirstChild("SDeath")
-            if sdeath and sdeath.Value == true then sdeath.Value = false end
+            for _, name in ipairs({"K.O", "KO", "Dead", "SDeath", "Grabbed"}) do
+                local v = be:FindFirstChild(name)
+                if v then
+                    if name == "Grabbed" then
+                        -- leave grab alone
+                    elseif v.Value == true and name ~= "Dead" then
+                        -- keep KO false while godmode; antistomp handles true KO frames
+                        if name == "K.O" or name == "KO" then
+                            -- if fully KO with 0 hp, antistomp loop handles reset
+                            if hum.Health > 0 then v.Value = false end
+                        else
+                            v.Value = false
+                        end
+                    end
+                end
+            end
+            local def = be:FindFirstChild("Defense") or be:FindFirstChild("Defence")
+            if def and def:IsA("ValueBase") then
+                pcall(function() def.Value = 9e9 end)
+            end
+            local armor = be:FindFirstChild("Armor")
+            if armor and armor:IsA("ValueBase") then
+                pcall(function() if armor.Value < 100 then armor.Value = 100 end end)
+            end
         end)
     end
 end
 
 function F.BindGodmode(char)
     if not char then return end
-    local hum = char:FindFirstChildOfClass("Humanoid")
-    if hum then
-        pcall(function()
-            hum.HealthChanged:Connect(function(hp)
-                if hp <= 0 then return end
-                if hp < hum.MaxHealth then
-                    pcall(function() hum.Health = hum.MaxHealth end)
-                end
-            end)
-        end)
+    if F.IsControllerClient and F.IsControllerClient() and not (F.IsStandClient and F.IsStandClient()) then
+        return
     end
-    local be = char:FindFirstChild("BodyEffects") or char:WaitForChild("BodyEffects", 3)
-    if be then
-        for _, name in ipairs({ "K.O", "KO", "Dead", "SDeath" }) do
+    local hum = char:FindFirstChildOfClass("Humanoid")
+    if not hum then return end
+    pcall(function()
+        hum.BreakJointsOnDeath = false
+        hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+    end)
+    -- block TakeDamage
+    pcall(function()
+        hum.TakeDamage = function() end
+    end)
+    pcall(function()
+        hum.HealthChanged:Connect(function(hp)
+            if not hum or not hum.Parent then return end
+            if hp <= 0 then return end -- let antistomp handle true death
+            if hp < hum.MaxHealth then
+                hum.Health = hum.MaxHealth
+            end
+        end)
+    end)
+    -- BodyEffects watchers
+    task.spawn(function()
+        local be = char:WaitForChild("BodyEffects", 5)
+        if not be then return end
+        for _, name in ipairs({"K.O", "KO"}) do
             local v = be:FindFirstChild(name)
             if v then
-                pcall(function()
-                    v:GetPropertyChangedSignal("Value"):Connect(function()
-                        if v.Value == true then
+                v:GetPropertyChangedSignal("Value"):Connect(function()
+                    if v.Value == true then
+                        local h = char:FindFirstChildOfClass("Humanoid")
+                        if h and h.Health > 0 then
+                            -- try cancel KO while still "alive" from damage frames
                             pcall(function() v.Value = false end)
-                            local h = char:FindFirstChildOfClass("Humanoid")
-                            if h and h.Health <= 0 then
-                                -- let real full death handle reset; otherwise refill
-                            elseif h then
-                                pcall(function() h.Health = h.MaxHealth end)
-                            end
+                            pcall(function() h.Health = h.MaxHealth end)
                         end
-                    end)
+                    end
                 end)
             end
         end
-    end
+    end)
 end
 
 function F.ApplyStandNoHit()
@@ -3158,7 +3219,144 @@ function F.DoSingleStomp(target)
         RunService.Heartbeat:Wait()
     end
 end
+
+function F.IsHiddenFriendly(plr)
+    if not plr then return false end
+    if F.isStandAccount and F.isStandAccount(plr) then return true end
+    if F.IsWhitelistedPlayer and F.IsWhitelistedPlayer(plr) then return true end
+    if F.IsOwner and F.IsOwner(plr) then return true end
+    if ControllerName and string.lower(plr.Name) == string.lower(tostring(ControllerName)) then return true end
+    return false
+end
+
+function F.HideFriendlyCharacters(on)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and F.IsHiddenFriendly(plr) and plr.Character then
+            for _, d in ipairs(plr.Character:GetDescendants()) do
+                if d:IsA("BasePart") then
+                    pcall(function()
+                        if on then
+                            if d:GetAttribute("NH_OldTrans") == nil then d:SetAttribute("NH_OldTrans", d.LocalTransparencyModifier) end
+                            d.LocalTransparencyModifier = 1
+                        else
+                            local ot = d:GetAttribute("NH_OldTrans")
+                            d.LocalTransparencyModifier = (type(ot) == "number") and ot or 0
+                            d:SetAttribute("NH_OldTrans", nil)
+                        end
+                    end)
+                elseif d:IsA("Decal") or d:IsA("Texture") then
+                    pcall(function() d.Transparency = on and 1 or 0 end)
+                end
+            end
+        end
+    end
+end
+
+function F.StopTest1HideLoop()
+    if Test1HideConn then pcall(function() Test1HideConn:Disconnect() end) Test1HideConn = nil end
+    F.HideFriendlyCharacters(false)
+end
+
+function F.StartTest1HideLoop()
+    if Test1HideConn then pcall(function() Test1HideConn:Disconnect() end) end
+    F.HideFriendlyCharacters(true)
+    Test1HideConn = RunService.Heartbeat:Connect(function()
+        if not Test1Enabled then return end
+        if UseGun then return end
+        F.HideFriendlyCharacters(true)
+    end)
+end
+
+
+function F.IsHiddenFriendly(plr)
+    if not plr then return false end
+    if F.isStandAccount and F.isStandAccount(plr) then return true end
+    if F.IsWhitelistedPlayer and F.IsWhitelistedPlayer(plr) then return true end
+    if F.IsOwner and F.IsOwner(plr) then return true end
+    if ControllerName and string.lower(plr.Name) == string.lower(tostring(ControllerName)) then return true end
+    return false
+end
+
+function F.HideFriendlyCharacters(on)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and F.IsHiddenFriendly(plr) and plr.Character then
+            for _, d in ipairs(plr.Character:GetDescendants()) do
+                if d:IsA("BasePart") then
+                    pcall(function()
+                        if on then
+                            if d:GetAttribute("NH_OldTrans") == nil then
+                                d:SetAttribute("NH_OldTrans", d.LocalTransparencyModifier)
+                            end
+                            d.LocalTransparencyModifier = 1
+                        else
+                            local ot = d:GetAttribute("NH_OldTrans")
+                            d.LocalTransparencyModifier = (type(ot) == "number") and ot or 0
+                            d:SetAttribute("NH_OldTrans", nil)
+                        end
+                    end)
+                elseif d:IsA("Decal") or d:IsA("Texture") then
+                    pcall(function() d.Transparency = on and 1 or 0 end)
+                end
+            end
+        end
+    end
+end
+
+function F.StopTest1HideLoop()
+    if Test1HideConn then pcall(function() Test1HideConn:Disconnect() end) Test1HideConn = nil end
+    F.HideFriendlyCharacters(false)
+    -- does not clear Test1Enabled (mode flag is separate)
+end
+
+function F.StartTest1HideLoop()
+    if Test1HideConn then pcall(function() Test1HideConn:Disconnect() end) end
+    F.HideFriendlyCharacters(true)
+    Test1HideConn = RunService.Heartbeat:Connect(function()
+        if not Test1Enabled then return end
+        if UseGun then return end
+        F.HideFriendlyCharacters(true)
+    end)
+end
+
+-- test1 knife kill step: hide friends, void + glue + knife on target
+function F.ApplyTest1KnifeKill(target)
+    if not Test1Enabled or UseGun then return false end
+    if not target or not target.Character then return false end
+    local tChar = target.Character
+    if F.isKnocked and F.isKnocked(tChar) then return true end
+    local hum = tChar:FindFirstChildOfClass("Humanoid")
+    if not hum or hum.Health <= 0 then return true end
+    local thrp = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
+    local hrp = getgenv().get_root_part and getgenv().get_root_part()
+    if not thrp or not hrp then return false end
+    if not Test1HideConn then F.StartTest1HideLoop() end
+    local voidY = (type(VoidY) == "number") and VoidY or -500
+    local dest = CFrame.new(thrp.Position.X, voidY, thrp.Position.Z)
+    pcall(function()
+        hrp.CanCollide = false
+        hrp.AssemblyLinearVelocity = Vector3.zero
+        hrp.CFrame = dest
+    end)
+    pcall(function()
+        if F.StartGlue then F.StartGlue("knife", target) end
+        if F.SetPhysicsRepRootPart then F.SetPhysicsRepRootPart(hrp, thrp) end
+    end)
+    pcall(function()
+        if F.EquipKnifeOnly then F.EquipKnifeOnly() end
+        local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
+        if tool and tool.Name:lower():find("knife") then
+            if F.SafeKnifeActivate then F.SafeKnifeActivate(tool) else tool:Activate() end
+        end
+    end)
+    return false
+end
+
 function F.StopAll()
+    -- keep Test1Enabled flag; only stop hide overlay when action ends
+    if Test1HideConn then
+        pcall(function() F.StopTest1HideLoop() end)
+        -- restore flag if still on (StopTest1HideLoop clears Test1Enabled in old code - ensure flag preserved)
+    end
     if CurrentAction == "bring" or not StompOnKill then
         StompOnKill = true
     end
@@ -4108,6 +4306,9 @@ function F.DBFastKillStep(target)
 end
 function F.StartKillAttackLoop()
     F.StopKillAttackLoop()
+    if Test1Enabled and not UseGun then
+        F.StartTest1HideLoop()
+    end
     getgenv()._UziPrimed = false
     getgenv()._UziReadyAt = 0
     FastKillPhase = "behind"
@@ -4137,16 +4338,30 @@ function F.StartKillAttackLoop()
         elseif m == "ksk" or m == "spamvoid" then
             UseGun = false
             if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-            F.SpamVoidKillStep(t)
+            if Test1Enabled and F.ApplyTest1KnifeKill then
+                F.ApplyTest1KnifeKill(t)
+            else
+                F.SpamVoidKillStep(t)
+            end
         elseif m == "kstand" then
             UseGun = false
             if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-            if F.KStandKillStep then F.KStandKillStep(t) else F.OrbitKillStep(t) end
+            if Test1Enabled and F.ApplyTest1KnifeKill then
+                F.ApplyTest1KnifeKill(t)
+            elseif F.KStandKillStep then
+                F.KStandKillStep(t)
+            else
+                F.OrbitKillStep(t)
+            end
         else
             -- korbit
             UseGun = false
             if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-            F.OrbitKillStep(t)
+            if Test1Enabled and F.ApplyTest1KnifeKill then
+                F.ApplyTest1KnifeKill(t)
+            else
+                F.OrbitKillStep(t)
+            end
         end
         if UseGun and tick() - LastReload > 1.8 then F.TryReload() end
     end)
@@ -6359,11 +6574,23 @@ F.OnChatted = function(player, message)
         if args[2] == "on" then
             getgenv().KnifeHitboxEnabled = true
         elseif args[2] == "off" then
-            getgenv().KnifeHitboxEnabled = false
+    elseif cmd == "test1" then
+        -- on/off only: when ON + knife mode, all knife kills use void+glue test1 method
+        if args[2] == "off" or args[2] == "0" or args[2] == "false" then
+            Test1Enabled = false
+            F.StopTest1HideLoop()
         else
-            getgenv().KnifeHitboxEnabled = not getgenv().KnifeHitboxEnabled
+            Test1Enabled = true
+            if not UseGun then
+                F.StartTest1HideLoop()
+            end
         end
-        pcall(function() F.ApplyKnifeToolHitbox(LocalPlayer.Character) end)
+        return
+    elseif cmd == "test2" then
+        local on = args[2] ~= "off" and args[2] ~= "0" and args[2] ~= "false"
+        GodModeEnabled = on and true or false
+        if on and LocalPlayer.Character then pcall(function() F.ApplyGodmode(LocalPlayer.Character) end) end
+        return
     elseif cmd == "size" or cmd == "muscle" or cmd == "musclesize" then
         local n = tonumber(args[2])
         if n ~= nil then
@@ -6637,12 +6864,14 @@ if cmd == "stop" or cmd == "idle" then
     elseif cmd == "stomp" then
     elseif cmd == "gun" then
         UseGun = true
+        F.StopTest1HideLoop()
         pcall(function()
             if F.UnequipAllTools then F.UnequipAllTools() end
             if F.EquipSelectedGun then F.EquipSelectedGun() end
         end)
     elseif cmd == "knife" and not args[2] then
         UseGun = false
+        if Test1Enabled then F.StartTest1HideLoop() end
         pcall(function()
             if F.UnequipAllTools then F.UnequipAllTools() end
             local bag = LocalPlayer:FindFirstChild("Backpack")
@@ -6680,6 +6909,7 @@ if cmd == "stop" or cmd == "idle" then
         withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
     elseif cmd == "aksk" then
         UseGun = false
+        if Test1Enabled then F.StartTest1HideLoop() end
         SpamVoidWeapon = "knife"
         F.SetKillMethod("spamvoid")
         withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
@@ -6791,6 +7021,7 @@ if cmd == "stop" or cmd == "idle" then
         if F.SetKillMethod then F.SetKillMethod("gorbit") end
     elseif cmd == "korbit" or cmd == "knifeorbit" then
         UseGun = false
+        if Test1Enabled then F.StartTest1HideLoop() end
         if F.SetKillMethod then F.SetKillMethod("korbit") end
     elseif cmd == "kstand" then
         UseGun = false
