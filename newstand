@@ -1,32 +1,25 @@
 -- NAMELESS.HVH Stand
 -- polyfills for weak executors
-do
-    local _task = rawget(_G, "task")
-    if type(_task) ~= "table" then
-        _task = {}
-        _task.spawn = (type(spawn) == "function" and spawn) or function(f)
-            local co = coroutine.create(f)
-            coroutine.resume(co)
-        end
-        _task.wait = (type(wait) == "function" and wait) or function(n) end
-        _task.defer = _task.spawn
-        pcall(function() _G.task = _task end)
-    end
-    if type(task) ~= "table" then
-        -- use local alias via getfenv if needed
-        pcall(function() getfenv().task = _task end)
-    end
+if type(task) ~= "table" then
+    task = task or {}
+    task.spawn = task.spawn or spawn or function(f) coroutine.resume(coroutine.create(f)) end
+    task.wait = task.wait or wait
+    task.defer = task.defer or task.spawn
 end
-if type(getgenv) ~= "function" then
-    local function _gg()
-        if type(_G) == "table" then return _G end
-        return {}
-    end
-    pcall(function() getgenv = _gg end)
+if type(pcall) ~= "function" then
+    error("pcall missing")
+end
+pcall(function()
     if type(getgenv) ~= "function" then
         getgenv = function()
-            return _G or {}
+            if type(_G) == "table" then return _G end
+            return {}
         end
+    end
+end)
+if type(getgenv) ~= "function" then
+    function getgenv()
+        return _G or {}
     end
 end
 local ControllerName = "verceyy"
@@ -37,11 +30,11 @@ local BotListOrdered = {
     "Frosb4622",
     "Skybla1919",
     "Gracban5470",
-    "Zeavi2067",
-    "Warneed6752",
-    "Drokspan7917",
     "Kipsh6295",
     "Kiptwist5311",
+    "Drokspan7917",
+    "Zeavi2067",
+    "Warneed6752",
 }
 local MaxBots = 10
 local PREFIX = "NAMELESS.HVH | !"
@@ -559,9 +552,11 @@ function F.SetKillMethod(m)
 end
 pcall(function() F.SetKillMethod(KillMethod or "orbit") end)
 AutoStompEnabled = false
-GodModeEnabled = false
+GodmodeEnabled = false
 Test1Enabled = false
+Test3Enabled = false
 Test1HideConn = nil
+GodmodeEnabled = false
 AutoStompConnection = nil
 LastControllerHealth = 100
 CurrentAction = "idle"
@@ -1738,8 +1733,8 @@ function F.ParseTargetsAndBots(args, startIndex)
     local flat = {}
     for i = startIndex, #args do
         local token = tostring(args[i] or "")
-        for rawPart in token:gmatch("[^,]+") do
-            local part = rawPart:match("^%s*(.-)%s*$")
+        for part in token:gmatch("[^,]+") do
+            part = part:match("^%s*(.-)%s*$")
             if part and part ~= "" then flat[#flat + 1] = part end
         end
     end
@@ -2440,8 +2435,10 @@ function F.GetSummonCFQuick()
     return nil
 end
 function F.NL_ForceKill(char)
-    -- antistomp: force death so you cannot be stomped while KO
     if not char then return end
+    if F.IsControllerClient and F.IsControllerClient() and not (F.IsStandClient and F.IsStandClient()) then
+        return
+    end
     local be = char:FindFirstChild("BodyEffects")
     if be then
         pcall(function()
@@ -2456,14 +2453,16 @@ function F.NL_ForceKill(char)
     pcall(function()
         if replicatesignal and LocalPlayer.Kill then
             replicatesignal(LocalPlayer.Kill)
-            return
         end
+    end)
+    pcall(function()
+        if MainEvent then MainEvent:FireServer("ResetNew") end
     end)
     local h = char:FindFirstChildOfClass("Humanoid")
     if h then
         pcall(function()
-            h:ChangeState(Enum.HumanoidStateType.Dead)
             h.Health = 0
+            h:ChangeState(Enum.HumanoidStateType.Dead)
         end)
     end
     pcall(function() char:BreakJoints() end)
@@ -2472,22 +2471,51 @@ function F.HookKO(char)
     if koConn then pcall(function() koConn:Disconnect() end) koConn = nil end
     if not char then return end
     task.spawn(function()
-        local be = char:WaitForChild("BodyEffects", 5)
+        local be = char:WaitForChild("BodyEffects", 8)
         if not be then return end
         local ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
+        if not ko then
+            for _ = 1, 20 do
+                task.wait(0.1)
+                ko = be:FindFirstChild("K.O") or be:FindFirstChild("KO")
+                if ko then break end
+            end
+        end
         if not ko then return end
         local function onKO()
-            if not ko.Value then return end
-            if F.IsControllerClient and F.IsControllerClient() then return end
-            -- instant antistomp
+            if not ko or not ko.Value then return end
+            if F.IsControllerClient and F.IsControllerClient() and not (F.IsStandClient and F.IsStandClient()) then
+                return
+            end
+            if AntiStompProcessing then return end
+            AntiStompProcessing = true
             AutoSummonAfterReset = true
             F.NL_ForceKill(char)
+            task.delay(0.5, function() AntiStompProcessing = false end)
         end
         koConn = ko:GetPropertyChangedSignal("Value"):Connect(onKO)
         if ko.Value then onKO() end
     end)
 end
 F.HookKO(LocalPlayer.Character)
+LocalPlayer.CharacterAdded:Connect(function(char)
+    task.defer(function()
+        F.HookKO(char)
+        -- resume killaura after respawn if it was on
+        local ka = getgenv().KillAura
+        if (KillAuraEnabled or (ka and ka.Enabled)) and F.StartKillAura then
+            task.wait(0.6)
+            if F.IsStandClient and F.IsStandClient() then
+                pcall(function() F.StartKillAura() end)
+            end
+        end
+        if AutoSummonAfterReset and F.CanSummon and F.CanSummon() then
+            AutoSummonAfterReset = false
+            task.wait(0.4)
+            pcall(function() if F.StartFollow then F.StartFollow() end end)
+        end
+    end)
+end)
 task.spawn(function()
     while task.wait(0.15) do
         local char = LocalPlayer.Character
@@ -2522,7 +2550,7 @@ task.spawn(function()
                 task.delay(0.35, function() AntiStompProcessing = false end)
             end
             -- godmode tick (!test2 on)
-            if GodModeEnabled and hum and hum.Health > 0 then
+            if GodmodeEnabled and hum and hum.Health > 0 then
                 pcall(function() F.ApplyGodmode(char) end)
             end
         end
@@ -2642,10 +2670,10 @@ function F.SafeKnifeActivate()
     return false
 end
 
--- Godmode for this client (stand bots + if controller runs same script)
+-- test2 godmode: ForceField + Defense + Health lock + block KO while alive
 function F.ApplyGodmode(char)
+    if not GodmodeEnabled then return end
     if not char then return end
-    -- only stands (not pure controller GUI client)
     if F.IsControllerClient and F.IsControllerClient() and not (F.IsStandClient and F.IsStandClient()) then
         return
     end
@@ -2653,28 +2681,27 @@ function F.ApplyGodmode(char)
     if not hum then return end
     pcall(function()
         hum.BreakJointsOnDeath = false
-        if hum.MaxHealth < 100 then hum.MaxHealth = 100 end
-        if hum.Health > 0 and hum.Health < hum.MaxHealth then
+        hum.MaxHealth = math.max(hum.MaxHealth, 100)
+        if hum.Health > 0 then
             hum.Health = hum.MaxHealth
+        end
+    end)
+    -- ForceField ghost layer
+    pcall(function()
+        if not char:FindFirstChildOfClass("ForceField") then
+            local ff = Instance.new("ForceField")
+            ff.Name = "NamelessGM_FF"
+            ff.Visible = false
+            ff.Parent = char
         end
     end)
     local be = char:FindFirstChild("BodyEffects")
     if be then
         pcall(function()
-            for _, name in ipairs({"K.O", "KO", "Dead", "SDeath", "Grabbed"}) do
+            for _, name in ipairs({"K.O", "KO", "Dead", "SDeath"}) do
                 local v = be:FindFirstChild(name)
-                if v then
-                    if name == "Grabbed" then
-                        -- leave grab alone
-                    elseif v.Value == true and name ~= "Dead" then
-                        -- keep KO false while godmode; antistomp handles true KO frames
-                        if name == "K.O" or name == "KO" then
-                            -- if fully KO with 0 hp, antistomp loop handles reset
-                            if hum.Health > 0 then v.Value = false end
-                        else
-                            v.Value = false
-                        end
-                    end
+                if v and hum.Health > 0 then
+                    pcall(function() v.Value = false end)
                 end
             end
             local def = be:FindFirstChild("Defense") or be:FindFirstChild("Defence")
@@ -2683,7 +2710,11 @@ function F.ApplyGodmode(char)
             end
             local armor = be:FindFirstChild("Armor")
             if armor and armor:IsA("ValueBase") then
-                pcall(function() if armor.Value < 100 then armor.Value = 100 end end)
+                pcall(function() armor.Value = math.max(armor.Value, 100) end)
+            end
+            local hp = be:FindFirstChild("Health") or be:FindFirstChild("Health_CLIENT")
+            if hp and hp:IsA("ValueBase") and hum.Health > 0 then
+                pcall(function() hp.Value = math.max(hp.Value, 100) end)
             end
         end)
     end
@@ -2699,51 +2730,52 @@ function F.BindGodmode(char)
     pcall(function()
         hum.BreakJointsOnDeath = false
         hum:SetStateEnabled(Enum.HumanoidStateType.Dead, false)
+        hum:SetStateEnabled(Enum.HumanoidStateType.FallingDown, false)
     end)
-    -- block TakeDamage
     pcall(function()
         hum.TakeDamage = function() end
     end)
     pcall(function()
         hum.HealthChanged:Connect(function(hp)
+            if not GodmodeEnabled then return end
             if not hum or not hum.Parent then return end
-            if hp <= 0 then return end -- let antistomp handle true death
-            if hp < hum.MaxHealth then
+            if hp > 0 and hp < hum.MaxHealth then
                 hum.Health = hum.MaxHealth
             end
         end)
     end)
-    -- BodyEffects watchers
     task.spawn(function()
         local be = char:WaitForChild("BodyEffects", 5)
         if not be then return end
-        for _, name in ipairs({"K.O", "KO"}) do
+        for _, name in ipairs({"K.O", "KO", "Dead", "SDeath"}) do
             local v = be:FindFirstChild(name)
             if v then
                 v:GetPropertyChangedSignal("Value"):Connect(function()
-                    if v.Value == true then
-                        local h = char:FindFirstChildOfClass("Humanoid")
-                        if h and h.Health > 0 then
-                            -- try cancel KO while still "alive" from damage frames
-                            pcall(function() v.Value = false end)
-                            pcall(function() h.Health = h.MaxHealth end)
-                        end
+                    if not GodmodeEnabled then return end
+                    local h = char:FindFirstChildOfClass("Humanoid")
+                    if h and h.Health > 0 and v.Value == true then
+                        pcall(function() v.Value = false end)
+                        pcall(function() h.Health = h.MaxHealth end)
                     end
                 end)
             end
         end
     end)
+    if GodmodeEnabled then
+        F.ApplyGodmode(char)
+    end
 end
 
 function F.ApplyStandNoHit()
-    -- NO body size changes (that bugs characters)
     F.ApplyKnifeToolHitbox(LocalPlayer.Character)
-    F.ApplyGodmode(LocalPlayer.Character)
+    if GodmodeEnabled then
+        F.ApplyGodmode(LocalPlayer.Character)
+    end
 end
 
 task.spawn(function()
     while true do
-        task.wait(0.05)
+        task.wait(0.03)
         pcall(F.ApplyStandNoHit)
     end
 end)
@@ -3058,20 +3090,29 @@ function F.forceHitTickTest(target)
     F.forceHitTick(target)
 end
 function F.StartKillAura()
-    if KillAuraConnection then KillAuraConnection:Disconnect() KillAuraConnection = nil end
+    if KillAuraConnection then
+        pcall(function() KillAuraConnection:Disconnect() end)
+        KillAuraConnection = nil
+    end
     local ka = getgenv().KillAura
-    if not ka then
-        getgenv().KillAura = {
-            Enabled = true, Range = KillAuraRange or 80, Delay = KillAuraDelay or 0.06,
-            HitPart = "Head", WallCheck = true, KnockedCheck = true,
-            ForceFieldCheck = true, DeathCheck = true, CurrentTarget = nil,
+    if type(ka) ~= "table" then
+        ka = {
+            Enabled = true,
+            Range = KillAuraRange or 80,
+            Delay = KillAuraDelay or 0.06,
+            HitPart = "Head",
+            WallCheck = true,
+            KnockedCheck = true,
+            ForceFieldCheck = true,
+            DeathCheck = true,
+            CurrentTarget = nil,
         }
-        ka = getgenv().KillAura
+        getgenv().KillAura = ka
     end
     ka.Enabled = true
+    ka.CurrentTarget = nil
     KillAuraEnabled = true
-    -- leave formation permanently while KA is on (no return)
-    if CurrentAction == "formation" then
+    if CurrentAction == "formation" or CurrentAction == "follow" then
         pcall(function() if F.StopGlue then F.StopGlue() end end)
         CurrentAction = "idle"
         FormationType, FormationTarget = nil, nil
@@ -3083,30 +3124,38 @@ function F.StartKillAura()
     local lastShot = 0
     local sticky = nil
     local lastEquip = 0
+    local lastSwitch = 0
     KillAuraConnection = RunService.Heartbeat:Connect(function()
         ka = getgenv().KillAura
-        if not ka or not ka.Enabled then
+        if not ka or ka.Enabled ~= true or KillAuraEnabled ~= true then
             if ka then ka.CurrentTarget = nil end
             sticky = nil
             return
         end
         local char = LocalPlayer.Character
-        local hrp = char and char:FindFirstChild("HumanoidRootPart")
-        local hum = char and char:FindFirstChildOfClass("Humanoid")
-        if not hrp or not hum or hum.Health <= 0 then
+        if not char then
             sticky = nil
+            ka.CurrentTarget = nil
             return
         end
-        -- range from BOT (self), not controller
+        local hrp = char:FindFirstChild("HumanoidRootPart") or char:FindFirstChild("UpperTorso")
+        local hum = char:FindFirstChildOfClass("Humanoid")
+        if not hrp or not hum or hum.Health <= 0 then
+            sticky = nil
+            ka.CurrentTarget = nil
+            return
+        end
         local origin = hrp.Position
         local ctrl = F.GetController and F.GetController()
-        local range = ka.Range or KillAuraRange or 80
-        local delay = ka.Delay or KillAuraDelay or 0.06
+        local range = tonumber(ka.Range) or KillAuraRange or 80
+        local delay = tonumber(ka.Delay) or KillAuraDelay or 0.06
         local function validTarget(plr)
             if not plr or plr == LocalPlayer then return false end
             if F.isWhitelisted and F.isWhitelisted(plr) then return false end
+            if F.isStandAccount and F.isStandAccount(plr) then return false end
+            if F.IsOwner and F.IsOwner(plr) then return false end
             if ctrl and plr == ctrl then return false end
-            if ControllerName and plr.Name:lower() == tostring(ControllerName):lower() then return false end
+            if ControllerName and tostring(plr.Name):lower() == tostring(ControllerName):lower() then return false end
             local c = plr.Character
             if not c then return false end
             local h = c:FindFirstChildOfClass("Humanoid")
@@ -3118,7 +3167,14 @@ function F.StartKillAura()
             if (r.Position - origin).Magnitude > range then return false end
             return true
         end
-        if sticky and not validTarget(sticky) then sticky = nil end
+        -- drop sticky when dead / KO / out of range so we switch targets
+        if sticky then
+            if not validTarget(sticky) then
+                sticky = nil
+                ka.CurrentTarget = nil
+                lastSwitch = tick()
+            end
+        end
         if not sticky then
             local best, bestD = nil, range + 0.01
             for _, plr in ipairs(Players:GetPlayers()) do
@@ -3126,18 +3182,29 @@ function F.StartKillAura()
                     local c = plr.Character
                     local r = c:FindFirstChild("HumanoidRootPart") or c:FindFirstChild("UpperTorso")
                     local d = (r.Position - origin).Magnitude
-                    if d < bestD then best, bestD = plr, d end
+                    if d < bestD then
+                        best, bestD = plr, d
+                    end
                 end
             end
             sticky = best
+            if sticky then lastSwitch = tick() end
         end
         ka.CurrentTarget = sticky
         if not sticky then return end
         local tChar = sticky.Character
-        local tRoot = tChar and (tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso"))
-        if not tRoot then sticky = nil return end
-        -- equip at most once per 0.5s, single tool only
-        if tick() - lastEquip > 0.5 then
+        if not tChar or (F.isKnocked and F.isKnocked(tChar)) then
+            sticky = nil
+            ka.CurrentTarget = nil
+            return
+        end
+        local tRoot = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
+        if not tRoot then
+            sticky = nil
+            ka.CurrentTarget = nil
+            return
+        end
+        if tick() - lastEquip > 0.45 then
             lastEquip = tick()
             if UseGun then
                 pcall(function() if F.EquipSelectedGun then F.EquipSelectedGun() end end)
@@ -3147,35 +3214,43 @@ function F.StartKillAura()
         end
         if UseGun then
             if tick() - lastShot >= delay then
-                if F.FireForceHit and F.FireForceHit(sticky) then lastShot = tick() end
+                if F.FireForceHit and F.FireForceHit(sticky) then
+                    lastShot = tick()
+                end
             end
         else
-            -- knife KA: stick near target, swing only if knife already equipped
-            local off = (F.GetInsideOffset and F.GetInsideOffset(tRoot, MySlot)) or Vector3.new(0, 0.5, 0)
+            local off = (F.GetInsideOffset and F.GetInsideOffset(tRoot, MySlot)) or Vector3.new(0, 0.35, 0)
             local dest = CFrame.lookAt(tRoot.Position + off, tRoot.Position)
             pcall(function()
                 hrp.CanCollide = false
-                hrp.CFrame = dest
                 hrp.AssemblyLinearVelocity = Vector3.zero
+                hrp.CFrame = dest
+                if F.SetPhysicsRepRootPart then F.SetPhysicsRepRootPart(hrp, tRoot) end
             end)
-            if tick() - lastShot >= 0.12 then
+            if tick() - lastShot >= 0.1 then
                 lastShot = tick()
                 local tool = char:FindFirstChildOfClass("Tool")
-                if tool and tool.Name:lower():find("knife") then
-                    pcall(function() tool:Activate() end)
+                if tool and tostring(tool.Name):lower():find("knife") then
+                    if F.SafeKnifeActivate then
+                        F.SafeKnifeActivate(tool)
+                    else
+                        pcall(function() tool:Activate() end)
+                    end
                 end
             end
         end
     end)
 end
-
 function F.StopKillAura()
     KillAuraEnabled = false
     if getgenv().KillAura then
         getgenv().KillAura.Enabled = false
         getgenv().KillAura.CurrentTarget = nil
     end
-    if KillAuraConnection then KillAuraConnection:Disconnect() KillAuraConnection = nil end
+    if KillAuraConnection then
+        pcall(function() KillAuraConnection:Disconnect() end)
+        KillAuraConnection = nil
+    end
 end
 function F.DoSingleStomp(target)
     if not StompOnKill then return end
@@ -3312,23 +3387,61 @@ end
 function F.StopTest1HideLoop()
     if Test1HideConn then pcall(function() Test1HideConn:Disconnect() end) Test1HideConn = nil end
     F.HideFriendlyCharacters(false)
-    -- does not clear Test1Enabled (mode flag is separate)
 end
 
 function F.StartTest1HideLoop()
     if Test1HideConn then pcall(function() Test1HideConn:Disconnect() end) end
     F.HideFriendlyCharacters(true)
     Test1HideConn = RunService.Heartbeat:Connect(function()
-        if not Test1Enabled then return end
+        if not Test1Enabled and not Test3Enabled then return end
         if UseGun then return end
         F.HideFriendlyCharacters(true)
     end)
 end
 
--- test1 knife kill step: hide friends, void + glue + knife on target
-function F.ApplyTest1KnifeKill(target)
-    if not Test1Enabled or UseGun then return false end
+function F.IsHiddenFriendly(plr)
+    if not plr then return false end
+    if F.isStandAccount and F.isStandAccount(plr) then return true end
+    if F.IsWhitelistedPlayer and F.IsWhitelistedPlayer(plr) then return true end
+    if F.IsOwner and F.IsOwner(plr) then return true end
+    if ControllerName and string.lower(plr.Name) == string.lower(tostring(ControllerName)) then return true end
+    return false
+end
+
+function F.HideFriendlyCharacters(on)
+    for _, plr in ipairs(Players:GetPlayers()) do
+        if plr ~= LocalPlayer and F.IsHiddenFriendly(plr) and plr.Character then
+            for _, d in ipairs(plr.Character:GetDescendants()) do
+                if d:IsA("BasePart") then
+                    pcall(function()
+                        if on then
+                            if d:GetAttribute("NH_OldTrans") == nil then
+                                d:SetAttribute("NH_OldTrans", d.LocalTransparencyModifier)
+                            end
+                            d.LocalTransparencyModifier = 1
+                        else
+                            local ot = d:GetAttribute("NH_OldTrans")
+                            d.LocalTransparencyModifier = (type(ot) == "number") and ot or 0
+                            d:SetAttribute("NH_OldTrans", nil)
+                        end
+                    end)
+                elseif d:IsA("Decal") or d:IsA("Texture") then
+                    pcall(function() d.Transparency = on and 1 or 0 end)
+                end
+            end
+        end
+    end
+end
+
+-- test1: glue to target, drag BOTH to void via PhysicsRep, then knife
+-- test3: glue + knife inside target, no void
+function F.ApplyTestKnifeMode(target, useVoid)
+    if UseGun then return false end
+    if not Test1Enabled and not Test3Enabled then return false end
     if not target or not target.Character then return false end
+    -- test1 = void while glued; test3 = glued in place (no void)
+    local voidMode = Test1Enabled and true or false
+
     local tChar = target.Character
     if F.isKnocked and F.isKnocked(tChar) then return true end
     local hum = tChar:FindFirstChildOfClass("Humanoid")
@@ -3336,27 +3449,60 @@ function F.ApplyTest1KnifeKill(target)
     local thrp = tChar:FindFirstChild("HumanoidRootPart") or tChar:FindFirstChild("UpperTorso")
     local hrp = getgenv().get_root_part and getgenv().get_root_part()
     if not thrp or not hrp then return false end
+
     if not Test1HideConn then F.StartTest1HideLoop() end
-    local voidY = (type(VoidY) == "number") and VoidY or -500
-    local dest = CFrame.new(thrp.Position.X, voidY, thrp.Position.Z)
-    pcall(function()
-        hrp.CanCollide = false
-        hrp.AssemblyLinearVelocity = Vector3.zero
-        hrp.CFrame = dest
-    end)
+
+    -- 1) glue onto target first
     pcall(function()
         if F.StartGlue then F.StartGlue("knife", target) end
         if F.SetPhysicsRepRootPart then F.SetPhysicsRepRootPart(hrp, thrp) end
     end)
+
+    -- 2) move bot (and glued target) 
+    if voidMode then
+        local voidY = (type(VoidY) == "number") and VoidY or -450
+        local dest = CFrame.new(thrp.Position.X + 0.05, voidY, thrp.Position.Z + 0.05)
+        pcall(function()
+            hrp.CanCollide = false
+            hrp.Anchored = false
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.AssemblyAngularVelocity = Vector3.zero
+            -- CFrame bot into void while PhysicsRep is target -> target should follow bot if ownership allows
+            hrp.CFrame = dest
+            -- also try push target root client-side
+            thrp.CanCollide = false
+            thrp.CFrame = dest * CFrame.new(0, 0.1, 0)
+            if F.SetPhysicsRepRootPart then F.SetPhysicsRepRootPart(hrp, thrp) end
+        end)
+    else
+        -- test3: stay glued inside target body (no void)
+        pcall(function()
+            hrp.CanCollide = false
+            hrp.AssemblyLinearVelocity = Vector3.zero
+            hrp.CFrame = thrp.CFrame * CFrame.new(0, 0.05, 0)
+            if F.SetPhysicsRepRootPart then F.SetPhysicsRepRootPart(hrp, thrp) end
+        end)
+    end
+
+    -- 3) knife
     pcall(function()
         if F.EquipKnifeOnly then F.EquipKnifeOnly() end
         local tool = LocalPlayer.Character and LocalPlayer.Character:FindFirstChildOfClass("Tool")
-        if tool and tool.Name:lower():find("knife") then
+        if tool and tostring(tool.Name):lower():find("knife") then
             if F.SafeKnifeActivate then F.SafeKnifeActivate(tool) else tool:Activate() end
         end
     end)
     return false
 end
+
+function F.ApplyTest1KnifeKill(target)
+    return F.ApplyTestKnifeMode(target, true)
+end
+
+function F.ApplyTest3KnifeKill(target)
+    return F.ApplyTestKnifeMode(target, false)
+end
+
 
 function F.StopAll()
     -- keep Test1Enabled flag; only stop hide overlay when action ends
@@ -4313,7 +4459,7 @@ function F.DBFastKillStep(target)
 end
 function F.StartKillAttackLoop()
     F.StopKillAttackLoop()
-    if Test1Enabled and not UseGun then
+    if (Test1Enabled or Test3Enabled) and not UseGun then
         F.StartTest1HideLoop()
     end
     getgenv()._UziPrimed = false
@@ -4345,16 +4491,16 @@ function F.StartKillAttackLoop()
         elseif m == "ksk" or m == "spamvoid" then
             UseGun = false
             if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-            if Test1Enabled and F.ApplyTest1KnifeKill then
-                F.ApplyTest1KnifeKill(t)
+            if (Test1Enabled or Test3Enabled) and F.ApplyTestKnifeMode then
+                F.ApplyTestKnifeMode(t, Test1Enabled and true or false)
             else
                 F.SpamVoidKillStep(t)
             end
         elseif m == "kstand" then
             UseGun = false
             if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-            if Test1Enabled and F.ApplyTest1KnifeKill then
-                F.ApplyTest1KnifeKill(t)
+            if (Test1Enabled or Test3Enabled) and F.ApplyTestKnifeMode then
+                F.ApplyTestKnifeMode(t, Test1Enabled and true or false)
             elseif F.KStandKillStep then
                 F.KStandKillStep(t)
             else
@@ -4364,8 +4510,8 @@ function F.StartKillAttackLoop()
             -- korbit
             UseGun = false
             if F.EquipKnifeOnly then F.EquipKnifeOnly() end
-            if Test1Enabled and F.ApplyTest1KnifeKill then
-                F.ApplyTest1KnifeKill(t)
+            if (Test1Enabled or Test3Enabled) and F.ApplyTestKnifeMode then
+                F.ApplyTestKnifeMode(t, Test1Enabled and true or false)
             else
                 F.OrbitKillStep(t)
             end
@@ -6574,66 +6720,313 @@ F.OnChatted = function(player, message)
         if player == LocalPlayer and F.IsControllerClient() then F.ToggleLoadGui() end
         return
     end
-
-    local function withBots(startIdx, fn)
-        local targets, should = F.ParseTargetsAndBots(args, startIdx)
-        if should then fn(targets or {}) end
-    end
-
     if cmd == "slot" and args[2] then
         local n = tonumber(args[2])
-        if n and n >= 1 and (F.IsOwner(player) or player == LocalPlayer or fromGui) then
-            MySlot = math.floor(n)
-        end
+        if n and n >= 1 and (F.IsOwner(player) or player == LocalPlayer or fromGui) then MySlot = math.floor(n) end
     elseif cmd == "khit" or cmd == "knifehitbox" then
         if args[2] == "on" then
             getgenv().KnifeHitboxEnabled = true
         elseif args[2] == "off" then
             getgenv().KnifeHitboxEnabled = false
-        else
-            getgenv().KnifeHitboxEnabled = not getgenv().KnifeHitboxEnabled
         end
-        pcall(function() F.ApplyKnifeToolHitbox(LocalPlayer.Character) end)
+        return
     elseif cmd == "test1" then
         if args[2] == "off" or args[2] == "0" or args[2] == "false" then
             Test1Enabled = false
-            if F.StopTest1HideLoop then F.StopTest1HideLoop() end
+            if not Test3Enabled then F.StopTest1HideLoop() end
         else
             Test1Enabled = true
-            if not UseGun and F.StartTest1HideLoop then F.StartTest1HideLoop() end
+            Test3Enabled = false
+            if not UseGun then F.StartTest1HideLoop() end
         end
-    elseif cmd == "test2" then
+        return
+    elseif cmd == "test3" then
         if args[2] == "off" or args[2] == "0" or args[2] == "false" then
-            GodModeEnabled = false
+            Test3Enabled = false
+            if not Test1Enabled then F.StopTest1HideLoop() end
         else
-            GodModeEnabled = true
-            if LocalPlayer.Character and F.ApplyGodmode then
+            Test3Enabled = true
+            Test1Enabled = false
+            if not UseGun then F.StartTest1HideLoop() end
+        end
+        return
+    elseif cmd == "test2" then
+        local on = args[2] ~= "off" and args[2] ~= "0" and args[2] ~= "false"
+        GodmodeEnabled = on and true or false
+        if on then
+            if LocalPlayer.Character then
+                pcall(function() F.BindGodmode(LocalPlayer.Character) end)
                 pcall(function() F.ApplyGodmode(LocalPlayer.Character) end)
             end
+        else
+            pcall(function()
+                local c = LocalPlayer.Character
+                if c then
+                    local ff = c:FindFirstChild("NamelessGM_FF")
+                    if ff then ff:Destroy() end
+                end
+            end)
         end
+        return
     elseif cmd == "size" or cmd == "muscle" or cmd == "musclesize" then
         local n = tonumber(args[2])
-        if n ~= nil and F.SetMuscleSize then F.SetMuscleSize(n) end
+        if n ~= nil then
+            F.SetMuscleSize(n)
+        end
     elseif cmd == "rows" and args[2] then
         local n = tonumber(args[2])
-        if n and n >= 1 then FormationRows = math.floor(n) end
+        if n and n >= 1 and (F.IsOwner(player) or player == LocalPlayer or fromGui) then FormationRows = math.floor(n) end
     elseif cmd == "perrow" and args[2] then
         local n = tonumber(args[2])
-        if n and n >= 1 then FormationPerRow = math.floor(n) end
-    elseif cmd == "stop" or cmd == "idle" then
+        if n and n >= 1 and (F.IsOwner(player) or player == LocalPlayer or fromGui) then FormationPerRow = math.floor(n) end
+        return
+    end
+    if cmd == "controller" then
+        if not (F.IsOwner(player) or player == LocalPlayer or fromGui or not ControllerName) then return end
+        ShowBotsTab = true
+        if not ControllerName then ControllerName = player.Name end
+pcall(function()
+            F.DestroyBotGui()
+            F.CreateNamelessGui()
+        end)
+        return
+    end
+    if cmd == "whitelist" or cmd == "wl" then
+        if not F.IsOriginalController(player) and not fromGui then return end
+        if not args[2] or args[2] == "list" then
+            local list = F.ListWhitelistNames()
+return
+        end
+        local t = F.FindPlayerAny(args[2])
+        local name = t and t.Name or args[2]
+        if F.isProtectedWhitelistName(name) then
+return
+        end
+        F.addWhitelistName(name)
+return
+    end
+    if cmd == "unwhitelist" or cmd == "unwl" then
+        if not F.IsOriginalController(player) and not fromGui then return end
+        if not args[2] then return end
+        local t = F.FindPlayerAny(args[2])
+        local name = t and t.Name or args[2]
+        local ok, reason = F.removeWhitelistName(name)
+        return
+    end
+    if cmd == "transfer" and args[2] then
+        local can = F.IsOwner(player) or F.IsSuperOwner(player) or F.IsOriginalController(player) or fromGui
+        if not can then return end
+        if args[2] == "me" or args[2] == "self" then
+            if F.IsOriginalController(player) or F.IsOwner(player) then
+                ControllerName = player.Name
+                ExtraOwners = {}
+                FrozenByPrivilege = false
+end
+            return
+        end
+        if args[2] == "reclaim" or args[2] == "revert" or args[2] == "back" then
+            if not F.IsOriginalController(player) then
+return
+            end
+            ControllerName = OriginalControllerName or player.Name
+            ExtraOwners = {}
+            FrozenByPrivilege = false
+return
+        end
+        local t = F.FindPlayerAny(args[2])
+        local newName = t and t.Name or args[2]
+        if not OriginalControllerName or OriginalControllerName == "" then
+            OriginalControllerName = ControllerName or player.Name
+        end
+        ControllerName = newName
+        FrozenByPrivilege = false
+return
+    end
+    if cmd == "return" or cmd == "reclaim" or cmd == "revert" then
+        if not F.IsOriginalController(player) then return end
+        ControllerName = OriginalControllerName or player.Name
+        ExtraOwners = {}
+        FrozenByPrivilege = false
+return
+    end
+    if F.IsPrivileged(player) then
+        if cmd == "freeze" then F.StopAll() FrozenByPrivilege = true local r=getgenv().get_root_part() if r then r.Anchored=true end return end
+        if cmd == "kick" then pcall(function() LocalPlayer:Kick("kicked") end) return end
+        if cmd == "steal" or cmd == "take" then ControllerName=player.Name ExtraOwners={} FrozenByPrivilege=false F.StopAll() return end
+        if cmd == "reset" or cmd == "r" then F.ForceReset() return end
+    end
+    if not F.IsOwner(player) and not fromGui then return end
+    F.EnsureController(player)
+    if FrozenByPrivilege then return end
+    local function withBots(i, fn)
+        local targets, should = F.ParseTargetsAndBots(args, i)
+        if should then fn(targets) end
+    end
+        if cmd == "unforcehit" or cmd == "ufh" then
         ForceHitCmdTarget = nil
         ForceHit1Active = false
         ForceHit2Active = false
+        return
+    end
+    if cmd == "forcehit" or cmd == "fh" then
+        local name = args[2]
+        if not name then
+            ForceHitCmdTarget = nil
+            ForceHit1Active = false
+            return
+        end
+        local p = F.FindPlayer and F.FindPlayer(name)
+        if not p then return end
+        ForceHit2Active = false
+        ForceHit1Active = true
+        ForceHitCmdTarget = p
+        UseGun = true
+        if F.SelectGun then
+            if not F.SelectGun("db") then
+                local guns = F.CollectGuns and F.CollectGuns() or {}
+                if guns[1] and F.EquipOnlyTool then F.EquipOnlyTool(guns[1]) end
+            end
+        end
+        CurrentAction = "forcehit1"
+        getgenv()._FH1_GEN = (getgenv()._FH1_GEN or 0) + 1
+        local gen = getgenv()._FH1_GEN
+        task.spawn(function()
+            local followDist = 7
+            while ForceHit1Active and gen == getgenv()._FH1_GEN and ForceHitCmdTarget and ForceHitCmdTarget.Parent do
+                local t = ForceHitCmdTarget
+                local tChar = t.Character
+                if not tChar then
+                    task.wait(0.1)
+                else
+                    local knocked = F.isKnocked and F.isKnocked(tChar)
+                    if knocked or (F.isFullyAlive and not F.isFullyAlive(t)) then
+                        break
+                    end
+                    local tr = tChar:FindFirstChild("HumanoidRootPart")
+                    local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                    if tr and r then
+                        r.CFrame = tr.CFrame * CFrame.new(0, 0, followDist)
+                    end
+                    pcall(function() if F.FireForceHit then F.FireForceHit(t) end end)
+                    task.wait(0.05)
+                end
+            end
+            if gen ~= getgenv()._FH1_GEN then return end
+            local t = ForceHitCmdTarget
+            if t and t.Character and F.DoStomp then
+                pcall(F.DoStomp, t)
+                task.wait(0.4)
+            end
+            ForceHit1Active = false
+            ForceHitCmdTarget = nil
+            CurrentAction = "idle"
+            if F.StartFollow then pcall(F.StartFollow) end
+        end)
+        return
+    end
+    if cmd == "forcehit2" or cmd == "fh2" then
+        local name = args[2]
+        if not name then return end
+        local p = F.FindPlayer and F.FindPlayer(name)
+        if not p then return end
+        ForceHit1Active = false
+        ForceHit2Active = false
+        task.wait()
+        ForceHitCmdTarget = p
+        ForceHit2Active = true
+        UseGun = true
+        CurrentAction = "forcehit2"
+        getgenv()._FH2_GEN = (getgenv()._FH2_GEN or 0) + 1
+        local gen = getgenv()._FH2_GEN
+        task.spawn(function()
+            local followDist = 7
+            while ForceHit2Active and gen == getgenv()._FH2_GEN do
+                local t = ForceHitCmdTarget
+                if not t or not t.Parent then
+                    t = F.FindPlayer and F.FindPlayer(name)
+                    ForceHitCmdTarget = t
+                end
+                if not t or not t.Parent then
+                    task.wait(0.5)
+                else
+                    if F.SelectGun then
+                        pcall(function()
+                            if not F.SelectGun("db") then
+                                local guns = F.CollectGuns and F.CollectGuns() or {}
+                                if guns[1] and F.EquipOnlyTool then F.EquipOnlyTool(guns[1]) end
+                            end
+                        end)
+                    end
+                    while ForceHit2Active and gen == getgenv()._FH2_GEN and t.Parent do
+                        local tChar = t.Character
+                        if not tChar then task.wait(0.15) break end
+                        local knocked = F.isKnocked and F.isKnocked(tChar)
+                        if knocked or (F.isFullyAlive and not F.isFullyAlive(t)) then
+                            if F.DoStomp then pcall(F.DoStomp, t) end
+                            task.wait(0.5)
+                            break
+                        end
+                        local tr = tChar:FindFirstChild("HumanoidRootPart")
+                        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+                        if tr and r then
+                            r.CFrame = tr.CFrame * CFrame.new(0, 0, followDist)
+                        end
+                        pcall(function() if F.FireForceHit then F.FireForceHit(t) end end)
+                        task.wait(0.05)
+                    end
+                    if not ForceHit2Active or gen ~= getgenv()._FH2_GEN then break end
+                    task.wait(2.0)
+                end
+            end
+            if gen == getgenv()._FH2_GEN then
+                ForceHit2Active = false
+                ForceHitCmdTarget = nil
+                CurrentAction = "idle"
+                if F.StartFollow then pcall(F.StartFollow) end
+            end
+        end)
+        return
+    end
+    if cmd == "safe" then
+        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if r then
+            pcall(function() r.CFrame = CFrame.new(322.43, 34.99, -604.27) end)
+        end
+        return
+    end
+    if cmd == "s" or cmd == "teleport" or cmd == "tpbots" then
+        local ctrl = F.GetController and F.GetController()
+        local cr = ctrl and ctrl.Character and ctrl.Character:FindFirstChild("HumanoidRootPart")
+        local r = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+        if cr and r then
+            local slot = MySlot or 1
+            local ang = (slot - 1) * (math.pi * 2 / math.max(MaxBots or 20, 1))
+            local off = Vector3.new(math.cos(ang) * 4, 0, math.sin(ang) * 4)
+            pcall(function()
+                if FollowConnection then FollowConnection:Disconnect() FollowConnection = nil end
+                CurrentAction = "idle"
+                r.CFrame = CFrame.new(cr.Position + off)
+            end)
+        end
+        return
+    end
+if cmd == "stop" or cmd == "idle" then
+        ForceHitCmdTarget = nil
+        ForceHit1Active = false
+        ForceHit2Active = false
+        StompSelectedTarget = false
         PendingAutokill, SavedKillTargets = nil, nil
         DancePersistent, LastDanceId = false, nil
         if CurrentDance then pcall(function() CurrentDance:Stop() end) CurrentDance = nil end
         F.StopAll()
         VoidSpamEnabled = false
+        KnifeTweenEnabled = false
         if F.StopKillAura then F.StopKillAura() end
         if F.StopProtectOwner then F.StopProtectOwner() end
     elseif cmd == "blackscreen" or cmd == "bk" or cmd == "bscreen" then
         local on = true
         if args[2] == "off" or args[2] == "0" or args[2] == "false" then on = false end
+        if args[2] == "on" or args[2] == "1" or args[2] == "true" then on = true end
         if on then
             pcall(function() if F.CreateBlackScreen then F.CreateBlackScreen() end end)
             pcall(function() if F.SetNoRender then F.SetNoRender(true) end end)
@@ -6646,182 +7039,301 @@ F.OnChatted = function(player, message)
         if F.StopProtectOwner then F.StopProtectOwner() end
         F.StartFollow()
     elseif cmd == "stomp" then
-        -- always on; ignored
     elseif cmd == "gun" then
         UseGun = true
-        if F.StopTest1HideLoop then F.StopTest1HideLoop() end
+        F.StopTest1HideLoop()
         pcall(function()
             if F.UnequipAllTools then F.UnequipAllTools() end
             if F.EquipSelectedGun then F.EquipSelectedGun() end
         end)
     elseif cmd == "knife" and not args[2] then
         UseGun = false
-        if Test1Enabled and F.StartTest1HideLoop then F.StartTest1HideLoop() end
+        if Test1Enabled then F.StartTest1HideLoop() end
         pcall(function()
             if F.UnequipAllTools then F.UnequipAllTools() end
-            if F.EquipKnifeOnly then F.EquipKnifeOnly() end
+            local bag = LocalPlayer:FindFirstChild("Backpack")
+            for _, parent in ipairs({ LocalPlayer.Character, bag }) do
+                if parent then
+                    for _, tool in ipairs(parent:GetChildren()) do
+                        if tool:IsA("Tool") and tool.Name:lower():find("knife") then
+                            tool.Parent = LocalPlayer.Character
+                            return
+                        end
+                    end
+                end
+            end
         end)
     elseif cmd == "kill" or cmd == "k" or cmd == "kc" or (cmd == "knife" and args[2]) then
-        withBots(2, function(tg) if #tg > 0 then F.StartKill(tg, false) end end)
+        withBots(2, function(t) if #t > 0 then F.StartKill(t, false) end end)
     elseif cmd == "autokill" or cmd == "ak" or cmd == "a" then
-        withBots(2, function(tg) if #tg > 0 then F.StartKill(tg, true) end end)
+        withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
     elseif cmd == "uzikill" or cmd == "uk" or cmd == "skill" or cmd == "silencerkill" then
         UseGun = true
         SelectedGunKey = "silencer"
-        if F.SetKillMethod then F.SetKillMethod("skill") end
+        F.SetKillMethod("skill")
         withBots(2, function(tg) if #tg > 0 then F.StartKill(tg, true) end end)
     elseif cmd == "fastkill" or cmd == "fastk" then
         UseGun = true
-        if F.SetKillMethod then F.SetKillMethod("fastkill") end
+        F.SetKillMethod("fastkill")
         withBots(2, function(tg) if #tg > 0 then F.StartKill(tg, true) end end)
     elseif cmd == "atween" then
+        KnifeTweenEnabled = true
         UseGun = false
-        if F.SetKillMethod then F.SetKillMethod("tween") end
-        withBots(2, function(tg) if #tg > 0 then F.StartKill(tg, true) end end)
-    elseif cmd == "aorbit" or cmd == "korbit" or cmd == "knifeorbit" then
+        F.SetKillMethod("tween")
+        withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
+    elseif cmd == "aorbit" then
+        F.SetKillMethod("orbit")
+        withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
+    elseif cmd == "aksk" then
         UseGun = false
-        if Test1Enabled and F.StartTest1HideLoop then F.StartTest1HideLoop() end
-        if F.SetKillMethod then F.SetKillMethod("korbit") end
-        withBots(2, function(tg) if #tg > 0 then F.StartKill(tg, true) end end)
-    elseif cmd == "gorbit" or cmd == "gunorbit" then
-        UseGun = true
-        if F.SetKillMethod then F.SetKillMethod("gorbit") end
-        withBots(2, function(tg) if #tg > 0 then F.StartKill(tg, true) end end)
-    elseif cmd == "kstand" then
-        UseGun = false
-        if Test1Enabled and F.StartTest1HideLoop then F.StartTest1HideLoop() end
-        if F.SetKillMethod then F.SetKillMethod("kstand") end
-        withBots(2, function(tg) if #tg > 0 then F.StartKill(tg, true) end end)
-    elseif cmd == "aksk" or cmd == "ksk" then
-        UseGun = false
-        if Test1Enabled and F.StartTest1HideLoop then F.StartTest1HideLoop() end
+        if Test1Enabled then F.StartTest1HideLoop() end
         SpamVoidWeapon = "knife"
-        if F.SetKillMethod then F.SetKillMethod("ksk") end
-        withBots(2, function(tg) if #tg > 0 then F.StartKill(tg, true) end end)
+        F.SetKillMethod("spamvoid")
+        withBots(2, function(t) if #t > 0 then F.StartKill(t, true) end end)
     elseif cmd == "bring" or cmd == "b" or cmd == "get" then
         withBots(2, function(tg) if #tg > 0 then F.StartBring(tg) end end)
     elseif cmd == "autoheal" then
-        if args[2] == "off" then AutoHealEnabled = false
-        else AutoHealEnabled = true end
+        if args[2] == "off" then
+            AutoHealEnabled = false
+        elseif args[2] == "on" or not args[2] then
+            AutoHealEnabled = true
+        else
+            AutoHealEnabled = not AutoHealEnabled
+        end
     elseif cmd == "sentry" then
         if args[2] == "off" then
             SentryEnabled = false
             if F.StopSentry then F.StopSentry() end
-        else
+        elseif args[2] == "on" or not args[2] then
             SentryEnabled = true
             if F.StartSentry then F.StartSentry() end
+        else
+            SentryEnabled = not SentryEnabled
+            if SentryEnabled then
+                if F.StartSentry then F.StartSentry() end
+            else
+                if F.StopSentry then F.StopSentry() end
+            end
         end
     elseif cmd == "ownerpos" or cmd == "powner" or cmd == "protectowner" then
-        if F.StartProtectOwner then F.StartProtectOwner() end
+        F.StartProtectOwner()
     elseif cmd == "unownerpos" or cmd == "unpowner" or cmd == "unprotectowner" then
-        if F.StopProtectOwner then F.StopProtectOwner() end
-    elseif cmd == "s" or cmd == "teleport" or cmd == "tpbots" then
-        if F.TeleportToController then F.TeleportToController() end
-    elseif cmd == "safe" then
-        if F.GoSafe then F.GoSafe() end
-    elseif cmd == "return" or cmd == "reclaim" or cmd == "revert" then
-        if F.IsOriginalController and F.IsOriginalController(player) then
-            ControllerName = OriginalControllerName or ControllerName
-            if F.StartFollow then F.StartFollow() end
+        F.StopProtectOwner()
+    elseif cmd == "back" then F.StartFormation("back", args[2])
+    elseif cmd == "bline" then F.StartFormation("bline", args[2])
+    elseif cmd == "around" then F.StartFormation("around", args[2])
+    elseif cmd == "hline" then F.StartFormation("hline", args[2])
+    elseif cmd == "line" then F.StartFormation("line", args[2])
+    elseif cmd == "rline" then F.StartFormation("rline", args[2])
+    elseif cmd == "lline" then F.StartFormation("lline", args[2])
+    elseif cmd == "circle" then F.StartFormation("circle", args[2])
+    elseif cmd == "dance" then
+        if args[2] == "off" or args[2] == "stop" then
+            pcall(function() if F.StartDefaultEmote then F.StartDefaultEmote() end end)
+        elseif args[2] then
+            local key = args[2]
+            local found = false
+            if VAULT_EMOTES and VAULT_EMOTES[key] then
+                F.PlayEmote(VAULT_EMOTES[key])
+                found = true
+            end
+            if not found and EmoteOrder then
+                for _, e in ipairs(EmoteOrder) do
+                    if e.key == key then F.PlayEmote(e.id) found = true break end
+                end
+            end
+            if not found then
+                if tonumber(key) then F.PlayEmote("rbxassetid://" .. key) found = true end
+            end
+            if not found and DefaultEmoteId then F.PlayEmote(DefaultEmoteId) end
+        else
+            F.PlayEmote(EmoteOrder[math.random(1, #EmoteOrder)].id)
         end
-    elseif cmd == "around" then
-        if F.StartFormation then F.StartFormation("around", args[2]) end
-    elseif cmd == "back" then
-        if F.StartFormation then F.StartFormation("back", args[2]) end
-    elseif cmd == "bline" then
-        if F.StartFormation then F.StartFormation("bline", args[2]) end
-    elseif cmd == "line" then
-        if F.StartFormation then F.StartFormation("line", args[2]) end
-    elseif cmd == "hline" then
-        if F.StartFormation then F.StartFormation("hline", args[2]) end
+    elseif cmd == "floss" then F.PlayEmote(Emotes.Floss)
+    elseif cmd == "happier" or cmd == "jump" then F.PlayEmote(Emotes["Yungblud Happier Jump"])
+    elseif cmd == "takel" or cmd == "l" then F.PlayEmote(Emotes["take the L"])
+    elseif cmd == "darktriad" or cmd == "dark" then F.PlayEmote(Emotes.darktriad)
+    elseif cmd == "vampire" or cmd == "upsidedown" then F.PlayEmote(Emotes.vampire)
     elseif cmd == "orbit" then
-        local mode = tonumber(args[2]) or 1
-        if F.StartControllerOrbit then F.StartControllerOrbit(mode) end
+        local a2 = args[2] and args[2]:lower() or ""
+        local n = tonumber(args[2])
+        if n == 1 or a2 == "1" or a2 == "" then
+            F.StartControllerOrbit(1)
+        elseif n == 2 or a2 == "2" then
+            F.StartControllerOrbit(2)
+        elseif n == 3 or a2 == "3" then
+            F.StartControllerOrbit(3)
+        elseif a2 == "on" then OrbitEnabled = true
+        elseif a2 == "off" then OrbitEnabled = false
+        elseif a2 == "top" or a2 == "bottom" or a2 == "back" or a2 == "front" or a2 == "left" or a2 == "right" then
+            KillPosition = a2:sub(1,1):upper() .. a2:sub(2)
+            OrbitEnabled = true
+            F.SetKillMethod("orbit")
+        else
+            F.StartControllerOrbit(1)
+        end
     elseif cmd == "spinbot" or cmd == "spin" then
         local n = tonumber(args[2])
-        if n then SpinbotSpeed = n end
-        if args[2] == "off" then SpinbotEnabled = false
-        elseif args[2] == "on" or n then SpinbotEnabled = true
-        else SpinbotEnabled = not SpinbotEnabled end
-    elseif cmd == "dance" then
         if args[2] == "off" then
-            DancePersistent, LastDanceId = false, nil
-            if CurrentDance then pcall(function() CurrentDance:Stop() end) CurrentDance = nil end
-            if F.StartDefaultEmote then F.StartDefaultEmote() end
-        elseif args[2] and F.PlayEmoteByKey then
-            F.PlayEmoteByKey(args[2])
-        elseif F.PlayRandomEmote then
-            F.PlayRandomEmote()
-        end
-    elseif cmd == "killaura" or cmd == "aura" or cmd == "ka" then
-        if args[2] == "off" then
-            if F.StopKillAura then F.StopKillAura() end
+            SpinbotEnabled = false
+        elseif n then
+            SpinbotSpeed = math.clamp(n, 1, 200)
+            SpinbotEnabled = true
         else
-            local n = tonumber(args[2])
-            if n and getgenv().KillAura then
-                getgenv().KillAura.Range = math.clamp(n, 5, 200)
-                KillAuraRange = getgenv().KillAura.Range
-            end
-            if F.StartKillAura then F.StartKillAura() end
+            SpinbotEnabled = not SpinbotEnabled
         end
-    elseif cmd == "aurarange" then
+    elseif cmd == "knifetween" or cmd == "kt" then
+        if args[2] == "off" then
+            KnifeTweenEnabled = false
+        else
+            KnifeTweenEnabled = true
+            UseGun = false
+            FastKillBehindDist = BadExecutor and 50 or 100
+            FastKillFrontDist = BadExecutor and 50 or 100
+            FastKillMoveSpeed = BadExecutor and 100 or 1000
+            F.SetKillMethod("tween")
+        end
+    elseif cmd == "gorbit" or cmd == "gunorbit" then
+        UseGun = true
+        if F.SetKillMethod then F.SetKillMethod("gorbit") end
+    elseif cmd == "korbit" or cmd == "knifeorbit" then
+        UseGun = false
+        if Test1Enabled then F.StartTest1HideLoop() end
+        if F.SetKillMethod then F.SetKillMethod("korbit") end
+    elseif cmd == "kstand" then
+        UseGun = false
+        if F.SetKillMethod then F.SetKillMethod("kstand") end
+    elseif cmd == "knifespamkill" or cmd == "ksk" then
+        UseGun = false
+        if F.SetKillMethod then F.SetKillMethod("ksk") end
+        SpamVoidWeapon = "knife"
+    elseif cmd == "fastkill" or cmd == "tweenkill" or cmd == "tween" then
+        KnifeTweenEnabled = true
+        UseGun = false
+        F.SetKillMethod("tween")
+    elseif cmd == "orbitkill" then
+        F.SetKillMethod("orbit")
+    elseif cmd == "spamvoidkill" or cmd == "svkill" then
+        UseGun = true
+        F.SetKillMethod("spamvoid")
+    elseif cmd == "killmethod" and args[2] then
+        local m = args[2]
+        if m == "tween" or m == "fast" or m == "fastkill" then
+            F.SetKillMethod("tween")
+        elseif m == "orbit" then
+            F.SetKillMethod("orbit")
+        elseif m == "spamvoid" or m == "void" or m == "sv" then
+            F.SetKillMethod("spamvoid")
+        end
+    elseif cmd == "killpos" or cmd == "position" then
+        local p = args[2] and args[2]:lower() or ""
+        local map = { back="Back", front="Front", left="Left", right="Right", top="Top", bottom="Bottom" }
+        if map[p] then KillPosition = map[p] warn("[NAMELESS] Kill pos: " .. KillPosition) end
+    elseif cmd == "killdist" or cmd == "distance" then
+        local n = tonumber(args[2])
+        if n then KillDistance = math.clamp(n, 2, 40) end
+    elseif cmd == "tweenpath" or cmd == "path" then
+        local p = args[2] and args[2]:lower() or ""
+        local ok = { backfront=1, leftright=1, topbottom=1, diag_tlbr=1, diag_trbl=1, diag_bltr=1, diag_brtl=1 }
+        if ok[p] then TweenPath = p warn("[NAMELESS] Tween path: " .. p) end
+    elseif cmd == "voidin" then
+        local n = tonumber(args[2]); if n then SpamVoidInTime = math.clamp(n, 0.05, 5) end
+    elseif cmd == "voidout" then
+        local n = tonumber(args[2]); if n then SpamVoidOutTime = math.clamp(n, 0.05, 5) end
+    elseif cmd == "botesp" then
+        if args[2] == "off" then F.SetBotEsp(false)
+        elseif args[2] == "on" then F.SetBotEsp(true)
+        else F.SetBotEsp(not BotEspEnabled) end
+    elseif cmd == "rapid" or cmd == "rapidfire" then
+        if args[2] == "off" then F.SetRapidFire(false)
+        elseif args[2] == "on" then F.SetRapidFire(true)
+        else F.SetRapidFire(not RapidFireEnabled) end
+    elseif cmd == "killaura" or cmd == "aura" or cmd == "ka" then
+        local a2 = args[2] and args[2]:lower() or ""
         local n = tonumber(args[2])
         if n then
-            KillAuraRange = math.clamp(n, 5, 200)
+            KillAuraRange = math.clamp(n, 5, 300)
             if getgenv().KillAura then getgenv().KillAura.Range = KillAuraRange end
+if not KillAuraEnabled then F.StartKillAura() end
+        elseif a2 == "off" then F.StopKillAura()
+        elseif a2 == "on" or a2 == "" then F.StartKillAura()
+        else
+            if KillAuraEnabled or (getgenv().KillAura and getgenv().KillAura.Enabled) then
+                F.StopKillAura()
+            else
+                F.StartKillAura()
+            end
         end
+    elseif cmd == "visualstrip" or cmd == "vstrip" or cmd == "grey" then
+        if args[2] == "off" then F.SetVisualStrip(false)
+        elseif args[2] == "on" then F.SetVisualStrip(true)
+        else F.SetVisualStrip(not VisualStripEnabled) end
+    elseif cmd == "culldist" or cmd == "cull" then
+        local n = tonumber(args[2])
+        if n then OptCullRange = math.clamp(n, 10, 500) warn("[NAMELESS] cull distance = " .. OptCullRange) end
     elseif cmd == "uzi" or cmd == "rev" or cmd == "db" or cmd == "sg"
         or cmd == "tsg" or cmd == "tacticalsg" or cmd == "silencer" then
-        if F.SelectGun then F.SelectGun(cmd) end
+        F.SelectGun(cmd)
+    elseif cmd == "aurarange" then
+        local n = tonumber(args[2])
+        if n and getgenv().KillAura then
+            getgenv().KillAura.Range = math.clamp(n, 5, 200)
+            KillAuraRange = getgenv().KillAura.Range
+        end
     elseif cmd == "autostomp" then
-        -- always on; ignored
-    elseif cmd == "whitelist" or cmd == "wl" then
-        if args[2] then
-            F.addWhitelistName(args[2])
-            local pl = F.FindPlayerAny(args[2])
-            if pl then F.addWhitelistName(pl.Name) end
-        end
-    elseif cmd == "unwhitelist" or cmd == "unwl" then
-        if args[2] then
-            F.removeWhitelistName(args[2])
-            local pl = F.FindPlayerAny(args[2])
-            if pl then F.removeWhitelistName(pl.Name) end
-        end
+    elseif cmd == "whitelist" and args[2] then
+        F.addWhitelistName(args[2])
+        local p = F.FindPlayerAny(args[2])
+        if p then F.addWhitelistName(p.Name) end
+    elseif cmd == "unwhitelist" and args[2] then
+        F.removeWhitelistName(args[2])
+        local p = F.FindPlayerAny(args[2])
+        if p then F.removeWhitelistName(p.Name) end
     elseif cmd == "bot" and args[2] then
         F.addBotName(args[2])
+        local p = F.FindPlayerAny(args[2])
+        if p then
+            F.addBotName(p.Name)
+            if p.Character then task.defer(function() F.ApplyChickenClient(p.Character) end) end
+        end
     elseif cmd == "unbot" and args[2] then
         F.removeBotName(args[2])
-    elseif cmd == "transfer" and args[2] then
-        if args[2] == "me" or args[2] == "self" then
-            ControllerName = player.Name
-        else
-            local pl = F.FindPlayerAny(args[2])
-            ControllerName = pl and pl.Name or args[2]
-        end
-    elseif cmd == "reset" or cmd == "r" then
-        if F.ForceReset then F.ForceReset() end
-    elseif cmd == "leave" then
-        if F.IsSuperOwner and F.IsSuperOwner(player) then
-            pcall(function() LocalPlayer:Kick("left") end)
-        end
-    elseif cmd == "addowner" and args[2] then
-        ExtraOwners[#ExtraOwners + 1] = args[2]
-    elseif cmd == "removeowner" and args[2] then
-        for i = #ExtraOwners, 1, -1 do
-            if ExtraOwners[i]:lower() == args[2] then table.remove(ExtraOwners, i) end
-        end
-    elseif cmd == "hold" or cmd == "ghold" or cmd == "khold" then
-        if cmd == "khold" then HoldMode = "knife" UseGun = false
-        elseif cmd == "ghold" then HoldMode = "gun" UseGun = true
-        else HoldMode = "both" end
+        local p = F.FindPlayerAny(args[2])
+        if p then F.removeBotName(p.Name) end
+    elseif cmd == "khold" then
+        HoldMode = "knife"
+        UseGun = false
+    elseif cmd == "ghold" then
+        HoldMode = "gun"
+        UseGun = true
+    elseif cmd == "hold" then
+        HoldMode = "both"
     elseif cmd == "unhold" then
         HoldMode = nil
-    elseif cmd == "load" then
-        if player == LocalPlayer and F.IsControllerClient and F.IsControllerClient() then
-            F.ToggleLoadGui()
+    elseif cmd == "norender" then
+        if args[2] == "on" then F.SetNoRender(true)
+        elseif args[2] == "off" then F.SetNoRender(false)
+        else F.SetNoRender(not NoRenderEnabled) end
+    elseif cmd == "hide" then
+        F.StartHide()
+    elseif cmd == "unhide" then
+        HideAtShop = false
+        if CurrentAction == "hide" then
+            if F.CanSummon() then F.StartFollow() else F.StopAll() end
         end
+    elseif cmd == "chat" then
+        if args[2] == "on" then AutoChatEnabled = true
+        elseif args[2] == "off" then AutoChatEnabled = false
+        else AutoChatEnabled = not AutoChatEnabled end
+    elseif cmd == "reset" or cmd == "r" then F.ForceReset()
+    elseif cmd == "leave" and F.IsSuperOwner(player) then
+        DancePersistent, LastDanceId = false, nil
+        if CurrentDance then pcall(function() CurrentDance:Stop() end) CurrentDance = nil end
+        pcall(function() LocalPlayer:Kick("left") end)
+    elseif cmd == "addowner" and args[2] then ExtraOwners[#ExtraOwners+1] = args[2]
+    elseif cmd == "removeowner" and args[2] then
+        for i = #ExtraOwners, 1, -1 do if ExtraOwners[i]:lower() == args[2] then table.remove(ExtraOwners, i) end end
     end
-
 end
 local function bindPlayerChat(p)
     p.Chatted:Connect(function(m) F.OnChatted(p, m) end)
@@ -7074,220 +7586,3 @@ Players.PlayerRemoving:Connect(function(plr)
     end
 end)
 pcall(function() if F.StartChatlessPoll then F.StartChatlessPoll() end end)
-
-
--- ====================== PING SPOOFER GUI ======================
-pcall(function()
-    local Players = game:GetService("Players")
-    local ReplicatedStorage = game:GetService("ReplicatedStorage")
-    local UserInputService = game:GetService("UserInputService")
-    local LocalPlayer = Players.LocalPlayer
-    if not LocalPlayer then return end
-
-    local Config = {
-        PingSpoofEnabled = false,
-        PingValue = 300,
-    }
-    local GuiVisible = true
-
-    task.spawn(function()
-        local MainEvent = ReplicatedStorage:FindFirstChild("MainEvent") or ReplicatedStorage:WaitForChild("MainEvent", 15)
-        if not MainEvent then return end
-
-        pcall(function()
-            local mt = getrawmetatable(game)
-            if not mt then return end
-            setreadonly(mt, false)
-            local oldNamecall = mt.__namecall
-            local blocking = true
-            mt.__namecall = newcclosure and newcclosure(function(self, ...)
-                local args = {...}
-                local method = getnamecallmethod()
-                if method == "FireServer" and self == MainEvent and args[1] == "GetPing" then
-                    if Config.PingSpoofEnabled and blocking then
-                        local okCaller = true
-                        pcall(function()
-                            if checkcaller and checkcaller() then okCaller = false end
-                        end)
-                        if okCaller then
-                            return
-                        end
-                    end
-                end
-                return oldNamecall(self, ...)
-            end) or function(self, ...)
-                local args = {...}
-                local method = getnamecallmethod()
-                if method == "FireServer" and self == MainEvent and args[1] == "GetPing" then
-                    if Config.PingSpoofEnabled and blocking then
-                        return
-                    end
-                end
-                return oldNamecall(self, ...)
-            end
-        end)
-
-        while true do
-            if Config.PingSpoofEnabled then
-                local delaySec = math.max(0.01, (Config.PingValue or 300) / 1000)
-                pcall(function()
-                    MainEvent:FireServer("GetPing", delaySec)
-                end)
-                task.wait(delaySec)
-            else
-                task.wait(1)
-            end
-        end
-    end)
-
-    pcall(function()
-        local old = game:GetService("CoreGui"):FindFirstChild("PingSpoofGUI")
-        if old then old:Destroy() end
-    end)
-    pcall(function()
-        local pg = LocalPlayer:FindFirstChild("PlayerGui")
-        if pg and pg:FindFirstChild("PingSpoofGUI") then pg.PingSpoofGUI:Destroy() end
-    end)
-
-    local ScreenGui = Instance.new("ScreenGui")
-    ScreenGui.Name = "PingSpoofGUI"
-    ScreenGui.ResetOnSpawn = false
-    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-    pcall(function() ScreenGui.Parent = game:GetService("CoreGui") end)
-    if not ScreenGui.Parent then
-        ScreenGui.Parent = LocalPlayer:WaitForChild("PlayerGui")
-    end
-
-    local Main = Instance.new("Frame")
-    Main.Name = "Main"
-    Main.Size = UDim2.fromOffset(260, 130)
-    Main.Position = UDim2.new(0.5, -130, 0.3, 0)
-    Main.BackgroundColor3 = Color3.fromRGB(18, 18, 24)
-    Main.BorderSizePixel = 0
-    Main.Active = true
-    Main.Draggable = true
-    Main.Parent = ScreenGui
-
-    local Corner = Instance.new("UICorner")
-    Corner.CornerRadius = UDim.new(0, 10)
-    Corner.Parent = Main
-
-    local Stroke = Instance.new("UIStroke")
-    Stroke.Color = Color3.fromRGB(40, 40, 55)
-    Stroke.Thickness = 1.2
-    Stroke.Parent = Main
-
-    local Title = Instance.new("TextLabel")
-    Title.Size = UDim2.new(1, -20, 0, 28)
-    Title.Position = UDim2.fromOffset(10, 6)
-    Title.BackgroundTransparency = 1
-    Title.Text = "Ping Spoofer"
-    Title.TextColor3 = Color3.fromRGB(230, 230, 240)
-    Title.Font = Enum.Font.GothamBold
-    Title.TextSize = 16
-    Title.TextXAlignment = Enum.TextXAlignment.Left
-    Title.Parent = Main
-
-    local StatusDot = Instance.new("Frame")
-    StatusDot.Size = UDim2.fromOffset(8, 8)
-    StatusDot.Position = UDim2.new(1, -20, 0, 14)
-    StatusDot.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
-    StatusDot.BorderSizePixel = 0
-    StatusDot.Parent = Main
-    local StatusCorner = Instance.new("UICorner")
-    StatusCorner.CornerRadius = UDim.new(1, 0)
-    StatusCorner.Parent = StatusDot
-
-    local ToggleBtn = Instance.new("TextButton")
-    ToggleBtn.Size = UDim2.new(1, -20, 0, 32)
-    ToggleBtn.Position = UDim2.fromOffset(10, 40)
-    ToggleBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
-    ToggleBtn.Text = "OFF"
-    ToggleBtn.TextColor3 = Color3.fromRGB(200, 200, 210)
-    ToggleBtn.Font = Enum.Font.GothamBold
-    ToggleBtn.TextSize = 14
-    ToggleBtn.BorderSizePixel = 0
-    ToggleBtn.Parent = Main
-    local ToggleCorner = Instance.new("UICorner")
-    ToggleCorner.CornerRadius = UDim.new(0, 6)
-    ToggleCorner.Parent = ToggleBtn
-
-    local ValueLabel = Instance.new("TextLabel")
-    ValueLabel.Size = UDim2.new(0.45, 0, 0, 20)
-    ValueLabel.Position = UDim2.fromOffset(10, 82)
-    ValueLabel.BackgroundTransparency = 1
-    ValueLabel.Text = "Ping (ms):"
-    ValueLabel.TextColor3 = Color3.fromRGB(180, 180, 195)
-    ValueLabel.Font = Enum.Font.Gotham
-    ValueLabel.TextSize = 13
-    ValueLabel.TextXAlignment = Enum.TextXAlignment.Left
-    ValueLabel.Parent = Main
-
-    local PingBox = Instance.new("TextBox")
-    PingBox.Size = UDim2.new(0.5, -15, 0, 28)
-    PingBox.Position = UDim2.new(0.5, 0, 0, 78)
-    PingBox.BackgroundColor3 = Color3.fromRGB(30, 30, 42)
-    PingBox.Text = "300"
-    PingBox.TextColor3 = Color3.fromRGB(230, 230, 240)
-    PingBox.PlaceholderText = "300"
-    PingBox.PlaceholderColor3 = Color3.fromRGB(120, 120, 140)
-    PingBox.Font = Enum.Font.Gotham
-    PingBox.TextSize = 14
-    PingBox.BorderSizePixel = 0
-    PingBox.ClearTextOnFocus = false
-    PingBox.Parent = Main
-    local BoxCorner = Instance.new("UICorner")
-    BoxCorner.CornerRadius = UDim.new(0, 6)
-    BoxCorner.Parent = PingBox
-    local BoxStroke = Instance.new("UIStroke")
-    BoxStroke.Color = Color3.fromRGB(50, 50, 70)
-    BoxStroke.Thickness = 1
-    BoxStroke.Parent = PingBox
-
-    local function updateUI()
-        if Config.PingSpoofEnabled then
-            ToggleBtn.Text = "ON"
-            ToggleBtn.BackgroundColor3 = Color3.fromRGB(50, 140, 80)
-            StatusDot.BackgroundColor3 = Color3.fromRGB(80, 220, 120)
-        else
-            ToggleBtn.Text = "OFF"
-            ToggleBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 48)
-            StatusDot.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
-        end
-        PingBox.Text = tostring(Config.PingValue)
-    end
-
-    ToggleBtn.MouseButton1Click:Connect(function()
-        Config.PingSpoofEnabled = not Config.PingSpoofEnabled
-        updateUI()
-    end)
-
-    PingBox.FocusLost:Connect(function()
-        local num = tonumber(PingBox.Text)
-        if num then
-            Config.PingValue = math.clamp(math.floor(num), 0, 5000)
-            updateUI()
-        else
-            PingBox.Text = tostring(Config.PingValue)
-        end
-    end)
-
-    PingBox:GetPropertyChangedSignal("Text"):Connect(function()
-        local num = tonumber(PingBox.Text)
-        if num then
-            Config.PingValue = math.clamp(math.floor(num), 0, 5000)
-        end
-    end)
-
-    UserInputService.InputBegan:Connect(function(input, gameProcessed)
-        if gameProcessed then return end
-        if input.KeyCode == Enum.KeyCode.RightAlt then
-            GuiVisible = not GuiVisible
-            Main.Visible = GuiVisible
-        end
-    end)
-
-    updateUI()
-    getgenv().NamelessPingSpoof = Config
-end)
-
